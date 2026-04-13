@@ -1,0 +1,611 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '../supabase';
+import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
+import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
+import { typeIcon, typeLabel } from '../lib/pubUtils';
+import Btn from '../components/Btn';
+import Spinner from '../components/Spinner';
+import ConflictResolverModal from '../components/ConflictResolverModal';
+import SectionGroup from './SectionGroup';
+
+export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPendingConsumed }) {
+  const [pubs,      setPubs]      = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [proposals, setProposals] = useState([]);
+  const [confirmed, setConfirmed] = useState(new Set());
+  const [rejected,  setRejected]  = useState(new Set());
+  const [showSearch,setShowSearch]= useState(false);
+  const [showAdd,   setShowAdd]   = useState(false);
+  const [showImport,setShowImport]= useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProposals, setImportProposals] = useState([]);
+  const [importConfirmed, setImportConfirmed] = useState(new Set());
+  const [importRejected,  setImportRejected]  = useState(new Set());
+  const [newPub,    setNewPub]    = useState({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
+  const [saving,    setSaving]    = useState(false);
+  const [nameVariants, setNameVariants] = useState('');
+
+  useEffect(()=>{
+    if(!user) return;
+    supabase.from('publications').select('*').eq('user_id',user.id)
+      .order('year',{ascending:false}).order('created_at',{ascending:false})
+      .then(({data})=>{ setPubs(data||[]); setLoading(false); });
+    if(profile?.name){
+      const n = profile.name.replace(/^Dr\.?\s*/i,'').trim();
+      const parts = n.split(/\s+/);
+      const last  = parts[parts.length-1];
+      const first = parts[0];
+      const initials = parts.slice(0,-1).map(p=>p[0]).join('');
+      const variants = [
+        `${last} ${first}`,
+        `${last} ${initials}`,
+        `${last} ${parts.slice(0,-1).map(p=>p[0]).join('')}`,
+      ].filter((v,i,a)=>v.trim()&&a.indexOf(v)===i).join(', ');
+      setNameVariants(variants);
+    }
+  },[user, profile?.name]);
+
+  useEffect(()=>{
+    if(!pendingCvPubs?.length || !user) return;
+    const insert = async () => {
+      const existingDois   = new Set(pubs.map(p=>(p.doi||'').toLowerCase()).filter(Boolean));
+      const existingTitles = new Set(pubs.map(p=>normForMatch(p.title).slice(0,40)));
+      const toInsert = pendingCvPubs.filter(p=>{
+        if(!p.title?.trim()) return false;
+        if(p.doi && existingDois.has(p.doi.toLowerCase())) return false;
+        if(existingTitles.has(normForMatch(p.title).slice(0,40))) return false;
+        return true;
+      });
+      if(toInsert.length) {
+        const {data} = await supabase.from('publications').insert(
+          toInsert.map(p=>({ user_id:user.id, title:p.title||'', journal:p.journal||'',
+            year:String(p.year||''), doi:p.doi||'', authors:p.authors||'',
+            pmid:'', pub_type:p.pub_type||'journal', venue:p.venue||'', source:'cv' }))
+        ).select();
+        if(data) setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+      }
+      onPendingConsumed?.();
+    };
+    insert();
+  },[pendingCvPubs]);
+
+  const searchEPMC = async () => {
+    if(!nameVariants.trim()) return;
+    setSearching(true);
+    try {
+      const variants = nameVariants.split(',').map(v=>v.trim()).filter(Boolean);
+      const query    = variants.map(v=>`AUTH:"${v}"`).join(' OR ');
+      const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&resultType=core&pageSize=100`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const articles = data.resultList?.result || [];
+
+      const existingPmids = new Set(pubs.map(p=>p.pmid).filter(Boolean));
+      const existingDois  = new Set(pubs.map(p=>(p.doi||'').toLowerCase()).filter(Boolean));
+
+      const results = articles.map(r => {
+        const pmid = r.pmid || '';
+        const doi  = (r.doi  || '').toLowerCase();
+        if(pmid && existingPmids.has(pmid)) return null;
+        if(doi  && existingDois.has(doi))   return null;
+
+        const pt = (r.pubType||'').toLowerCase();
+        let pub_type = 'journal';
+        if(pt.includes('preprint'))      pub_type = 'preprint';
+        else if(pt.includes('review'))   pub_type = 'review';
+        else if(pt.includes('book'))     pub_type = 'book';
+        else if(r.source === 'PPR')      pub_type = 'preprint';
+
+        const ftUrls = r.fullTextUrlList?.fullTextUrl || [];
+        const fullTextUrl =
+          ftUrls.find(u=>u.availability==='Open access'&&u.documentStyle==='html')?.url ||
+          ftUrls.find(u=>u.availability==='Open access')?.url ||
+          ftUrls.find(u=>u.documentStyle==='html')?.url ||
+          ftUrls[0]?.url || '';
+
+        return {
+          pmid,
+          epmc_id:        r.id || '',
+          title:          (r.title||'').replace(/<[^>]+>/g,''),
+          journal:        r.journalTitle || r.journalInfo?.journal?.title || r.bookTitle || '',
+          year:           r.pubYear || '',
+          authors:        r.authorString || '',
+          doi:            r.doi || '',
+          pub_type,
+          venue:          '',
+          citations:      r.citedByCount || 0,
+          is_open_access: r.isOpenAccess === 'Y',
+          full_text_url:  fullTextUrl,
+        };
+      }).filter(Boolean);
+
+      setProposals(results);
+    } catch(e){ console.warn('[EPMC] error:', e); }
+    setSearching(false);
+  };
+
+  const confirmPub = async (pub) => {
+    setConfirmed(s=>new Set([...s, pub.pmid||pub.epmc_id||pub.title]));
+    const { data } = await supabase.from('publications').insert({
+      user_id:user.id, title:pub.title, journal:pub.journal, year:pub.year,
+      doi:pub.doi, authors:pub.authors, pmid:pub.pmid||'',
+      pub_type:pub.pub_type||'journal', venue:pub.venue||'', source:'europepmc',
+      citations:pub.citations||0, is_open_access:pub.is_open_access||false,
+      full_text_url:pub.full_text_url||'',
+    }).select().single();
+    if(data) setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+  };
+
+  const rejectPub = (key) => setRejected(s=>new Set([...s, key]));
+
+  const [cvPreview,    setCvPreview]    = useState(null);
+  const [showCvPreview,setShowCvPreview]= useState(false);
+  const [cvImporting,  setCvImporting]  = useState(false);
+  const [cvSaving,     setCvSaving]     = useState(false);
+  const [cvSel,        setCvSel]        = useState({profile:true,work:true,edu:true,honors:true,skills:true,languages:true,publications:true});
+  const [conflicts,    setConflicts]    = useState([]);
+  const [showConflicts,setShowConflicts]= useState(false);
+  const [pendingImport,setPendingImport]= useState(null);
+
+  const handleFullCvUpload = async (file) => {
+    if(!file) return;
+    setCvImporting(true);
+    setCvPreview(null);
+    try {
+      const payload = await prepareFile(file);
+      const resp = await fetch(EDGE_FN, {
+        method:'POST', headers:EDGE_HEADERS,
+        body: JSON.stringify({ ...payload, mode:'full_cv' })
+      });
+      if(!resp.ok) { const t=await resp.text(); throw new Error(`Edge Function ${resp.status}: ${t.slice(0,200)}`); }
+      const rd = await resp.json();
+      if(rd.error) throw new Error(rd.error);
+      setCvPreview(rd.result);
+      setShowCvPreview(true);
+    } catch(e) {
+      console.error('CV import error:', e);
+      alert('CV import failed: ' + e.message);
+    }
+    setCvImporting(false);
+  };
+
+  const applyFullCv = async () => {
+    if(!cvPreview) return;
+    setCvSaving(true);
+
+    const existingWH  = profile?.work_history || [];
+    const existingEdu = profile?.education    || [];
+
+    const whResult  = cvSel.work ? deduplicateSectionFuzzy(cvPreview.work_history||[], existingWH,  scoreWorkMatch, 'work') : { autoMerged:existingWH, conflicts:[], newItems:[] };
+    const eduResult = cvSel.edu  ? deduplicateSectionFuzzy(cvPreview.education||[],    existingEdu, scoreEduMatch,  'edu' ) : { autoMerged:existingEdu, conflicts:[], newItems:[] };
+
+    const allConflicts = [
+      ...whResult.conflicts.map(c=>({...c, field:'work_history', fieldLabel:'Work Experience'})),
+      ...eduResult.conflicts.map(c=>({...c, field:'education',   fieldLabel:'Education'})),
+    ].map((c,i)=>({...c, id:i, resolution:'keep_existing'}));
+
+    if(allConflicts.length > 0) {
+      setPendingImport({
+        whAutoMerged:  whResult.autoMerged,
+        whNewItems:    whResult.newItems,
+        eduAutoMerged: eduResult.autoMerged,
+        eduNewItems:   eduResult.newItems,
+      });
+      setConflicts(allConflicts);
+      setShowCvPreview(false);
+      setShowConflicts(true);
+      setCvSaving(false);
+      return;
+    }
+
+    await saveFullCvImport({
+      whFinal:  [...whResult.autoMerged, ...whResult.newItems],
+      eduFinal: [...eduResult.autoMerged, ...eduResult.newItems],
+      resolvedConflicts: [],
+    });
+    setCvSaving(false);
+  };
+
+  const applyResolvedConflicts = async (resolvedConflicts) => {
+    if(!pendingImport) return;
+    setCvSaving(true);
+    let whFinal  = [...pendingImport.whAutoMerged];
+    let eduFinal = [...pendingImport.eduAutoMerged];
+    for(const c of resolvedConflicts) {
+      const { resolution, field, incoming, existing, existingIdx } = c;
+      const arr = field==='work_history' ? whFinal : eduFinal;
+      if(resolution==='use_incoming')  arr[existingIdx] = incoming;
+      else if(resolution==='merge')    arr[existingIdx] = mergeRicher(incoming, existing);
+      else if(resolution==='keep_both') arr.push(incoming);
+    }
+    await saveFullCvImport({
+      whFinal:  [...whFinal,  ...pendingImport.whNewItems],
+      eduFinal: [...eduFinal, ...pendingImport.eduNewItems],
+    });
+    setCvSaving(false);
+    setShowConflicts(false);
+    setConflicts([]);
+    setPendingImport(null);
+  };
+
+  const saveFullCvImport = async ({ whFinal, eduFinal }) => {
+    const norm = normForMatch;
+    const updates = {};
+
+    if(cvSel.profile && cvPreview?.profile) {
+      const p = cvPreview.profile;
+      if(p.name     && !profile?.name)     updates.name     = p.name;
+      if(p.title    && !profile?.title)    updates.title    = p.title;
+      if(p.bio      && !profile?.bio)      updates.bio      = p.bio;
+      if(p.location && !profile?.location) updates.location = p.location;
+      if(p.orcid    && !profile?.orcid)    updates.orcid    = p.orcid;
+    }
+
+    if(cvSel.work && whFinal.length)
+      updates.work_history = whFinal.sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+
+    if(cvSel.edu && eduFinal.length)
+      updates.education = eduFinal.sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+
+    if(cvSel.honors && cvPreview?.honors?.length) {
+      const existing = profile?.honors || [];
+      const incoming = cvPreview.honors.filter(h=>!existing.some(e=>norm(e.title)===norm(h.title)));
+      updates.honors = [...existing, ...incoming];
+    }
+
+    if(cvSel.languages && cvPreview?.languages?.length) {
+      const existing = profile?.languages || [];
+      const incoming = cvPreview.languages.filter(l=>!existing.some(e=>norm(e.name)===norm(l.name)));
+      updates.languages = [...existing, ...incoming];
+    }
+
+    if(cvSel.skills && cvPreview?.skills?.length) {
+      const existing = profile?.skills || [];
+      const incoming = cvPreview.skills.filter(s=>!existing.some(e=>norm(e.name)===norm(s.name)));
+      updates.skills = [...existing, ...incoming];
+    }
+
+    if(Object.keys(updates).length) {
+      const { data } = await supabase.from('profiles').update(updates).eq('id',user.id).select().single();
+      if(data) setProfile(data);
+    }
+
+    if(cvSel.publications && cvPreview?.publications?.length) {
+      const existingDois   = new Set(pubs.map(p=>(p.doi||'').toLowerCase()).filter(Boolean));
+      const existingTitles = new Set(pubs.map(p=>norm(p.title).slice(0,40)));
+      const toInsert = cvPreview.publications.filter(p => {
+        if(!p.title?.trim()) return false;
+        if(p.doi && existingDois.has(p.doi.toLowerCase())) return false;
+        if(existingTitles.has(norm(p.title).slice(0,40))) return false;
+        return true;
+      });
+      if(toInsert.length) {
+        const { data } = await supabase.from('publications').insert(
+          toInsert.map(p=>({ user_id:user.id, title:p.title||'', journal:p.journal||'',
+            year:String(p.year||''), doi:p.doi||'', authors:p.authors||'',
+            pmid:'', pub_type:p.pub_type||'journal', venue:p.venue||'', source:'cv' }))
+        ).select();
+        if(data) setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+      }
+    }
+
+    setShowCvPreview(false);
+    setCvPreview(null);
+  };
+
+  const handleDocUpload = async (file) => {
+    if(!file) return;
+    setImporting(true);
+    setImportProposals([]);
+    setImportConfirmed(new Set());
+    setImportRejected(new Set());
+    try {
+      const payload = await prepareFile(file);
+      const resp = await fetch(EDGE_FN, {
+        method:'POST', headers:EDGE_HEADERS,
+        body: JSON.stringify({ ...payload, mode:'publications' })
+      });
+      if(!resp.ok) { const t=await resp.text(); throw new Error(`Edge Function ${resp.status}: ${t.slice(0,200)}`); }
+      const rd = await resp.json();
+      if(rd.error) throw new Error(rd.error);
+      handleExtracted(rd.publications || []);
+    } catch(e) {
+      console.error('Document import error:', e);
+      alert('Import failed: ' + e.message);
+    }
+    setImporting(false);
+  };
+
+  const handleExtracted = (publications) => {
+    const existingDois   = new Set(pubs.map(p=>(p.doi||'').toLowerCase()).filter(Boolean));
+    const existingTitles = new Set(pubs.map(p=>(p.title||'').toLowerCase().slice(0,40)));
+    const filtered = (publications||[]).filter(p => {
+      if(p.doi && existingDois.has(p.doi.toLowerCase())) return false;
+      if(existingTitles.has((p.title||'').toLowerCase().slice(0,40))) return false;
+      return !!p.title?.trim();
+    });
+    setImportProposals(filtered);
+  };
+
+  const confirmImportPub = async (pub, idx) => {
+    setImportConfirmed(s=>new Set([...s,idx]));
+    const { data } = await supabase.from('publications').insert({
+      user_id:user.id, title:pub.title||'', journal:pub.journal||'',
+      year:String(pub.year||''), doi:pub.doi||'', authors:pub.authors||'',
+      pmid:'', pub_type:pub.pub_type||'other', venue:pub.venue||pub.journal||'',
+      source:'document'
+    }).select().single();
+    if(data) setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+  };
+
+  const rejectImportPub = (idx) => setImportRejected(s=>new Set([...s,idx]));
+
+  const addManual = async () => {
+    if(!newPub.title.trim()) return;
+    setSaving(true);
+    const { data } = await supabase.from('publications').insert({
+      user_id:user.id, ...newPub, pmid:'', source:'manual'
+    }).select().single();
+    if(data) setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+    setSaving(false); setShowAdd(false);
+    setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
+  };
+
+  if(loading) return <Spinner/>;
+
+  const visibleProposals  = proposals.filter(p=>!confirmed.has(p.pmid||p.epmc_id||p.title)&&!rejected.has(p.pmid||p.epmc_id||p.title));
+  const visibleImport     = importProposals.filter((_,i)=>!importConfirmed.has(i)&&!importRejected.has(i));
+
+  const journals      = pubs.filter(p=>!p.pub_type||p.pub_type==='journal'||p.pub_type==='review'||p.pub_type==='preprint');
+  const presentations = pubs.filter(p=>['conference','poster','lecture'].includes(p.pub_type));
+  const books         = pubs.filter(p=>p.pub_type==='book');
+  const others        = pubs.filter(p=>p.pub_type==='other');
+
+  return (
+    <div>
+      {showConflicts && conflicts.length > 0 && (
+        <ConflictResolverModal
+          conflicts={conflicts}
+          saving={cvSaving}
+          onApply={applyResolvedConflicts}
+          onCancel={()=>{setShowConflicts(false);setConflicts([]);setPendingImport(null);}}
+        />
+      )}
+
+      {showCvPreview && cvPreview && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,overflowY:'auto',padding:'20px 0'}}>
+          <div style={{background:T.w,borderRadius:18,padding:32,maxWidth:620,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,marginBottom:4}}>CV import preview</div>
+            <div style={{fontSize:13,color:T.mu,marginBottom:20}}>Select what to import. Existing data is preserved — only new items are added.</div>
+
+            <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:20}}>
+              {[
+                cvPreview.work_history?.length      && `${cvPreview.work_history.length} work entries`,
+                cvPreview.education?.length         && `${cvPreview.education.length} education entries`,
+                cvPreview.publications?.length      && `${cvPreview.publications.length} publications`,
+                cvPreview.honors?.length            && `${cvPreview.honors.length} honors`,
+                cvPreview.languages?.length         && `${cvPreview.languages.length} languages`,
+                cvPreview.skills?.length            && `${cvPreview.skills.length} skills`,
+              ].filter(Boolean).map(s=>(
+                <span key={s} style={{background:T.gr2,border:`1px solid rgba(16,185,129,.25)`,borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:600,color:T.gr}}>{s}</span>
+              ))}
+            </div>
+
+            {[
+              ['profile',    'Profile info (name, title, bio, location)',  cvPreview.profile && (cvPreview.profile.name||cvPreview.profile.bio)],
+              ['work',       'Work history',                                cvPreview.work_history?.length > 0],
+              ['edu',        'Education',                                   cvPreview.education?.length > 0],
+              ['honors',     'Honors & Awards',                             cvPreview.honors?.length > 0],
+              ['languages',  'Languages',                                   cvPreview.languages?.length > 0],
+              ['skills',     'Skills',                                      cvPreview.skills?.length > 0],
+              ['publications','Publications & Presentations',               cvPreview.publications?.length > 0],
+            ].filter(([,,hasData])=>hasData).map(([key,label])=>(
+              <label key={key} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',marginBottom:10,padding:'9px 12px',background:cvSel[key]?T.gr2:T.s2,borderRadius:9,border:`1px solid ${cvSel[key]?'rgba(16,185,129,.2)':T.bdr}`}}>
+                <input type="checkbox" checked={cvSel[key]||false} onChange={()=>setCvSel(s=>({...s,[key]:!s[key]}))} style={{width:16,height:16,accentColor:T.gr}}/>
+                <span style={{fontSize:13,fontWeight:600,color:cvSel[key]?T.gr:T.text}}>{label}</span>
+                {key==='publications'&&<span style={{fontSize:11,color:T.mu,marginLeft:'auto'}}>Duplicates auto-skipped</span>}
+                {(key==='work'||key==='edu')&&<span style={{fontSize:11,color:T.mu,marginLeft:'auto'}}>Merged with existing</span>}
+              </label>
+            ))}
+
+            {cvSel.work && cvPreview.work_history?.length>0 && (
+              <div style={{marginTop:12,maxHeight:160,overflowY:'auto',display:'flex',flexDirection:'column',gap:5}}>
+                {cvPreview.work_history.slice(0,5).map((e,i)=>(
+                  <div key={i} style={{background:T.s2,borderRadius:8,padding:'7px 11px',fontSize:12}}>
+                    <div style={{fontWeight:700}}>{e.title}</div>
+                    <div style={{color:T.mu}}>{e.company}{e.location?` · ${e.location}`:''}{e.start?` · ${e.start.slice(0,4)}`:''}</div>
+                  </div>
+                ))}
+                {cvPreview.work_history.length>5&&<div style={{fontSize:11,color:T.mu,padding:'4px 4px'}}>+{cvPreview.work_history.length-5} more</div>}
+              </div>
+            )}
+
+            {cvSel.publications && cvPreview.publications?.length>0 && (
+              <div style={{marginTop:12,maxHeight:160,overflowY:'auto',display:'flex',flexDirection:'column',gap:5}}>
+                {cvPreview.publications.slice(0,5).map((p,i)=>(
+                  <div key={i} style={{background:T.s2,borderRadius:8,padding:'7px 11px',fontSize:12}}>
+                    <div style={{fontWeight:700,lineHeight:1.4}}>{p.title}</div>
+                    <div style={{color:T.mu}}>{p.journal||p.venue}{p.year?` · ${p.year}`:''}</div>
+                  </div>
+                ))}
+                {cvPreview.publications.length>5&&<div style={{fontSize:11,color:T.mu,padding:'4px 4px'}}>+{cvPreview.publications.length-5} more</div>}
+              </div>
+            )}
+
+            <div style={{display:'flex',gap:9,justifyContent:'flex-end',marginTop:20,paddingTop:16,borderTop:`1px solid ${T.bdr}`}}>
+              <Btn onClick={()=>{setShowCvPreview(false);setCvPreview(null);}}>Cancel</Btn>
+              <Btn variant="s" onClick={applyFullCv} disabled={cvSaving} style={{background:T.gr,borderColor:T.gr}}>
+                {cvSaving?'Checking for duplicates...':'Import selected →'}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:20,flexWrap:'wrap'}}>
+        <div style={{fontWeight:700,fontSize:13,flex:1}}>{pubs.length} publication{pubs.length!==1?'s':''}</div>
+        <Btn onClick={()=>{setShowSearch(!showSearch);if(!showSearch&&!proposals.length)searchEPMC();}} style={{fontSize:12}}>🔍 Search Europe PMC</Btn>
+        <label style={{cursor:'pointer'}}>
+          <input type="file" accept=".pdf,.docx,.txt,.md" onChange={e=>{ if(e.target.files?.[0]){setShowImport(true);handleDocUpload(e.target.files[0]);} }} style={{display:'none'}}/>
+          <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'6px 14px',borderRadius:22,cursor:'pointer',fontSize:12,fontWeight:600,border:`1.5px solid ${T.bdr}`,background:'transparent',color:T.mu}}>
+            📄 Import publication list
+          </span>
+        </label>
+        <Btn variant="v" onClick={()=>setShowAdd(!showAdd)} style={{fontSize:12}}>+ Add manually</Btn>
+      </div>
+
+      {showSearch&&(
+        <div style={{background:`linear-gradient(135deg,${T.v2},${T.bl2})`,borderRadius:12,padding:16,marginBottom:20,border:`1px solid rgba(108,99,255,.15)`}}>
+          <div style={{fontSize:12,fontWeight:700,color:T.v,marginBottom:8}}>Europe PMC search — name variants</div>
+          <div style={{fontSize:11.5,color:T.mu,marginBottom:10}}>
+            Add all the name formats you've published under, comma-separated. Searches PubMed, PubMed Central, preprints, and more — with citation data.
+          </div>
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
+            <input value={nameVariants} onChange={e=>setNameVariants(e.target.value)}
+              placeholder="Ruzicka Daniel, Ruzicka D, Ruzicka DJ"
+              style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
+            <Btn variant="s" onClick={searchEPMC} disabled={searching||!nameVariants.trim()} style={{whiteSpace:'nowrap'}}>
+              {searching?'Searching...':'Search →'}
+            </Btn>
+          </div>
+          {searching&&<Spinner/>}
+          {!searching&&visibleProposals.length===0&&proposals.length>0&&(
+            <div style={{fontSize:12.5,color:T.mu,textAlign:'center',padding:'12px 0'}}>All proposals reviewed.</div>
+          )}
+          {!searching&&proposals.length===0&&(
+            <div style={{fontSize:12.5,color:T.mu,textAlign:'center',padding:'8px 0'}}>Run the search to see proposals.</div>
+          )}
+          {!searching&&visibleProposals.length>0&&(
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {visibleProposals.map(pub=>(
+                <div key={pub.pmid||pub.epmc_id||pub.title} style={{background:'rgba(255,255,255,.85)',borderRadius:10,padding:'11px 13px',display:'flex',alignItems:'flex-start',gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:3,flexWrap:'wrap'}}>
+                      <span style={{fontSize:13}}>{typeIcon(pub.pub_type)}</span>
+                      <span style={{fontSize:10,color:T.mu,background:T.s2,borderRadius:8,padding:'1px 6px'}}>{typeLabel(pub.pub_type)}</span>
+                      {pub.is_open_access&&<span style={{fontSize:10,color:'#059669',background:'#d1fae5',borderRadius:8,padding:'1px 6px',fontWeight:600}}>Open Access</span>}
+                      {pub.citations>0&&<span style={{fontSize:10,color:T.mu}}>{pub.citations} citations</span>}
+                    </div>
+                    <div style={{fontSize:12.5,fontWeight:700,lineHeight:1.4,marginBottom:2}}>{pub.title}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:2}}>
+                      {pub.journal&&<span style={{fontSize:11.5,fontWeight:600,color:T.v}}>{pub.journal}</span>}
+                      {pub.year&&<span style={{fontSize:11,color:T.mu}}>{pub.year}</span>}
+                    </div>
+                    {pub.authors&&<div style={{fontSize:10.5,color:T.mu}}>{pub.authors}</div>}
+                  </div>
+                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                    <button onClick={()=>confirmPub(pub)} style={{padding:'5px 11px',borderRadius:20,border:'none',background:T.gr,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>✓ Mine</button>
+                    <button onClick={()=>rejectPub(pub.pmid||pub.epmc_id||pub.title)} style={{padding:'5px 11px',borderRadius:20,border:`1px solid ${T.bdr}`,background:T.w,color:T.mu,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>✕ Not mine</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showImport&&(
+        <div style={{background:T.s2,borderRadius:12,padding:16,marginBottom:20,border:`1px solid ${T.bdr}`}}>
+          <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:700,flex:1}}>📄 Extracted from document</div>
+            <button onClick={()=>setShowImport(false)} style={{fontSize:12,color:T.mu,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit'}}>Close</button>
+          </div>
+          {importing&&(
+            <div style={{display:'flex',alignItems:'center',gap:12,padding:'16px 0'}}>
+              <Spinner/>
+              <div style={{fontSize:13,color:T.mu}}>Claude is reading your document and extracting publications...</div>
+            </div>
+          )}
+          {!importing&&importProposals.length===0&&(
+            <div style={{fontSize:12.5,color:T.mu,textAlign:'center',padding:'12px 0'}}>
+              No publications extracted, or all have been reviewed. Try a different document or add manually.
+            </div>
+          )}
+          {!importing&&visibleImport.length>0&&(
+            <>
+              <div style={{fontSize:11.5,color:T.mu,marginBottom:10}}>
+                Found {importProposals.length} items. Confirm the ones that are yours — type is auto-detected by Claude.
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {visibleImport.map((pub,origIdx)=>{
+                  const idx = importProposals.indexOf(pub);
+                  return (
+                    <div key={idx} style={{background:T.w,borderRadius:10,padding:'11px 13px',display:'flex',alignItems:'flex-start',gap:10,border:`1px solid ${T.bdr}`}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                          <span style={{fontSize:14}}>{typeIcon(pub.pub_type)}</span>
+                          <span style={{fontSize:10.5,color:T.mu,background:T.s2,borderRadius:10,padding:'1px 8px'}}>{typeLabel(pub.pub_type)}</span>
+                          {pub.year&&<span style={{fontSize:10.5,color:T.mu}}>{pub.year}</span>}
+                        </div>
+                        <div style={{fontSize:12.5,fontWeight:700,lineHeight:1.4,marginBottom:2}}>{pub.title}</div>
+                        {pub.authors&&<div style={{fontSize:11,color:T.mu,marginBottom:1}}>{pub.authors}</div>}
+                        {(pub.journal||pub.venue)&&<div style={{fontSize:11,color:T.v,fontWeight:600}}>{pub.journal||pub.venue}</div>}
+                        {pub.doi&&<div style={{fontSize:10.5,color:T.mu}}>DOI: {pub.doi}</div>}
+                        {pub.notes&&<div style={{fontSize:10.5,color:T.mu,fontStyle:'italic',marginTop:2}}>{pub.notes}</div>}
+                      </div>
+                      <div style={{display:'flex',gap:6,flexShrink:0,flexDirection:'column',alignItems:'flex-end'}}>
+                        <button onClick={()=>confirmImportPub(pub,idx)} style={{padding:'5px 11px',borderRadius:20,border:'none',background:T.gr,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>✓ Add</button>
+                        <button onClick={()=>rejectImportPub(idx)} style={{padding:'5px 11px',borderRadius:20,border:`1px solid ${T.bdr}`,background:T.w,color:T.mu,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>✕ Skip</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {showAdd&&(
+        <div style={{background:T.s2,borderRadius:12,padding:16,marginBottom:20,border:`1px solid ${T.bdr}`}}>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:12}}>Add publication manually</div>
+          <div style={{marginBottom:12}}>
+            <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:6}}>Type</label>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {PUB_TYPES.map(t=>(
+                <button key={t.id} onClick={()=>setNewPub(p=>({...p,pub_type:t.id}))}
+                  style={{padding:'4px 11px',borderRadius:20,border:`1.5px solid ${newPub.pub_type===t.id?T.v:T.bdr}`,background:newPub.pub_type===t.id?T.v2:T.w,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600,color:newPub.pub_type===t.id?T.v:T.mu}}>
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {[
+            ['title','Title *','Full title of publication or presentation'],
+            ['authors','Authors','Smith J, Jones A et al.'],
+            ['year','Year','2024'],
+            ['journal',['journal','review','preprint'].includes(newPub.pub_type)?'Journal':'Venue / Conference',
+              ['conference','poster'].includes(newPub.pub_type)?'e.g. ASCO Annual Meeting':'e.g. Nature Medicine'],
+            ['doi','DOI / URL','10.1038/... or https://...'],
+          ].map(([f,l,ph])=>(
+            <div key={f} style={{marginBottom:10}}>
+              <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:4}}>{l}</label>
+              <input value={newPub[f]} onChange={e=>setNewPub(p=>({...p,[f]:e.target.value}))} placeholder={ph}
+                style={{width:'100%',background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
+            </div>
+          ))}
+          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+            <Btn onClick={()=>setShowAdd(false)}>Cancel</Btn>
+            <Btn variant="s" onClick={addManual} disabled={saving||!newPub.title.trim()}>{saving?'Saving...':'Add Publication'}</Btn>
+          </div>
+        </div>
+      )}
+
+      {pubs.length===0?(
+        <div style={{textAlign:'center',padding:'32px 0',color:T.mu}}>
+          <div style={{fontSize:32,marginBottom:10}}>📄</div>
+          <div style={{fontSize:14,fontFamily:"'DM Serif Display',serif",marginBottom:8}}>No publications yet</div>
+          <div style={{fontSize:13}}>Search PubMed, import a CV/document, or add manually.</div>
+        </div>
+      ):(
+        <>
+          <SectionGroup title="Journal Articles & Reviews" items={journals} setPubs={setPubs}/>
+          <SectionGroup title="Presentations & Posters" items={presentations} setPubs={setPubs}/>
+          <SectionGroup title="Book Chapters" items={books} setPubs={setPubs}/>
+          <SectionGroup title="Other" items={others} setPubs={setPubs}/>
+        </>
+      )}
+    </div>
+  );
+}

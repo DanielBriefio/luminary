@@ -1,0 +1,211 @@
+# Luminary Prototype — CLAUDE.md
+
+## What is Luminary?
+
+Luminary is a research networking and knowledge-sharing platform for scientists and medical affairs professionals. Think LinkedIn meets ResearchGate, designed to be modern, fast, and tailored to the scientific community. This repo is the working prototype.
+
+## Tech Stack
+
+- **Frontend:** React 18, Create React App (CRA)
+- **Backend:** Supabase (PostgreSQL + Auth + Storage + Edge Functions)
+- **Deployment:** Vercel
+- **Fonts:** DM Sans (body) + DM Serif Display (headings)
+- **Key deps:** `@supabase/supabase-js`, `jszip`, `mammoth`, `qrcode`
+
+## Architecture
+
+**No React Router.** Navigation is state-based in `App.jsx` via a `screen` state variable. The one exception is public profile pages (`/p/:slug`), which are detected from `window.location.pathname` in a `useState` initializer, before auth runs. `vercel.json` has a SPA rewrite rule.
+
+**All inline styles** using design tokens from `src/lib/constants.js`. No CSS files, no CSS modules, no Tailwind.
+
+**Design tokens** (import `T` from `src/lib/constants.js`):
+```
+T.bg    = #f2f3fb   (app background)
+T.w     = #fff      (card/panel background)
+T.s2    = #f7f8fe   (input background)
+T.s3    = #eef0fc   (subtle)
+T.bdr   = #e3e5f5   (border)
+T.text  = #1b1d36   (body text)
+T.mu    = #7a7fa8   (muted text)
+T.v     = #6c63ff   (violet primary)
+T.v2    = #eeecff   (violet tint)
+T.v3    = #5a52e8   (violet dark)
+T.bl    = #4285f4   (blue)
+T.bl2   = #e8f0fe   (blue tint)
+T.gr    = #10b981   (green)
+T.gr2   = #ecfdf5   (green tint)
+T.am    = #f59e0b   (amber)
+T.am2   = #fef3c7   (amber tint)
+T.ro    = #f43f5e   (rose/error)
+T.ro2   = #fff1f3   (rose tint)
+T.te    = #0ea5e9   (teal)
+T.te2   = #f0f9ff   (teal tint)
+```
+
+## File Structure
+
+```
+src/
+  App.jsx                        — Root: auth, routing, sidebar, nav
+  supabase.js                    — Supabase client
+  index.js                       — React entry point
+  lib/
+    constants.js                 — T (tokens), NAV, PUB_TYPES, EDGE_FN
+    utils.js                     — timeAgo, fuzzy dedup, match scoring
+    htmlUtils.js                 — sanitiseHtml
+    fileUtils.js                 — getFileCategory
+    linkedInUtils.js             — parseCsv, parseLinkedInDate, formatDateRange, cleanBio, buildName
+    pubUtils.js                  — typeIcon, typeLabel
+  components/
+    Av.jsx                       — Avatar (avatar_color or avatar_url)
+    Btn.jsx                      — Button: variant="" grey / "v" violet outline / "s" violet solid
+    Bdg.jsx                      — Badge
+    Inp.jsx                      — Labelled input
+    Spinner.jsx                  — Loading spinner
+    FollowBtn.jsx                — Follow/unfollow (user | paper | group)
+    PaperPreview.jsx             — Paper card preview
+    FilePreview.jsx              — File attachment preview
+    SafeHtml.jsx                 — Sanitized HTML renderer
+    RichTextEditor.jsx           — contenteditable editor with bold/italic/link toolbar
+    ConflictResolverModal.jsx    — Dedup conflict resolution UI for imports
+    ExpandableBio.jsx            — Truncated bio with expand toggle
+    Linkify.jsx                  — Auto-link URLs in text
+  screens/
+    AuthScreen.jsx               — Login / sign-up
+    NewPostScreen.jsx            — Compose: text, paper, link, upload, tip
+    ExploreScreen.jsx            — Search posts + topic tag browse
+    GroupsScreen.jsx             — Private research groups
+    NotifsScreen.jsx             — Notifications (mark-as-read)
+  feed/
+    FeedScreen.jsx               — Main feed (For You / Following, All / Papers tabs)
+    PostCard.jsx                 — Post display: like, comment, edit, delete, follow
+  profile/
+    ProfileScreen.jsx            — Editable profile (About / Publications / Posts tabs)
+    PublicationsTab.jsx          — Publications: manual add, search, import
+    LinkedInImporter.jsx         — LinkedIn ZIP export parser
+    OrcidImporter.jsx            — ORCID API importer
+    PublicProfilePage.jsx        — Public profile at /p/:slug (no auth required)
+    ShareProfilePanel.jsx        — Share panel: slug editor, visibility, SVG badge, QR code
+    PubRow.jsx                   — Single publication row
+    SectionGroup.jsx             — Collapsible profile section group
+```
+
+## Screens & Features
+
+### Feed (`FeedScreen`)
+- Toggle: **For You** (all posts) / **Following** (posts by followed users + followed papers by DOI)
+- Tabs: **All** / **Papers**
+- Right sidebar: profile mini-card + "Founding Fellows" message + Paper of the Week (static)
+- `posts_with_meta` view gives `like_count` and `comment_count`
+
+### New Post (`NewPostScreen`)
+Five post types:
+- **Text** — rich text (bold, italic, links via `RichTextEditor`)
+- **Paper** — DOI lookup via CrossRef API (auto-fills title, journal, authors, abstract, year)
+- **Link** — title + URL
+- **Upload** — image (10MB), video (200MB), audio (50MB), PDF (25MB), CSV (5MB) → Supabase Storage `post-files` bucket
+- **Tip** — plain text tip
+
+All posts support:
+- Manual hashtags (space/comma separated)
+- AI auto-tagging via `auto-tag` edge function (appended to manual tags, max 10 total, best-effort)
+- Visibility: **Everyone** / **Followers only**
+
+### Post Card (`PostCard`)
+- Like/unlike (optimistic update)
+- Comments (lazy load, inline compose, threaded on post)
+- Edit / delete (owner only, dropdown menu)
+- Follow paper by DOI or follow post author via `FollowBtn`
+- Post type badge
+
+### Explore (`ExploreScreen`)
+- Full-text search against `posts_with_meta.content` (ilike, debounced 400ms)
+- Topic tag chips: #GLP1, #CryoEM, #CRISPR, #OpenScience, #DigitalHealth, #MedicalAffairs, #RWE, #WomensHealth
+
+### Groups (`GroupsScreen`)
+- Create private research groups (name + institution)
+- Group feed: text posts within the group
+- Creator is automatically added as `owner` in `group_members`
+- Non-owners can follow groups via `FollowBtn`
+
+### Notifications (`NotifsScreen`)
+- Types: `new_post`, `new_comment`, `paper_comment`, `new_follower`, `group_announcement`, `group_member_added`
+- Unread badge count; marks all as read on open
+- Actor profile fetched in batch
+
+### My Profile (`ProfileScreen`)
+Tabs: **About**, **Publications**, **Posts**
+
+**About tab** — editable fields: name, title, institution, location, bio, orcid, twitter
+
+Import menu (top-right):
+- **LinkedIn ZIP** — parses `profile.csv`, `positions.csv`, `education.csv`, `volunteer.csv`, `organizations.csv`, `honors.csv`, `languages.csv`, `skills.csv`, `patents.csv`. Fuzzy dedup with `ConflictResolverModal` for work + education conflicts.
+- **ORCID** — fetches from `pub.orcid.org/v3.0/{id}/record`, imports employment + education + works
+- **CV upload** (PDF/DOCX/TXT) — calls `extract-publications` edge function in `mode:'full_cv'`, imports bio/title/location/honors/languages/skills/work_history/education + publications
+
+Profile sections (stored as JSONB arrays in `profiles`):
+`work_history`, `education`, `volunteering`, `organizations`, `honors`, `languages`, `skills`, `patents`
+
+**Publications tab** (`PublicationsTab`):
+- CRUD for `publications` table
+- CrossRef name search (auto-derives name variants: "Last First", "Last FI")
+- ORCID import (reuses `OrcidImporter`)
+- CV import (reuses `extract-publications` edge function, `mode:'full_cv'`)
+- Conflict-aware dedup on import
+- Types: journal, conference, poster, lecture, book, review, preprint, other
+
+**Share profile** (`ShareProfilePanel` — right-side drawer):
+- Edit `profile_slug` (auto-generated from name)
+- Per-section visibility toggles (work, education, volunteering, organizations, skills, publications)
+- SVG badge export (320px wide, gradient, name/title/institution)
+- QR code via `qrcode` npm package
+
+### Public Profile (`/p/:slug`)
+- No auth required
+- Reads `profiles` by `profile_slug`, respects `profile_visibility` JSONB
+- Shows: avatar, name, title, institution, bio, work history, education, skills, publications
+- Tab: About / Publications
+
+## Database Schema (Supabase / PostgreSQL)
+
+| Table | Key columns |
+|-------|-------------|
+| `profiles` | id (FK auth.users), name, title, institution, location, bio, orcid, twitter, avatar_color, avatar_url, work_history (JSONB[]), education (JSONB[]), volunteering (JSONB[]), organizations (JSONB[]), honors (JSONB[]), languages (JSONB[]), skills (JSONB[]), patents (JSONB[]), **profile_slug** TEXT UNIQUE, **profile_visibility** JSONB |
+| `posts` | id, user_id, content, post_type, paper_title, paper_journal, paper_doi, paper_abstract, paper_authors, paper_year, link_title, link_url, image_url, file_type, file_name, tags (TEXT[]), visibility |
+| `posts_with_meta` | VIEW: posts + like_count, comment_count |
+| `likes` | user_id, post_id |
+| `comments` | id, post_id, user_id, content, created_at + profiles join |
+| `follows` | follower_id, target_type (user\|paper\|group), target_id |
+| `groups` | id, name, institution, owner_id, created_at |
+| `group_members` | group_id, user_id, role (owner\|member) |
+| `group_posts` | id, group_id, user_id, content, post_type, created_at |
+| `notifications` | id, user_id, actor_id, notif_type, meta (JSONB), read, created_at |
+| `publications` | id, user_id, title, authors, journal, year, doi, pub_type, venue, created_at |
+
+## Edge Functions (Supabase)
+
+Both use the anon JWT from `EDGE_HEADERS` in constants.js.
+
+**`extract-publications`** (`EDGE_FN`)
+- `mode: 'full_cv'` — extracts profile fields + work/edu + publications from PDF/DOCX/text
+- Input: `{ base64, mediaType }` for PDF, or `{ text }` for plain text/DOCX
+- Returns: `{ result: { profile, work_history, education, honors, languages, skills, publications } }`
+
+**`auto-tag`**
+- Extracts hashtags from post content + paper metadata
+- Input: `{ content, paperTitle, paperJournal, paperAbstract, linkTitle }`
+- Returns: `{ tags: string[] }` (tag names without `#`)
+- Enabled by `AUTO_TAG_ENABLED = true` in constants.js; always best-effort (never blocks publish)
+
+## Gamification (Decorative / In Progress)
+
+Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level system is currently static/decorative — not yet wired to real activity.
+
+## Conventions
+
+- **Always use `T.*` tokens** — never hardcode colours
+- **No CSS files** — all styles inline
+- **No React Router** — screen switching via `setScreen(id)` in App
+- **Supabase queries** use `.from()` chained calls; no ORM
+- **Fuzzy dedup** for imports: `deduplicateSectionFuzzy` + `scoreWorkMatch` / `scoreEduMatch` in `src/lib/utils.js`
+- Public profile pages skip auth entirely (`if(publicSlug) return` early in useEffect)
