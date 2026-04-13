@@ -129,6 +129,14 @@ export default function FeedScreen({ user, profile, onViewUser }) {
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
+  // Remove a user's posts immediately when unfollowed in the Following tab
+  const handleUnfollow = (userId) => {
+    if (fp !== 'fol') return;
+    setPosts(prev => prev.filter(p =>
+      (p.isRepost  ? p.reposter_id !== userId : p.user_id !== userId)
+    ));
+  };
+
   const emptyMsg = fp === 'fol'
     ? { icon: '👥', title: "Follow people & papers to build your feed", body: "Use the + Follow button on any post or paper to start seeing their updates here." }
     : { icon: '🌱', title: "The feed is quiet", body: "Be the first Founding Fellow to post. Share a paper, a finding, or a tip to get the community started." };
@@ -159,7 +167,7 @@ export default function FeedScreen({ user, profile, onViewUser }) {
                   <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:8}}>{emptyMsg.title}</div>
                   <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                 </div>
-              ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser}/>)}
+              ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow}/>)}
             </div>
             <div>
               {profile&&(

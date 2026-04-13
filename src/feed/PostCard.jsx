@@ -12,7 +12,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 
-export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser }) {
+export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow }) {
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
   const [reposted,setReposted]       = useState(post.user_reposted||false);
@@ -157,7 +157,8 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           </div>
 
           {!isOwner&&post.user_id&&(
-            <FollowBtn targetType="user" targetId={post.user_id} currentUserId={currentUserId}/>
+            <FollowBtn targetType="user" targetId={post.user_id} currentUserId={currentUserId}
+              onToggle={nowFollowing => { if (!nowFollowing) onUnfollow?.(post.user_id); }}/>
           )}
 
           {isOwner&&(

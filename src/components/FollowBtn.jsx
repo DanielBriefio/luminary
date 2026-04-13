@@ -11,7 +11,7 @@ import { T } from '../lib/constants';
  *   currentUserId  UUID of the logged-in user — if null, renders nothing
  *   label       optional override for the follow label (default: 'Follow')
  */
-export default function FollowBtn({ targetType, targetId, currentUserId, label = 'Follow' }) {
+export default function FollowBtn({ targetType, targetId, currentUserId, label = 'Follow', onToggle }) {
   const [following, setFollowing] = useState(false);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
@@ -40,11 +40,13 @@ export default function FollowBtn({ targetType, targetId, currentUserId, label =
         .eq('target_type', targetType)
         .eq('target_id',   targetId);
       setFollowing(false);
+      onToggle?.(false);
     } else {
       await supabase
         .from('follows')
         .insert({ follower_id: currentUserId, target_type: targetType, target_id: targetId });
       setFollowing(true);
+      onToggle?.(true);
     }
     setSaving(false);
   };
