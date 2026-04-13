@@ -15,8 +15,10 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+const YT_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/;
+
 function postMeta(post) {
-  let title, description;
+  let title, description, image;
 
   if (post.post_type === 'paper' && post.paper_title) {
     title = post.paper_title;
@@ -28,6 +30,9 @@ function postMeta(post) {
   } else if (post.post_type === 'link' && post.link_title) {
     title       = post.link_title;
     description = post.link_url || '';
+    // YouTube thumbnail
+    const yt = post.link_url && YT_RE.exec(post.link_url);
+    if (yt) image = `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
 
   } else {
     const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
@@ -35,9 +40,12 @@ function postMeta(post) {
     description = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
   }
 
+  // Uploaded image takes priority over anything derived above
+  if (post.image_url && post.file_type === 'image') image = post.image_url;
+
   if (!title)       title       = 'Post on Luminary';
   if (!description) description = 'Research networking for scientists and medical affairs professionals.';
-  return { title, description };
+  return { title, description, image: image || null };
 }
 
 async function supabaseFetch(path) {
@@ -92,11 +100,13 @@ module.exports = async function handler(req, res) {
   }
 
   const canonicalUrl = `https://${req.headers.host}/s/${id}`;
-  const { title, description } = post
+  const { title, description, image } = post
     ? postMeta(post)
-    : { title: 'Post on Luminary', description: 'Research networking for scientists.' };
+    : { title: 'Post on Luminary', description: 'Research networking for scientists.', image: null };
 
   const authorLine = [authorName, authorInstitution].filter(Boolean).join(', ');
+  // Large-image card when we have an image, plain summary otherwise
+  const twitterCard = image ? 'summary_large_image' : 'summary';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -111,13 +121,15 @@ module.exports = async function handler(req, res) {
   <meta property="og:title"       content="${esc(title)}">
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:url"         content="${esc(canonicalUrl)}">
+  ${image ? `<meta property="og:image" content="${esc(image)}">` : ''}
   ${authorLine ? `<meta property="article:author" content="${esc(authorLine)}">` : ''}
 
   <!-- Twitter / X Card -->
-  <meta name="twitter:card"        content="summary">
+  <meta name="twitter:card"        content="${twitterCard}">
   <meta name="twitter:site"        content="@LuminaryScience">
   <meta name="twitter:title"       content="${esc(title)}">
   <meta name="twitter:description" content="${esc(description)}">
+  ${image ? `<meta name="twitter:image" content="${esc(image)}">` : ''}
 
   <link rel="canonical" href="${esc(canonicalUrl)}">
 </head>

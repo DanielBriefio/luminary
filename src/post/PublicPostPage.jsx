@@ -22,7 +22,9 @@ export default function PublicPostPage({ postId }) {
   useEffect(() => {
     if (!post) return;
 
-    let ogTitle, ogDescription;
+    const YT_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/;
+    let ogTitle, ogDescription, ogImage;
+
     if (post.post_type === 'paper' && post.paper_title) {
       ogTitle = post.paper_title;
       const byline = [post.paper_authors, post.paper_journal, post.paper_year].filter(Boolean).join(' · ');
@@ -31,11 +33,14 @@ export default function PublicPostPage({ postId }) {
     } else if (post.post_type === 'link' && post.link_title) {
       ogTitle = post.link_title;
       ogDescription = post.link_url || '';
+      const yt = post.link_url && YT_RE.exec(post.link_url);
+      if (yt) ogImage = `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
     } else {
       const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
       ogTitle = plain.slice(0, 100) + (plain.length > 100 ? '…' : '');
       ogDescription = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
     }
+    if (post.image_url && post.file_type === 'image') ogImage = post.image_url;
     if (!ogTitle) ogTitle = 'Post on Luminary';
     if (!ogDescription) ogDescription = 'Research networking for scientists and medical affairs professionals.';
 
@@ -46,10 +51,12 @@ export default function PublicPostPage({ postId }) {
       ['property', 'og:title',       ogTitle],
       ['property', 'og:description', ogDescription],
       ['property', 'og:url',         postUrl],
-      ['name',     'twitter:card',        'summary'],
-      ['name',     'twitter:site',        '@LuminaryScience'],
-      ['name',     'twitter:title',       ogTitle],
-      ['name',     'twitter:description', ogDescription],
+      ...(ogImage ? [['property', 'og:image', ogImage]] : []),
+      ['name', 'twitter:card',        ogImage ? 'summary_large_image' : 'summary'],
+      ['name', 'twitter:site',        '@LuminaryScience'],
+      ['name', 'twitter:title',       ogTitle],
+      ['name', 'twitter:description', ogDescription],
+      ...(ogImage ? [['name', 'twitter:image', ogImage]] : []),
     ];
 
     const injected = metas.map(([attr, key, content]) => {
