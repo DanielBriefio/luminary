@@ -4,7 +4,9 @@
       "Bash(ls /Users/daniel/luminary-prototype/*.sql)",
       "Bash(ls /Users/daniel/luminary-prototype/*.md)",
       "Bash(npm run:*)",
-      "Bash(npx react-scripts:*)"
+      "Bash(npx react-scripts:*)",
+      "Bash(node -e \"require\\('./src/lib/constants'\\); console.log\\('constants ok'\\)\")",
+      "Bash(npx --no react-scripts build)"
     ]
   }
 }
