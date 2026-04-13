@@ -11,14 +11,6 @@ export default function FeedScreen({ user, profile, onViewUser }) {
   const [tab,setTab]=useState('all');
   const [fp,setFp]=useState('sug');
 
-  const withLikes = useCallback(async (data) => {
-    if (!data?.length || !user) return data || [];
-    const ids = data.map(p => p.id);
-    const { data: ld } = await supabase.from('likes').select('post_id').eq('user_id', user.id).in('post_id', ids);
-    const ls = new Set((ld || []).map(l => l.post_id));
-    return data.map(p => ({ ...p, user_liked: ls.has(p.id) }));
-  }, [user]);
-
   const withSlugs = useCallback(async (data) => {
     if (!data?.length) return data || [];
     const ids = [...new Set(data.map(p => p.user_id).filter(Boolean))];
@@ -32,41 +24,108 @@ export default function FeedScreen({ user, profile, onViewUser }) {
   const fetchPosts = useCallback(async () => {
     setLoading(true);
 
+    // ── 1. Resolve follows once ──────────────────────────────────────────
+    let followedUserIds = [], followedPaperIds = [];
     if (fp === 'fol' && user) {
-      // Fetch followed users and papers
-      const { data: followData } = await supabase
-        .from('follows')
-        .select('target_type, target_id')
-        .eq('follower_id', user.id);
-
-      const userIds  = (followData || []).filter(f => f.target_type === 'user').map(f => f.target_id);
-      const paperIds = (followData || []).filter(f => f.target_type === 'paper').map(f => f.target_id);
-
-      if (!userIds.length && !paperIds.length) {
+      const { data: fols } = await supabase
+        .from('follows').select('target_type, target_id').eq('follower_id', user.id);
+      followedUserIds  = (fols||[]).filter(f=>f.target_type==='user').map(f=>f.target_id);
+      followedPaperIds = (fols||[]).filter(f=>f.target_type==='paper').map(f=>f.target_id);
+      if (!followedUserIds.length && !followedPaperIds.length) {
         setPosts([]); setLoading(false); return;
       }
-
-      // Build an OR filter: posts by followed users OR paper posts with followed DOIs
-      let orParts = [];
-      if (userIds.length)  orParts.push(`user_id.in.(${userIds.join(',')})`);
-      if (paperIds.length) orParts.push(`paper_doi.in.(${paperIds.join(',')})`);
-
-      let q = supabase.from('posts_with_meta').select('*').or(orParts.join(',')).order('created_at',{ascending:false}).limit(30);
-      if (tab === 'papers') q = q.eq('post_type','paper');
-
-      const { data } = await q;
-      setPosts(await withSlugs(await withLikes(data)));
-      setLoading(false);
-      return;
     }
 
-    // "For You" — all posts
-    let q = supabase.from('posts_with_meta').select('*').order('created_at',{ascending:false}).limit(30);
-    if (tab === 'papers') q = q.eq('post_type','paper');
-    const { data } = await q;
-    setPosts(await withSlugs(await withLikes(data)));
+    // ── 2. Regular posts ─────────────────────────────────────────────────
+    let postQ = supabase.from('posts_with_meta').select('*').order('created_at',{ascending:false}).limit(30);
+    if (fp === 'fol') {
+      const orParts = [];
+      if (followedUserIds.length)  orParts.push(`user_id.in.(${followedUserIds.join(',')})`);
+      if (followedPaperIds.length) orParts.push(`paper_doi.in.(${followedPaperIds.join(',')})`);
+      postQ = postQ.or(orParts.join(','));
+    }
+    if (tab === 'papers') postQ = postQ.eq('post_type','paper');
+
+    // ── 3. Repost items (All tab only) ───────────────────────────────────
+    let repostPromise = Promise.resolve([]);
+    if (tab !== 'papers') {
+      const shouldFetch = fp !== 'fol' || followedUserIds.length > 0;
+      if (shouldFetch) {
+        repostPromise = (async () => {
+          let rq = supabase.from('reposts').select('id, user_id, post_id, created_at')
+            .order('created_at',{ascending:false}).limit(30);
+          if (fp === 'fol') rq = rq.in('user_id', followedUserIds);
+
+          const { data: reposts } = await rq;
+          if (!reposts?.length) return [];
+
+          // Reposter profiles + original posts in parallel
+          const reposterIds = [...new Set(reposts.map(r=>r.user_id))];
+          const origIds     = [...new Set(reposts.map(r=>r.post_id))];
+          const [{ data: profs }, { data: origPosts }] = await Promise.all([
+            supabase.from('profiles').select('id, name, avatar_color, avatar_url, profile_slug').in('id', reposterIds),
+            supabase.from('posts_with_meta').select('*').in('id', origIds),
+          ]);
+          const profMap = Object.fromEntries((profs||[]).map(p=>[p.id,p]));
+          const postMap = Object.fromEntries((origPosts||[]).map(p=>[p.id,p]));
+
+          return reposts.filter(r=>postMap[r.post_id]).map(r => {
+            const pr = profMap[r.user_id]||{};
+            return {
+              ...postMap[r.post_id],
+              _itemKey:        `r_${r.id}`,
+              _sortTime:       r.created_at,
+              isRepost:        true,
+              repost_id:       r.id,
+              reposter_id:     r.user_id,
+              reposter_name:   pr.name||'Researcher',
+              reposter_avatar: pr.avatar_color||null,
+              reposter_avatar_url: pr.avatar_url||'',
+              reposter_slug:   pr.profile_slug||null,
+            };
+          });
+        })();
+      }
+    }
+
+    // ── 4. Await both in parallel ────────────────────────────────────────
+    const [{ data: regularData }, repostItems] = await Promise.all([postQ, repostPromise]);
+
+    // ── 5. Merge ─────────────────────────────────────────────────────────
+    const allItems = [
+      ...(regularData||[]).map(p=>({...p, isRepost:false, _itemKey:p.id, _sortTime:p.created_at})),
+      ...repostItems,
+    ];
+    if (!allItems.length) { setPosts([]); setLoading(false); return; }
+
+    // ── 6. Batch-enrich: likes + repost counts ───────────────────────────
+    const allPostIds = [...new Set(allItems.map(p=>p.id))];
+    let likedSet = new Set(), repostCountMap = {}, userRepostedSet = new Set();
+    if (user && allPostIds.length) {
+      const [{ data: ld }, { data: rd }] = await Promise.all([
+        supabase.from('likes').select('post_id').eq('user_id',user.id).in('post_id', allPostIds),
+        supabase.from('reposts').select('post_id, user_id').in('post_id', allPostIds),
+      ]);
+      likedSet = new Set((ld||[]).map(l=>l.post_id));
+      (rd||[]).forEach(r => {
+        repostCountMap[r.post_id] = (repostCountMap[r.post_id]||0)+1;
+        if (r.user_id === user.id) userRepostedSet.add(r.post_id);
+      });
+    }
+
+    const enriched = allItems.map(item=>({
+      ...item,
+      user_liked:    likedSet.has(item.id),
+      repost_count:  repostCountMap[item.id]||0,
+      user_reposted: userRepostedSet.has(item.id),
+    }));
+
+    // ── 7. Slugs + sort ──────────────────────────────────────────────────
+    const withSlugData = await withSlugs(enriched);
+    withSlugData.sort((a,b) => new Date(b._sortTime) - new Date(a._sortTime));
+    setPosts(withSlugData);
     setLoading(false);
-  }, [user, tab, fp, withLikes, withSlugs]);
+  }, [user, tab, fp, withSlugs]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
@@ -100,7 +159,7 @@ export default function FeedScreen({ user, profile, onViewUser }) {
                   <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:8}}>{emptyMsg.title}</div>
                   <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                 </div>
-              ) : posts.map(p => <PostCard key={p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser}/>)}
+              ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser}/>)}
             </div>
             <div>
               {profile&&(

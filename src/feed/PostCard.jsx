@@ -13,10 +13,13 @@ import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 
 export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser }) {
-  const [liked,setLiked]           = useState(post.user_liked||false);
-  const [likeCount,setLikeCount]   = useState(parseInt(post.like_count)||0);
-  const [saving,setSaving]         = useState(false);
-  const [menuOpen,setMenuOpen]     = useState(false);
+  const [liked,setLiked]             = useState(post.user_liked||false);
+  const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
+  const [reposted,setReposted]       = useState(post.user_reposted||false);
+  const [repostCount,setRepostCount] = useState(parseInt(post.repost_count)||0);
+  const [reposting,setReposting]     = useState(false);
+  const [saving,setSaving]           = useState(false);
+  const [menuOpen,setMenuOpen]       = useState(false);
   const [editing,setEditing]       = useState(false);
   const [editText,setEditText]     = useState(post.content||'');
   const [editSaving,setEditSaving] = useState(false);
@@ -40,6 +43,16 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   const goToProfile = (userId, slug) => {
     if (onViewUser && userId) { onViewUser(userId); return; }
     if (slug) window.location.href = `/p/${slug}`;
+  };
+
+  const toggleRepost = async () => {
+    if (!currentUserId || reposting) return;
+    setReposting(true);
+    const nr = !reposted;
+    setReposted(nr); setRepostCount(c => nr ? c+1 : Math.max(0,c-1));
+    if (nr) await supabase.from('reposts').insert({user_id:currentUserId, post_id:post.id});
+    else    await supabase.from('reposts').delete().eq('user_id',currentUserId).eq('post_id',post.id);
+    setReposting(false);
   };
 
   const toggleLike = async () => {
@@ -113,6 +126,19 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
   return (
     <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,overflow:"hidden",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
+
+      {/* Repost banner — shown when this card appears as a repost in the feed */}
+      {post.isRepost&&(
+        <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",background:T.s2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600}}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.mu} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+          <span onClick={()=>goToProfile(post.reposter_id,post.reposter_slug)} style={{cursor:"pointer"}}>
+            {post.reposter_name||"Someone"} reposted
+          </span>
+        </div>
+      )}
+
       <div style={{padding:16,position:"relative"}}>
 
         <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
@@ -238,6 +264,13 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           <button onClick={toggleComments}
             style={{fontSize:12,color:showComments?T.v:T.mu,cursor:"pointer",padding:"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:showComments?T.v2:"transparent",fontFamily:"inherit"}}>
             💬 {commCount}
+          </button>
+          <button onClick={toggleRepost} title={reposted?"Undo repost":"Repost to your followers"}
+            style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:reposted?T.gr:T.mu,cursor:currentUserId?"pointer":"default",padding:"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:reposted?T.gr2:"transparent",fontFamily:"inherit"}}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
+            {repostCount}
           </button>
           <button onClick={()=>setShowShare(true)} style={{fontSize:12,color:T.mu,cursor:"pointer",padding:"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:"transparent",fontFamily:"inherit"}}>↗ Share</button>
         </div>
