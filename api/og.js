@@ -45,6 +45,7 @@ function postMeta(post) {
 
   if (!title)       title       = 'Post on Luminary';
   if (!description) description = 'Research networking for scientists and medical affairs professionals.';
+  // image is resolved by the caller; null here means use the branded fallback
   return { title, description, image: image || null };
 }
 
@@ -100,13 +101,15 @@ module.exports = async function handler(req, res) {
   }
 
   const canonicalUrl = `https://${req.headers.host}/s/${id}`;
-  const { title, description, image } = post
+  const { title, description, image: postImage } = post
     ? postMeta(post)
     : { title: 'Post on Luminary', description: 'Research networking for scientists.', image: null };
 
+  // Always have an og:image — use the real image/thumbnail or the branded fallback
+  const image = postImage || `https://${req.headers.host}/api/og-image`;
+
   const authorLine = [authorName, authorInstitution].filter(Boolean).join(', ');
-  // Large-image card when we have an image, plain summary otherwise
-  const twitterCard = image ? 'summary_large_image' : 'summary';
+  const twitterCard = 'summary_large_image';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
