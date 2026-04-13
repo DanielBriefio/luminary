@@ -14,6 +14,14 @@ import OrcidImporter from './OrcidImporter';
 import PublicationsTab from './PublicationsTab';
 import ShareProfilePanel from './ShareProfilePanel';
 
+const TOPICS = [
+  'GLP1','CRISPR','CryoEM','OpenScience','DigitalHealth',
+  'MedicalAffairs','RWE','Oncology','Neuroscience','Cardiology',
+  'Immunology','GenomicsAI','ClinicalTrials','DrugDiscovery',
+  'WomensHealth','Microbiome','Proteomics','SingleCell',
+  'MedTech','Biostatistics',
+];
+
 function EF({label,val,onChange,placeholder=""}) {
   return (
     <div style={{marginBottom:9}}>
@@ -48,6 +56,9 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const [pendingCvPubs, setPendingCvPubs] = useState([]);
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showSharePanel, setShowSharePanel] = useState(false);
+  const [editingTopics,  setEditingTopics]  = useState(false);
+  const [topicDraft,     setTopicDraft]     = useState([]);
+  const [savingTopics,   setSavingTopics]   = useState(false);
 
   // ORCID grants importer state
   const [showOrcidGrants,    setShowOrcidGrants]    = useState(false);
@@ -312,6 +323,14 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const grt = profile?.grants          || [];
   const hasExperience = wh.length||edu.length||vol.length||org.length;
   const hasSkills     = hon.length||lng.length||skl.length||pat.length;
+
+  const saveTopics = async (selected) => {
+    setSavingTopics(true);
+    const { data } = await supabase.from('profiles').update({ topic_interests: selected }).eq('id', user.id).select().single();
+    if (data) setProfile(data);
+    setSavingTopics(false);
+    setEditingTopics(false);
+  };
 
   const DATED_FIELDS = {
     work_history:  "start",
@@ -924,6 +943,44 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                   ))}
                   <AddRowItem field="patents" array={pat} logo="⚗️"
                     fields={[['title','Title','Patent title'],['number','Patent number','US1234567'],['date','Date','2020-03'],['url','URL','https://...']]}/>
+                </div>
+              )}
+
+              <SectionHead label="Research Interests"/>
+              {!editingTopics ? (
+                <div style={{marginBottom:16}}>
+                  {(profile?.topic_interests?.length > 0) ? (
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+                      {profile.topic_interests.map(t=>(
+                        <span key={t} style={{fontSize:10,padding:'5px 13px',borderRadius:20,border:`1.5px solid rgba(108,99,255,.2)`,background:T.v2,color:T.v,fontWeight:700}}>#{t}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{fontSize:12.5,color:T.mu,marginBottom:10}}>No research interests set — add some to personalise your feed.</div>
+                  )}
+                  <Btn onClick={()=>{ setTopicDraft(profile?.topic_interests||[]); setEditingTopics(true); }}>Edit interests</Btn>
+                </div>
+              ) : (
+                <div style={{marginBottom:16}}>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+                    {TOPICS.map(t=>{
+                      const on = topicDraft.includes(t);
+                      return (
+                        <button key={t}
+                          onClick={()=>setTopicDraft(prev=>on?prev.filter(x=>x!==t):[...prev,t])}
+                          style={{fontSize:10,padding:'6px 14px',borderRadius:20,border:`1.5px solid ${on?T.v:T.bdr}`,background:on?T.v:T.s2,color:on?'#fff':T.mu,cursor:'pointer',fontFamily:'inherit',fontWeight:600,transition:'all .15s'}}>
+                          #{t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{fontSize:12,color:topicDraft.length>=1?T.v:T.mu,fontWeight:600,marginBottom:14}}>
+                    {topicDraft.length} selected
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <Btn variant="s" onClick={()=>saveTopics(topicDraft)} disabled={savingTopics}>{savingTopics?'Saving…':'Save'}</Btn>
+                    <Btn onClick={()=>setEditingTopics(false)}>Cancel</Btn>
+                  </div>
                 </div>
               )}
             </div>

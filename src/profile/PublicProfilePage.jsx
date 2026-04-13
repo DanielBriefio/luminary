@@ -149,6 +149,19 @@ export default function PublicProfilePage({ slug }) {
             </div>
             {profile.bio && <div style={{ marginBottom: 14, maxWidth: 620 }}><ExpandableBio text={profile.bio} /></div>}
 
+            {profile.topic_interests?.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Research Interests</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {profile.topic_interests.map(t => (
+                    <span key={t} style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, border: '1.5px solid rgba(108,99,255,.2)', background: T.v2, color: T.v, fontWeight: 700 }}>
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 9, margin: '14px 0' }}>
               {[

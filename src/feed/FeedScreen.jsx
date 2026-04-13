@@ -5,11 +5,18 @@ import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
 
-export default function FeedScreen({ user, profile, onViewUser, onViewPaper }) {
+export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile }) {
   const [posts,setPosts]=useState([]);
   const [loading,setLoading]=useState(true);
   const [tab,setTab]=useState('all');
   const [fp,setFp]=useState('sug');
+  const [feedMode,setFeedMode]=useState(()=>{
+    const saved=localStorage.getItem('luminary_feed_mode');
+    if(saved) return saved;
+    return (profile?.topic_interests?.length>0)?'personalised':'chronological';
+  });
+
+  useEffect(()=>{ localStorage.setItem('luminary_feed_mode',feedMode); },[feedMode]);
 
   const withSlugs = useCallback(async (data) => {
     if (!data?.length) return data || [];
@@ -132,8 +139,8 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper }) {
     const withSlugData = await withSlugs(enriched);
     withSlugData.sort((a,b) => new Date(b._sortTime) - new Date(a._sortTime));
 
-    // In For You mode, float posts matching the user's topic interests to top
-    if (fp === 'sug' && profile?.topic_interests?.length) {
+    // In For You + personalised mode, float posts matching topic interests to top
+    if (fp === 'sug' && feedMode === 'personalised' && profile?.topic_interests?.length) {
       const interests = new Set(profile.topic_interests.map(t => t.toLowerCase()));
       withSlugData.sort((a, b) => {
         const aMatch = (a.tags || []).some(tag => interests.has(tag.toLowerCase()));
@@ -146,7 +153,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper }) {
 
     setPosts(withSlugData);
     setLoading(false);
-  }, [user, profile, tab, fp, withSlugs]);
+  }, [user, profile, tab, fp, feedMode, withSlugs]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
@@ -175,15 +182,35 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper }) {
         </div>
         <button onClick={fetchPosts} style={{fontSize:11,color:T.mu,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>↻ Refresh</button>
       </div>
-      <div style={{display:"flex",background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:"0 18px",flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:"0 18px",flexShrink:0}}>
         {[["all","All"],["papers","📄 Papers"]].map(([k,l])=>(
           <div key={k} onClick={()=>setTab(k)} style={{padding:"8px 16px",fontSize:12.5,color:tab===k?T.v:T.mu,cursor:"pointer",borderBottom:`2.5px solid ${tab===k?T.v:"transparent"}`,fontWeight:600}}>{l}</div>
         ))}
+        {fp==='sug'&&(
+          <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
+            <span style={{fontSize:11,color:T.mu}}>Feed:</span>
+            {[['personalised','✨ For you'],['chronological','🕐 Latest']].map(([mode,label])=>(
+              <button key={mode} onClick={()=>setFeedMode(mode)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:600,fontFamily:'inherit',cursor:'pointer',border:`1.5px solid ${feedMode===mode?T.v:T.bdr}`,background:feedMode===mode?T.v2:'transparent',color:feedMode===mode?T.v:T.mu,transition:'all .15s'}}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{flex:1,overflowY:"auto"}}>
         <div style={{padding:"16px 18px"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 264px",gap:16,alignItems:"start"}}>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {fp==='sug'&&feedMode==='personalised'&&!profile?.topic_interests?.length&&(
+                <div style={{fontSize:12.5,color:T.mu,padding:'10px 16px',background:T.s2,borderRadius:9,display:'flex',alignItems:'center',gap:8}}>
+                  <span>✨</span>
+                  <span>Add research interests to personalise this feed.{' '}
+                    <button onClick={onGoToProfile} style={{color:T.v,fontWeight:700,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',padding:0}}>
+                      Go to profile →
+                    </button>
+                  </span>
+                </div>
+              )}
               {loading ? <Spinner/> : posts.length === 0 ? (
                 <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:36,textAlign:"center",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
                   <div style={{fontSize:36,marginBottom:12}}>{emptyMsg.icon}</div>
