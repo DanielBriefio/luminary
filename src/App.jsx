@@ -15,6 +15,7 @@ import PublicPostPage from './post/PublicPostPage';
 import UserProfileScreen from './profile/UserProfileScreen';
 import NetworkScreen from './screens/NetworkScreen';
 import PaperDetailPage from './paper/PaperDetailPage';
+import OnboardingScreen from './screens/OnboardingScreen';
 
 // Detect public profile route: /p/:slug
 const getPublicSlug = () => {
@@ -44,6 +45,7 @@ export default function App() {
   const [viewedUserId,  setViewedUserId]  = useState(null);
   const [viewedPaperDoi,setViewedPaperDoi]= useState(null);
   const [authChecked,setAuthChecked]=useState(false);
+  const [showOnboarding,setShowOnboarding]=useState(false);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -59,6 +61,18 @@ export default function App() {
     if(!session?.user){setProfile(null);return;}
     supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>setProfile(data));
   },[session]);
+
+  useEffect(()=>{
+    if (!profile) return;
+    if (profile.onboarding_completed) return;
+    // Only show for genuinely new users (no follows and no publications yet)
+    Promise.all([
+      supabase.from('follows').select('id',{count:'exact',head:true}).eq('follower_id',profile.id),
+      supabase.from('publications').select('id',{count:'exact',head:true}).eq('user_id',profile.id),
+    ]).then(([{count:fc},{count:pc}])=>{
+      if ((fc||0) === 0 && (pc||0) === 0) setShowOnboarding(true);
+    });
+  },[profile]);
 
   const signOut=async()=>{ await supabase.auth.signOut(); setScreen('feed'); };
 
@@ -89,6 +103,16 @@ export default function App() {
     <>
       {fonts}
       <div style={{display:"flex",height:"100vh",fontFamily:"'DM Sans',sans-serif",fontSize:13,color:T.text,background:T.bg,overflow:"hidden"}}>
+        {/* Onboarding overlay */}
+        {showOnboarding && (
+          <OnboardingScreen
+            user={user}
+            profile={profile}
+            setProfile={setProfile}
+            onComplete={() => { setShowOnboarding(false); setScreen('feed'); }}
+            onGoToProfile={() => { setShowOnboarding(false); setScreen('profile'); }}
+          />
+        )}
         {/* Sidebar */}
         <div style={{width:200,flexShrink:0,background:T.w,borderRight:`1px solid ${T.bdr}`,display:"flex",flexDirection:"column"}}>
           <div style={{padding:"16px 14px 14px",borderBottom:`1px solid ${T.bdr}`}}>

@@ -12,7 +12,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 
-export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper }) {
+export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails }) {
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
   const [reposted,setReposted]       = useState(post.user_reposted||false);
@@ -213,7 +213,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
         )}
 
         {post.image_url&&<FilePreview url={post.image_url} fileType={post.file_type||'image'} fileName={post.file_name}/>}
-        {post.post_type==='paper'&&post.paper_title&&<PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper}/>}
+        {post.post_type==='paper'&&post.paper_title&&!hidePaperDetails&&<PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper}/>}
         {post.post_type==='link'&&post.link_title&&(()=>{
           const ytMatch = post.link_url?.match(
             /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/

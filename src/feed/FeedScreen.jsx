@@ -131,9 +131,22 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper }) {
     // ── 7. Slugs + sort ──────────────────────────────────────────────────
     const withSlugData = await withSlugs(enriched);
     withSlugData.sort((a,b) => new Date(b._sortTime) - new Date(a._sortTime));
+
+    // In For You mode, float posts matching the user's topic interests to top
+    if (fp === 'sug' && profile?.topic_interests?.length) {
+      const interests = new Set(profile.topic_interests.map(t => t.toLowerCase()));
+      withSlugData.sort((a, b) => {
+        const aMatch = (a.tags || []).some(tag => interests.has(tag.toLowerCase()));
+        const bMatch = (b.tags || []).some(tag => interests.has(tag.toLowerCase()));
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        return 0;
+      });
+    }
+
     setPosts(withSlugData);
     setLoading(false);
-  }, [user, tab, fp, withSlugs]);
+  }, [user, profile, tab, fp, withSlugs]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 

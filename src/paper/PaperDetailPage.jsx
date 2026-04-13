@@ -284,6 +284,7 @@ export default function PaperDetailPage({
                   onRefresh={load}
                   onViewUser={onViewUser}
                   onViewPaper={onViewPaper}
+                  hidePaperDetails
                 />
               ))}
             </div>
