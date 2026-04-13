@@ -247,7 +247,8 @@ export default function ProfileScreen({ user, profile, setProfile }) {
     setSaving(true);
     const composedName = [form.first_name, form.middle_name, form.last_name].filter(Boolean).join(' ');
     const updates = { ...form, name: composedName || undefined };
-    const{data}=await supabase.from('profiles').update(updates).eq('id',user.id).select().single();
+    const{data,error}=await supabase.from('profiles').update(updates).eq('id',user.id).select().single();
+    if(error){ alert('Save failed: ' + error.message); setSaving(false); return; }
     if(data)setProfile(data);
     setEditing(false);setSaving(false);
   };
