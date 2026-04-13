@@ -14,6 +14,7 @@ import PublicProfilePage from './profile/PublicProfilePage';
 import PublicPostPage from './post/PublicPostPage';
 import UserProfileScreen from './profile/UserProfileScreen';
 import NetworkScreen from './screens/NetworkScreen';
+import PaperDetailPage from './paper/PaperDetailPage';
 
 // Detect public profile route: /p/:slug
 const getPublicSlug = () => {
@@ -27,23 +28,32 @@ const getPublicPostId = () => {
   return m ? m[1] : null;
 };
 
+// Detect public paper route: /paper/:doi  (DOI may contain slashes)
+const getPublicPaperDoi = () => {
+  const m = window.location.pathname.match(/^\/paper\/(.+)$/);
+  return m ? m[1] : null;
+};
+
 export default function App() {
-  const [publicSlug]   = useState(getPublicSlug);
-  const [publicPostId] = useState(getPublicPostId);
+  const [publicSlug]     = useState(getPublicSlug);
+  const [publicPostId]   = useState(getPublicPostId);
+  const [publicPaperDoi] = useState(getPublicPaperDoi);
   const [session,setSession]=useState(null);
   const [profile,setProfile]=useState(null);
   const [screen,setScreen]=useState('feed');
-  const [viewedUserId,setViewedUserId]=useState(null);
+  const [viewedUserId,  setViewedUserId]  = useState(null);
+  const [viewedPaperDoi,setViewedPaperDoi]= useState(null);
   const [authChecked,setAuthChecked]=useState(false);
 
-  const onViewUser = (userId) => { setViewedUserId(userId); setScreen('user_profile'); };
+  const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
+  const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
 
   useEffect(()=>{
-    if(publicSlug || publicPostId) return; // no auth needed for public pages
+    if(publicSlug || publicPostId || publicPaperDoi) return; // no auth needed for public pages
     supabase.auth.getSession().then(({data})=>{ setSession(data.session); setAuthChecked(true); });
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_,s)=>setSession(s));
     return ()=>subscription.unsubscribe();
-  },[publicSlug, publicPostId]);
+  },[publicSlug, publicPostId, publicPaperDoi]);
 
   useEffect(()=>{
     if(!session?.user){setProfile(null);return;}
@@ -55,22 +65,24 @@ export default function App() {
   const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>;
 
   // Public pages — no auth required
-  if(publicSlug)   return <>{fonts}<PublicProfilePage slug={publicSlug}/></>;
-  if(publicPostId) return <>{fonts}<PublicPostPage postId={publicPostId}/></>;
+  if(publicSlug)     return <>{fonts}<PublicProfilePage slug={publicSlug}/></>;
+  if(publicPostId)   return <>{fonts}<PublicPostPage postId={publicPostId}/></>;
+  if(publicPaperDoi) return <>{fonts}<PaperDetailPage doi={publicPaperDoi} isPublicPage={true}/></>;
 
   if(!authChecked) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;
   if(!session) return <AuthScreen onAuth={()=>setScreen('feed')}/>;
 
   const user=session.user;
   const screens={
-    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser}/>,
+    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     explore:      <ExploreScreen user={user}/>,
-    network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser}/>,
+    network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     groups:       <GroupsScreen user={user}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,
     notifs:       <NotifsScreen user={user}/>,
     post:         <NewPostScreen user={user} profile={profile} onPostCreated={()=>setScreen('feed')}/>,
-    user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')}/>,
+    user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper}/>,
+    paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
   };
 
   return (

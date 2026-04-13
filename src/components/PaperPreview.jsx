@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { T } from '../lib/constants';
 import FollowBtn from './FollowBtn';
 
-export default function PaperPreview({ post, currentUserId }) {
+export default function PaperPreview({ post, currentUserId, onViewPaper }) {
   const [expanded, setExpanded] = useState(false);
   const doiUrl = post.paper_doi
     ? (post.paper_doi.startsWith('http') ? post.paper_doi : `https://doi.org/${post.paper_doi}`)
@@ -35,6 +35,13 @@ export default function PaperPreview({ post, currentUserId }) {
                 style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:T.v,color:"#fff",fontSize:11,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap"}}>
                 📄 Open paper ↗
               </a>
+            )}
+            {post.paper_doi&&onViewPaper&&(
+              <button
+                onClick={()=>onViewPaper(post.paper_doi)}
+                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:T.w,color:T.v,border:`1.5px solid ${T.v}`,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                💬 Discussions
+              </button>
             )}
             {post.paper_doi&&(
               <FollowBtn targetType="paper" targetId={post.paper_doi} currentUserId={currentUserId} label="Follow Paper"/>

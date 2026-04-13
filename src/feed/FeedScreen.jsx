@@ -5,7 +5,7 @@ import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
 
-export default function FeedScreen({ user, profile, onViewUser }) {
+export default function FeedScreen({ user, profile, onViewUser, onViewPaper }) {
   const [posts,setPosts]=useState([]);
   const [loading,setLoading]=useState(true);
   const [tab,setTab]=useState('all');
@@ -177,7 +177,7 @@ export default function FeedScreen({ user, profile, onViewUser }) {
                   <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:8}}>{emptyMsg.title}</div>
                   <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                 </div>
-              ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow}/>)}
+              ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper}/>)}
             </div>
             <div>
               {profile&&(

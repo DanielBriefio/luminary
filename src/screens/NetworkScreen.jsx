@@ -4,7 +4,7 @@ import { T } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 
-export default function NetworkScreen({ user, profile, onViewUser }) {
+export default function NetworkScreen({ user, profile, onViewUser, onViewPaper }) {
   const [loading,        setLoading]        = useState(true);
   const [friends,        setFriends]        = useState([]);
   const [followingOnly,  setFollowingOnly]  = useState([]);
@@ -311,6 +311,7 @@ export default function NetworkScreen({ user, profile, onViewUser }) {
                             isLast={i === followedPapers.length - 1}
                             saving={unfollowingDoi[paper.doi]}
                             onUnfollow={() => unfollowPaper(paper.doi)}
+                            onClick={onViewPaper ? () => onViewPaper(paper.doi) : null}
                           />
                         ))
                     }
@@ -531,11 +532,14 @@ function ActionBtn({ label, variant, saving, onClick }) {
   );
 }
 
-function PaperRow({ paper, isLast, onUnfollow, saving }) {
+function PaperRow({ paper, isLast, onUnfollow, saving, onClick }) {
   const title = paper.paper_title || paper.doi;
   const meta  = [paper.paper_journal, paper.paper_year].filter(Boolean).join(' · ');
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 0', borderBottom: isLast ? 'none' : `1px solid ${T.bdr}` }}>
+    <div
+      onClick={onClick || undefined}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 0', borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`, cursor: onClick ? 'pointer' : 'default' }}
+    >
       <div style={{ width: 36, height: 36, borderRadius: 8, background: T.am2, border: `1px solid ${T.am}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
         📄
       </div>
@@ -547,7 +551,7 @@ function PaperRow({ paper, isLast, onUnfollow, saving }) {
         <div style={{ fontSize: 10.5, color: T.mu, marginTop: 3, fontFamily: 'monospace', opacity: .7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{paper.doi}</div>
       </div>
       <button
-        onClick={onUnfollow}
+        onClick={e => { e.stopPropagation(); onUnfollow(); }}
         disabled={saving}
         style={{ fontSize: 10.5, padding: '3px 11px', borderRadius: 20, border: `1.5px solid ${T.bdr}`, background: T.w, color: T.mu, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontFamily: 'inherit', opacity: saving ? .6 : 1, whiteSpace: 'nowrap', flexShrink: 0, marginTop: 2 }}
       >

@@ -8,7 +8,7 @@ import Spinner from '../components/Spinner';
 import PostCard from '../feed/PostCard';
 import { formatDateRange } from '../lib/linkedInUtils';
 
-export default function UserProfileScreen({ userId, currentUserId, currentProfile, onBack }) {
+export default function UserProfileScreen({ userId, currentUserId, currentProfile, onBack, onViewPaper }) {
   const [profile,  setProfile]  = useState(null);
   const [pubs,     setPubs]     = useState([]);
   const [posts,    setPosts]    = useState([]);
@@ -313,6 +313,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                     currentUserId={currentUserId}
                     currentProfile={currentProfile}
                     onRefresh={refreshPosts}
+                    onViewPaper={onViewPaper}
                   />
                 ))}
               </div>
