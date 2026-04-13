@@ -76,7 +76,8 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
   const lng = p.languages      || [];
   const skl = p.skills         || [];
   const pat = p.patents        || [];
-  const hasAbout = wh.length || edu.length || vol.length || org.length || lng.length || skl.length || hon.length || pat.length;
+  const grt = p.grants         || [];
+  const hasAbout = wh.length || edu.length || vol.length || org.length || lng.length || skl.length || hon.length || pat.length || grt.length;
 
   const pubCount   = pubs.length;
   const citations  = pubs.map(r => r.citations || 0).sort((a, b) => b - a);
@@ -219,6 +220,22 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{o.name}</div>
                       {o.role && <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 1 }}>{o.role}</div>}
                       {(o.start || o.end) && <div style={{ fontSize: 11, color: T.mu }}>{formatDateRange(o.start, o.end)}</div>}
+                    </Row>
+                  ))}
+                </>}
+
+                {grt.length > 0 && <>
+                  <SH label="Grants &amp; Funding" />
+                  {grt.map((g, i) => (
+                    <Row key={i} logo="💰">
+                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{g.title}</div>
+                      {g.agency && <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 2 }}>{g.agency}</div>}
+                      <div style={{ fontSize: 11.5, color: T.mu, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {g.grant_number && <span>#{g.grant_number}</span>}
+                        {g.amount_value && <span style={{ fontWeight: 600, color: T.gr }}>{g.amount_value}{g.amount_currency ? ' ' + g.amount_currency : ''}</span>}
+                        {g.role && <span>{g.role}</span>}
+                        {(g.start || g.end) && <span>{formatDateRange(g.start, g.end)}</span>}
+                      </div>
                     </Row>
                   ))}
                 </>}

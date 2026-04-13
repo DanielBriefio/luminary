@@ -77,6 +77,7 @@ export default function PublicProfilePage({ slug }) {
   const lng  = vis.skills        !== false ? (profile.languages      || []) : [];
   const skl  = vis.skills        !== false ? (profile.skills         || []) : [];
   const pat  = vis.skills        !== false ? (profile.patents        || []) : [];
+  const grt  = vis.grants        !== false ? (profile.grants         || []) : [];
   const showPubs = vis.publications !== false;
 
   const tabs = [
@@ -84,7 +85,7 @@ export default function PublicProfilePage({ slug }) {
     ...(showPubs && pubs.length > 0 ? [['publications', `Publications (${pubs.length})`]] : []),
   ];
 
-  const hasAbout = wh.length || edu.length || vol.length || org.length || lng.length || skl.length || hon.length || pat.length;
+  const hasAbout = wh.length || edu.length || vol.length || org.length || lng.length || skl.length || hon.length || pat.length || grt.length;
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.text }}>
@@ -213,6 +214,22 @@ export default function PublicProfilePage({ slug }) {
                     <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{o.name}</div>
                     {o.role && <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 1 }}>{o.role}</div>}
                     {(o.start || o.end) && <div style={{ fontSize: 11, color: T.mu }}>{formatDateRange(o.start, o.end)}</div>}
+                  </Row>
+                ))}
+              </>}
+
+              {grt.length > 0 && <>
+                <SH label="Grants &amp; Funding" />
+                {grt.map((g, i) => (
+                  <Row key={i} logo="💰">
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{g.title}</div>
+                    {g.agency && <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 2 }}>{g.agency}</div>}
+                    <div style={{ fontSize: 11.5, color: T.mu, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {g.grant_number && <span>#{g.grant_number}</span>}
+                      {g.amount_value && <span style={{ fontWeight: 600, color: T.gr }}>{g.amount_value}{g.amount_currency ? ' ' + g.amount_currency : ''}</span>}
+                      {g.role && <span>{g.role}</span>}
+                      {(g.start || g.end) && <span>{formatDateRange(g.start, g.end)}</span>}
+                    </div>
                   </Row>
                 ))}
               </>}

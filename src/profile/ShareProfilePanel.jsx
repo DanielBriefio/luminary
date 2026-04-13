@@ -5,7 +5,7 @@ import Btn from '../components/Btn';
 
 const DEFAULT_VIS = {
   work_history: true, education: true, volunteering: true,
-  organizations: true, skills: true, publications: true,
+  organizations: true, skills: true, publications: true, grants: true,
 };
 
 const VIS_SECTIONS = [
@@ -15,6 +15,7 @@ const VIS_SECTIONS = [
   ['organizations', 'Organizations & Memberships'],
   ['skills',        'Skills & Achievements'],
   ['publications',  'Publications'],
+  ['grants',        'Grants & Funding'],
 ];
 
 function slugify(name) {
