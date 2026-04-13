@@ -30,7 +30,10 @@ export default function PublicProfilePage({ slug }) {
       if (!p) { setNotFound(true); setLoading(false); return; }
 
       setProfile(p);
-      if (p.name) document.title = `${p.name} — Luminary`;
+      if (p.name) {
+        const displayName = [p.name_prefix, p.name, p.name_suffix ? p.name_suffix : null].filter(Boolean).join(' ');
+        document.title = `${displayName} — Luminary`;
+      }
 
       const vis = p.profile_visibility || {};
       if (vis.publications !== false) {
@@ -121,7 +124,13 @@ export default function PublicProfilePage({ slug }) {
         <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderTop: 'none', borderRadius: '0 0 14px 14px', padding: '0 24px 20px', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
           <div style={{ paddingTop: 56 }}>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, lineHeight: 1.2, marginBottom: 4 }}>
+              {profile.name_prefix && (
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 600, color: T.mu, marginRight: 6 }}>{profile.name_prefix}</span>
+              )}
               {profile.name || 'Researcher'}
+              {profile.name_suffix && (
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 600, color: T.mu, marginLeft: 6 }}>, {profile.name_suffix}</span>
+              )}
             </div>
             {profile.title && (
               <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{profile.title}</div>

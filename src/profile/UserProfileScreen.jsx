@@ -125,7 +125,13 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
             <div style={{ paddingTop: 48, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, lineHeight: 1.2, marginBottom: 3 }}>
+                  {p.name_prefix && (
+                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: T.mu, marginRight: 5 }}>{p.name_prefix}</span>
+                  )}
                   {p.name || 'Researcher'}
+                  {p.name_suffix && (
+                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: T.mu, marginLeft: 5 }}>, {p.name_suffix}</span>
+                  )}
                 </div>
                 {p.title && <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, marginBottom: 3 }}>{p.title}</div>}
                 <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>

@@ -36,7 +36,7 @@ function PF({label,field,form,setForm,placeholder=""}) {
 
 export default function ProfileScreen({ user, profile, setProfile }) {
   const [editing,setEditing]     = useState(false);
-  const [form,setForm]           = useState({first_name:'',middle_name:'',last_name:'',title:'',institution:'',location:'',bio:'',orcid:'',twitter:''});
+  const [form,setForm]           = useState({name_prefix:'',first_name:'',middle_name:'',last_name:'',name_suffix:'',title:'',institution:'',location:'',bio:'',orcid:'',twitter:''});
   const [saving,setSaving]       = useState(false);
   const [tab,setTab]             = useState('about');
   const [showLinkedIn,setShowLinkedIn] = useState(false);
@@ -276,7 +276,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       else if(parts.length===2){ fn=parts[0]; ln=parts[1]; }
       else { fn=parts[0]; ln=parts[parts.length-1]; mn=parts.slice(1,-1).join(' '); }
     }
-    setForm({first_name:fn,middle_name:mn,last_name:ln,title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',orcid:profile.orcid||'',twitter:profile.twitter||''});
+    setForm({name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',orcid:profile.orcid||'',twitter:profile.twitter||''});
   },[profile]);
   useEffect(()=>{ if(!user) return; supabase.from('posts_with_meta').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).then(({data})=>setUserPosts(data||[])); },[user]);
   useEffect(()=>{
@@ -616,6 +616,10 @@ export default function ProfileScreen({ user, profile, setProfile }) {
 
           {editing?(
             <div style={{maxWidth:560}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:0}}>
+                <PF label="Pre-name title" field="name_prefix" form={form} setForm={setForm} placeholder="Dr. med."/>
+                <PF label="Post-name credentials" field="name_suffix" form={form} setForm={setForm} placeholder="MD, PhD"/>
+              </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
                 <PF label="First name" field="first_name" form={form} setForm={setForm} placeholder="Jane"/>
                 <PF label="Middle name" field="middle_name" form={form} setForm={setForm} placeholder="M."/>
@@ -639,9 +643,15 @@ export default function ProfileScreen({ user, profile, setProfile }) {
           ):(
             <>
               <div style={{fontFamily:"'DM Serif Display',serif",fontSize:24,lineHeight:1.2,marginBottom:4}}>
+                {profile?.name_prefix && (
+                  <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:15,fontWeight:600,color:T.mu,marginRight:6}}>{profile.name_prefix}</span>
+                )}
                 {profile?.first_name
                   ? [profile.first_name, profile.middle_name, profile.last_name].filter(Boolean).join(' ')
                   : (profile?.name||user?.email?.split('@')[0]||'Your Name')}
+                {profile?.name_suffix && (
+                  <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:15,fontWeight:600,color:T.mu,marginLeft:6}}>, {profile.name_suffix}</span>
+                )}
               </div>
               {profile?.title&&(
                 <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>{profile.title}</div>
