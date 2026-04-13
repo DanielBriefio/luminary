@@ -1,0 +1,132 @@
+'use strict';
+
+const SUPABASE_URL     = process.env.REACT_APP_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+// Known social-media / link-preview crawlers
+const BOT_RE = /facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|whatsapp|telegrambot|discordbot|vkshare|applebot|pinterest|iframely|embedly|outbrain|W3C_Validator/i;
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function postMeta(post) {
+  let title, description;
+
+  if (post.post_type === 'paper' && post.paper_title) {
+    title = post.paper_title;
+    const byline = [post.paper_authors, post.paper_journal, post.paper_year]
+      .filter(Boolean).join(' · ');
+    const abstract = post.paper_abstract ? post.paper_abstract.slice(0, 250) : '';
+    description = [byline, abstract].filter(Boolean).join(' — ');
+
+  } else if (post.post_type === 'link' && post.link_title) {
+    title       = post.link_title;
+    description = post.link_url || '';
+
+  } else {
+    const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
+    title       = plain.slice(0, 100) + (plain.length > 100 ? '…' : '');
+    description = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
+  }
+
+  if (!title)       title       = 'Post on Luminary';
+  if (!description) description = 'Research networking for scientists and medical affairs professionals.';
+  return { title, description };
+}
+
+async function supabaseFetch(path) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: {
+      apikey:        SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  return r.json();
+}
+
+module.exports = async function handler(req, res) {
+  const { id } = req.query;
+  if (!id) return res.status(400).send('Missing id');
+
+  const ua    = req.headers['user-agent'] || '';
+  const isBot = BOT_RE.test(ua);
+
+  // ── Regular browsers: proxy the React SPA shell ───────────────────────────
+  if (!isBot) {
+    try {
+      const proto = ((req.headers['x-forwarded-proto'] || 'https') + '').split(',')[0].trim();
+      const r     = await fetch(`${proto}://${req.headers.host}/index.html`);
+      const html  = await r.text();
+      res.setHeader('Content-Type',  'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, s-maxage=3600');
+      return res.end(html);
+    } catch {
+      return res.redirect(307, '/');
+    }
+  }
+
+  // ── Social crawlers / bots: build rich OG response ────────────────────────
+  let post = null, authorName = '', authorInstitution = '';
+
+  try {
+    const rows = await supabaseFetch(
+      `posts_with_meta?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
+    );
+    post = rows?.[0] ?? null;
+  } catch {}
+
+  if (post?.user_id) {
+    try {
+      const rows = await supabaseFetch(
+        `profiles?id=eq.${encodeURIComponent(post.user_id)}&select=name,institution&limit=1`
+      );
+      authorName        = rows?.[0]?.name        ?? '';
+      authorInstitution = rows?.[0]?.institution ?? '';
+    } catch {}
+  }
+
+  const canonicalUrl = `https://${req.headers.host}/s/${id}`;
+  const { title, description } = post
+    ? postMeta(post)
+    : { title: 'Post on Luminary', description: 'Research networking for scientists.' };
+
+  const authorLine = [authorName, authorInstitution].filter(Boolean).join(', ');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>${esc(title)} — Luminary</title>
+  <meta name="description" content="${esc(description)}">
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="article">
+  <meta property="og:site_name"   content="Luminary">
+  <meta property="og:title"       content="${esc(title)}">
+  <meta property="og:description" content="${esc(description)}">
+  <meta property="og:url"         content="${esc(canonicalUrl)}">
+  ${authorLine ? `<meta property="article:author" content="${esc(authorLine)}">` : ''}
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card"        content="summary">
+  <meta name="twitter:site"        content="@LuminaryScience">
+  <meta name="twitter:title"       content="${esc(title)}">
+  <meta name="twitter:description" content="${esc(description)}">
+
+  <link rel="canonical" href="${esc(canonicalUrl)}">
+</head>
+<body>
+  <script>window.location.replace(${JSON.stringify(canonicalUrl)});</script>
+  <p>Redirecting to Luminary…</p>
+</body>
+</html>`;
+
+  res.setHeader('Content-Type',  'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=3600');
+  res.end(html);
+};

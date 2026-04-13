@@ -17,6 +17,51 @@ export default function PublicPostPage({ postId }) {
   const [notFound, setNotFound] = useState(false);
   const [sharing,  setSharing]  = useState(false);
 
+  // Inject / clean up OG + Twitter meta tags dynamically
+  // (covers JS-executing crawlers like LinkedIn's bot)
+  useEffect(() => {
+    if (!post) return;
+
+    let ogTitle, ogDescription;
+    if (post.post_type === 'paper' && post.paper_title) {
+      ogTitle = post.paper_title;
+      const byline = [post.paper_authors, post.paper_journal, post.paper_year].filter(Boolean).join(' · ');
+      const abstract = post.paper_abstract ? post.paper_abstract.slice(0, 250) : '';
+      ogDescription = [byline, abstract].filter(Boolean).join(' — ');
+    } else if (post.post_type === 'link' && post.link_title) {
+      ogTitle = post.link_title;
+      ogDescription = post.link_url || '';
+    } else {
+      const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
+      ogTitle = plain.slice(0, 100) + (plain.length > 100 ? '…' : '');
+      ogDescription = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
+    }
+    if (!ogTitle) ogTitle = 'Post on Luminary';
+    if (!ogDescription) ogDescription = 'Research networking for scientists and medical affairs professionals.';
+
+    const postUrl = `${window.location.origin}/s/${postId}`;
+    const metas = [
+      ['property', 'og:type',        'article'],
+      ['property', 'og:site_name',   'Luminary'],
+      ['property', 'og:title',       ogTitle],
+      ['property', 'og:description', ogDescription],
+      ['property', 'og:url',         postUrl],
+      ['name',     'twitter:card',        'summary'],
+      ['name',     'twitter:site',        '@LuminaryScience'],
+      ['name',     'twitter:title',       ogTitle],
+      ['name',     'twitter:description', ogDescription],
+    ];
+
+    const injected = metas.map(([attr, key, content]) => {
+      let el = document.querySelector(`meta[${attr}="${key}"]`);
+      if (!el) { el = document.createElement('meta'); el.setAttribute(attr, key); document.head.appendChild(el); }
+      el.setAttribute('content', content);
+      return el;
+    });
+
+    return () => { injected.forEach(el => el.remove()); };
+  }, [post, postId]);
+
   useEffect(() => {
     document.title = 'Luminary';
     return () => { document.title = 'Luminary'; };
