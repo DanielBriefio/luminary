@@ -1,7 +1,8 @@
 'use strict';
 
-const SUPABASE_URL     = process.env.REACT_APP_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+// Credentials are the public anon key — safe to hardcode (same as browser bundle)
+const SUPABASE_URL      = 'https://rtblqylhoswckvwwspcp.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0YmxxeWxob3N3Y2t2d3dzcGNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDUzOTQsImV4cCI6MjA5MTEyMTM5NH0.lHcaMtZ6a781g8RTVkddupNc7qV1Ll1lvBdtdsaIgOs';
 
 // Known social-media / link-preview crawlers
 const BOT_RE = /facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|whatsapp|telegrambot|discordbot|vkshare|applebot|pinterest|iframely|embedly|outbrain|W3C_Validator/i;
