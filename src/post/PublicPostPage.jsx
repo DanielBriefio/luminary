@@ -36,8 +36,11 @@ export default function PublicPostPage({ postId }) {
       const yt = post.link_url && YT_RE.exec(post.link_url);
       if (yt) ogImage = `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
     } else {
-      const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
-      ogTitle = plain.slice(0, 100) + (plain.length > 100 ? '…' : '');
+      const html  = post.content || '';
+      const first = html.split(/<br\s*\/?>|<\/p>|<\/div>/i)[0]
+                        .replace(/<[^>]+>/g, '').trim();
+      const plain = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      ogTitle = first.slice(0, 100) + (first.length > 100 ? '…' : '');
       ogDescription = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
     }
     if (post.image_url && post.file_type === 'image') ogImage = post.image_url;

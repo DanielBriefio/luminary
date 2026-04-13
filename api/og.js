@@ -35,8 +35,12 @@ function postMeta(post) {
     if (yt) image = `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
 
   } else {
-    const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
-    title       = plain.slice(0, 100) + (plain.length > 100 ? '…' : '');
+    const html  = post.content || '';
+    // First line = text before the first block-level break
+    const first = html.split(/<br\s*\/?>|<\/p>|<\/div>/i)[0]
+                      .replace(/<[^>]+>/g, '').trim();
+    const plain = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    title       = first.slice(0, 100) + (first.length > 100 ? '…' : '');
     description = plain.slice(0, 280) + (plain.length > 280 ? '…' : '');
   }
 
