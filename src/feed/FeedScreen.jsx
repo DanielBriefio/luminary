@@ -92,9 +92,17 @@ export default function FeedScreen({ user, profile, onViewUser }) {
     const [{ data: regularData }, repostItems] = await Promise.all([postQ, repostPromise]);
 
     // ── 5. Merge ─────────────────────────────────────────────────────────
+    const followedUserSet  = new Set(followedUserIds);
+    const followedPaperSet = new Set(followedPaperIds);
+
     const allItems = [
       ...(regularData||[]).map(p=>({...p, isRepost:false, _itemKey:p.id, _sortTime:p.created_at})),
-      ...repostItems,
+      // In Following mode, only include reposts whose original content is from a followed user/paper
+      ...repostItems.filter(item =>
+        fp !== 'fol' ||
+        followedUserSet.has(item.user_id) ||
+        (item.paper_doi && followedPaperSet.has(item.paper_doi))
+      ),
     ];
     if (!allItems.length) { setPosts([]); setLoading(false); return; }
 
@@ -132,9 +140,11 @@ export default function FeedScreen({ user, profile, onViewUser }) {
   // Remove a user's posts immediately when unfollowed in the Following tab
   const handleUnfollow = (userId) => {
     if (fp !== 'fol') return;
-    setPosts(prev => prev.filter(p =>
-      (p.isRepost  ? p.reposter_id !== userId : p.user_id !== userId)
-    ));
+    setPosts(prev => prev.filter(p => {
+      if (p.user_id === userId) return false;           // direct posts + reposts of their content
+      if (p.isRepost && p.reposter_id === userId) return false;  // reposts they made
+      return true;
+    }));
   };
 
   const emptyMsg = fp === 'fol'
