@@ -5,22 +5,25 @@ import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 
 export default function NetworkScreen({ user, profile, onViewUser }) {
-  const [loading,      setLoading]      = useState(true);
-  const [friends,      setFriends]      = useState([]);
-  const [followingOnly,setFollowingOnly]= useState([]);
-  const [followerOnly, setFollowerOnly] = useState([]);
-  const [suggested,    setSuggested]    = useState([]);
-  const [saving,       setSaving]       = useState({});
-  const [listModal,    setListModal]    = useState(null); // 'following' | 'followers' | null
+  const [loading,        setLoading]        = useState(true);
+  const [friends,        setFriends]        = useState([]);
+  const [followingOnly,  setFollowingOnly]  = useState([]);
+  const [followerOnly,   setFollowerOnly]   = useState([]);
+  const [suggested,      setSuggested]      = useState([]);
+  const [saving,         setSaving]         = useState({});
+  const [listModal,      setListModal]      = useState(null); // 'following' | 'followers' | null
+  const [followedPapers, setFollowedPapers] = useState([]);
+  const [unfollowingDoi, setUnfollowingDoi] = useState({});
 
   useEffect(() => { load(); }, [user.id]); // eslint-disable-line
 
   async function load() {
     setLoading(true);
 
-    const [{ data: myFollowsData }, { data: myFollowersData }] = await Promise.all([
+    const [{ data: myFollowsData }, { data: myFollowersData }, { data: paperFollows }] = await Promise.all([
       supabase.from('follows').select('target_id').eq('follower_id', user.id).eq('target_type', 'user'),
       supabase.from('follows').select('follower_id').eq('target_id', user.id).eq('target_type', 'user'),
+      supabase.from('follows').select('target_id, created_at').eq('follower_id', user.id).eq('target_type', 'paper').order('created_at', { ascending: false }),
     ]);
 
     const myFollowingIds = [...new Set((myFollowsData  || []).map(f => f.target_id))];
@@ -87,6 +90,34 @@ export default function NetworkScreen({ user, profile, onViewUser }) {
 
     const seenSuggest = new Set();
     setSuggested(suggestProfiles.filter(p => !seenSuggest.has(p.id) && seenSuggest.add(p.id)));
+
+    // Fetch paper metadata for followed papers
+    const followedDois = (paperFollows || []).map(f => f.target_id);
+    if (followedDois.length > 0) {
+      const { data: paperPosts } = await supabase
+        .from('posts')
+        .select('paper_doi, paper_title, paper_journal, paper_year, paper_authors')
+        .in('paper_doi', followedDois)
+        .eq('post_type', 'paper');
+
+      // Deduplicate by DOI, keeping first occurrence (best metadata)
+      const metaByDoi = {};
+      (paperPosts || []).forEach(p => {
+        if (!metaByDoi[p.paper_doi]) metaByDoi[p.paper_doi] = p;
+      });
+
+      // Preserve the follow order and include DOIs even if no post found
+      setFollowedPapers(followedDois.map(doi => ({
+        doi,
+        paper_title:   metaByDoi[doi]?.paper_title   || null,
+        paper_journal: metaByDoi[doi]?.paper_journal || null,
+        paper_year:    metaByDoi[doi]?.paper_year    || null,
+        paper_authors: metaByDoi[doi]?.paper_authors || null,
+      })));
+    } else {
+      setFollowedPapers([]);
+    }
+
     setLoading(false);
   }
 
@@ -135,6 +166,14 @@ export default function NetworkScreen({ user, profile, onViewUser }) {
     setSaving(prev => ({ ...prev, [targetId]: false }));
   };
 
+  const unfollowPaper = async (doi) => {
+    setUnfollowingDoi(prev => ({ ...prev, [doi]: true }));
+    await supabase.from('follows').delete()
+      .eq('follower_id', user.id).eq('target_type', 'paper').eq('target_id', doi);
+    setFollowedPapers(prev => prev.filter(p => p.doi !== doi));
+    setUnfollowingDoi(prev => ({ ...prev, [doi]: false }));
+  };
+
   const totalFollowing  = friends.length + followingOnly.length;
   const totalFollowers  = friends.length + followerOnly.length;
   const noConnections   = friends.length === 0 && followingOnly.length === 0 && followerOnly.length === 0;
@@ -161,9 +200,10 @@ export default function NetworkScreen({ user, profile, onViewUser }) {
                   {/* Stats strip */}
                   <div style={{ display: 'flex', gap: 10 }}>
                     {[
-                      { count: friends.length, label: 'Friends',   color: T.v,  bg: T.v2,  onClick: null },
-                      { count: totalFollowing, label: 'Following',  color: T.gr, bg: T.gr2, onClick: () => setListModal('following') },
-                      { count: totalFollowers, label: 'Followers',  color: T.bl, bg: T.bl2, onClick: () => setListModal('followers') },
+                      { count: friends.length,          label: 'Friends',        color: T.v,  bg: T.v2,  onClick: null },
+                      { count: totalFollowing,           label: 'Following',      color: T.gr, bg: T.gr2, onClick: () => setListModal('following') },
+                      { count: totalFollowers,           label: 'Followers',      color: T.bl, bg: T.bl2, onClick: () => setListModal('followers') },
+                      { count: followedPapers.length,    label: 'Papers',         color: T.am, bg: T.am2, onClick: null },
                     ].map(({ count, label, color, bg, onClick }) => (
                       <div
                         key={label}
@@ -254,6 +294,27 @@ export default function NetworkScreen({ user, profile, onViewUser }) {
                       ))}
                     </SectionCard>
                   )}
+
+                  {/* Papers I'm Following */}
+                  <SectionCard
+                    icon="📄"
+                    title="Papers I'm Following"
+                    count={followedPapers.length}
+                    subtitle="Papers you'll get notified about when someone comments"
+                  >
+                    {followedPapers.length === 0
+                      ? <Empty icon="📄" message="You're not following any papers yet. Follow a paper from the feed to track discussions." />
+                      : followedPapers.map((paper, i) => (
+                          <PaperRow
+                            key={paper.doi}
+                            paper={paper}
+                            isLast={i === followedPapers.length - 1}
+                            saving={unfollowingDoi[paper.doi]}
+                            onUnfollow={() => unfollowPaper(paper.doi)}
+                          />
+                        ))
+                    }
+                  </SectionCard>
 
                   {/* Zero-state */}
                   {noConnections && (
@@ -467,6 +528,32 @@ function ActionBtn({ label, variant, saving, onClick }) {
     >
       {saving ? '...' : solid ? `+ ${label}` : `✓ ${label}`}
     </button>
+  );
+}
+
+function PaperRow({ paper, isLast, onUnfollow, saving }) {
+  const title = paper.paper_title || paper.doi;
+  const meta  = [paper.paper_journal, paper.paper_year].filter(Boolean).join(' · ');
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 0', borderBottom: isLast ? 'none' : `1px solid ${T.bdr}` }}>
+      <div style={{ width: 36, height: 36, borderRadius: 8, background: T.am2, border: `1px solid ${T.am}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+        📄
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+          {title}
+        </div>
+        {meta && <div style={{ fontSize: 11, color: T.mu, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta}</div>}
+        <div style={{ fontSize: 10.5, color: T.mu, marginTop: 3, fontFamily: 'monospace', opacity: .7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{paper.doi}</div>
+      </div>
+      <button
+        onClick={onUnfollow}
+        disabled={saving}
+        style={{ fontSize: 10.5, padding: '3px 11px', borderRadius: 20, border: `1.5px solid ${T.bdr}`, background: T.w, color: T.mu, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontFamily: 'inherit', opacity: saving ? .6 : 1, whiteSpace: 'nowrap', flexShrink: 0, marginTop: 2 }}
+      >
+        {saving ? '...' : '✓ Following'}
+      </button>
+    </div>
   );
 }
 
