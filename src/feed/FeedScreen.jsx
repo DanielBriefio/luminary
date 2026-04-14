@@ -188,7 +188,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         {[["all","All"],["papers","📄 Papers"]].map(([k,l])=>(
           <div key={k} onClick={()=>setTab(k)} style={{padding:"8px 16px",fontSize:12.5,color:tab===k?T.v:T.mu,cursor:"pointer",borderBottom:`2.5px solid ${tab===k?T.v:"transparent"}`,fontWeight:600}}>{l}</div>
         ))}
-        {fp==='sug'&&(
+        {fp==='sug'&&!isMobile&&(
           <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
             <span style={{fontSize:11,color:T.mu}}>Sort:</span>
             {[['personalised','Research interests'],['chronological','Chronological']].map(([mode,label])=>(

@@ -16,12 +16,12 @@ export default function PaperPreview({ post, currentUserId, onViewPaper }) {
     <div style={{background:T.v2,border:`1px solid rgba(108,99,255,.2)`,borderRadius:12,overflow:"hidden",marginBottom:10}}>
       <div style={{padding:"13px 15px"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-          <div style={{flex:1}}>
+          <div style={{flex:1,minWidth:0}}>
             {doiUrl
-              ? <a href={doiUrl} target="_blank" rel="noopener noreferrer" style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,color:T.text,textDecoration:"none",display:"block",marginBottom:5}}>
+              ? <a href={doiUrl} target="_blank" rel="noopener noreferrer" style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,color:T.text,textDecoration:"none",display:"block",marginBottom:5,overflowWrap:"break-word"}}>
                   {post.paper_title}
                 </a>
-              : <div style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,marginBottom:5}}>{post.paper_title}</div>
+              : <div style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,marginBottom:5,overflowWrap:"break-word"}}>{post.paper_title}</div>
             }
             {post.paper_authors&&<div style={{fontSize:11,color:T.mu,marginBottom:4}}>{post.paper_authors}</div>}
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>

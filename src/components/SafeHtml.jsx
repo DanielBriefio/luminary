@@ -8,6 +8,7 @@ export default function SafeHtml({ html, tags, onTagClick }) {
     return (
       <div style={{fontSize:13,lineHeight:1.8,marginBottom:10}}>
         <style>{`
+          .rc { overflow-wrap:break-word; word-break:break-word; }
           .rc h2 { font-size:17px; font-weight:700; margin:10px 0 5px; line-height:1.3; font-family:'DM Serif Display',serif; display:block; }
           .rc h3 { font-size:14.5px; font-weight:700; margin:8px 0 4px; line-height:1.3; display:block; }
           .rc p  { margin:3px 0; display:block; }
@@ -15,11 +16,12 @@ export default function SafeHtml({ html, tags, onTagClick }) {
           .rc ul { list-style-type:disc; padding-left:22px; margin:6px 0; display:block; }
           .rc ol { list-style-type:decimal; padding-left:22px; margin:6px 0; display:block; }
           .rc li { margin:3px 0; display:list-item; }
-          .rc a  { color:#6c63ff; text-decoration:underline; }
+          .rc a  { color:#6c63ff; text-decoration:underline; overflow-wrap:break-word; word-break:break-all; }
           .rc strong, .rc b { font-weight:700; }
           .rc em, .rc i { font-style:italic; }
           .rc u  { text-decoration:underline; }
           .rc br { display:block; content:""; }
+          .rc pre, .rc code { overflow-x:auto; max-width:100%; white-space:pre-wrap; }
         `}</style>
         <div
           className="rc"
