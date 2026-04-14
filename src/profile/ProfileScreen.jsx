@@ -1107,7 +1107,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
                 <div style={{fontSize:12.5,color:T.mu,lineHeight:1.6}}>
                   {profile?.profile_slug
-                    ? <>Your card is live at <a href={`/p/${profile.profile_slug}`} target="_blank" rel="noopener noreferrer" style={{color:T.v,fontWeight:600,textDecoration:'none'}}>luminary.to/p/{profile.profile_slug} ↗</a></>
+                    ? <>Your card is live at <a href={`/p/${profile.profile_slug}`} target="_blank" rel="noopener noreferrer" style={{color:T.v,fontWeight:600,textDecoration:'none'}}>{window.location.hostname}/p/{profile.profile_slug} ↗</a></>
                     : 'Set a profile slug in Share settings to activate your card URL.'}
                 </div>
                 <Btn variant="v" onClick={()=>setEditing(true)} style={{flexShrink:0,fontSize:12}}>✏️ Edit card details</Btn>

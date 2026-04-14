@@ -401,8 +401,8 @@ function BusinessCardView({ profile, currentUserId }) {
         ? `TEL;TYPE=WORK:${profile.card_phone}` : '',
       (profile.card_show_address && profile.card_address)
         ? `ADR;TYPE=WORK:;;${profile.card_address};;;;` : '',
-      `URL:https://luminary.to/p/${profile.profile_slug}`,
-      'NOTE:Connected via Luminary — luminary.to',
+      `URL:${window.location.origin}/p/${profile.profile_slug}`,
+      'NOTE:Connected via Luminary',
       'END:VCARD',
     ].filter(Boolean).join('\r\n');
     const blob = new Blob([lines], { type: 'text/vcard' });
@@ -502,7 +502,7 @@ function BusinessCardView({ profile, currentUserId }) {
           </a>
         )}
 
-        <a href={`https://luminary.to/p/${profile.profile_slug}`} style={{
+        <a href={`${window.location.origin}/p/${profile.profile_slug}`} style={{
           width:'100%', padding:'12px', borderRadius:12, border:'1.5px solid #6c63ff',
           background:'#f0effe', color:'#6c63ff', fontSize:13, fontWeight:700, fontFamily:'inherit',
           cursor:'pointer', textDecoration:'none',

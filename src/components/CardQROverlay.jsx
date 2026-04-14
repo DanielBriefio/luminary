@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { T } from '../lib/constants';
 
 export default function CardQROverlay({ profile, onClose }) {
-  const cardUrl  = `https://luminary.to/p/${profile.profile_slug}`;
+  const cardUrl  = `${window.location.origin}/p/${profile.profile_slug}`;
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [copied,    setCopied]    = useState(false);
 
@@ -63,7 +63,7 @@ export default function CardQROverlay({ profile, onClose }) {
 
         {/* URL label */}
         <div style={{ fontSize:11.5, color:'#bbb', marginBottom:20, letterSpacing:'.03em' }}>
-          luminary.to/p/{profile.profile_slug}
+          {window.location.hostname}/p/{profile.profile_slug}
         </div>
 
         {/* Actions */}
