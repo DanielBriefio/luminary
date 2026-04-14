@@ -188,8 +188,8 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         ))}
         {fp==='sug'&&(
           <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
-            <span style={{fontSize:11,color:T.mu}}>Feed:</span>
-            {[['personalised','✨ For you'],['chronological','🕐 Latest']].map(([mode,label])=>(
+            <span style={{fontSize:11,color:T.mu}}>Sort:</span>
+            {[['personalised','Research interests'],['chronological','Chronological']].map(([mode,label])=>(
               <button key={mode} onClick={()=>setFeedMode(mode)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:600,fontFamily:'inherit',cursor:'pointer',border:`1.5px solid ${feedMode===mode?T.v:T.bdr}`,background:feedMode===mode?T.v2:'transparent',color:feedMode===mode?T.v:T.mu,transition:'all .15s'}}>
                 {label}
               </button>
