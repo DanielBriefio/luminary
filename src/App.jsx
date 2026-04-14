@@ -14,6 +14,7 @@ import PublicProfilePage from './profile/PublicProfilePage';
 import PublicPostPage from './post/PublicPostPage';
 import UserProfileScreen from './profile/UserProfileScreen';
 import NetworkScreen from './screens/NetworkScreen';
+import MessagesScreen, { startConversation } from './screens/MessagesScreen';
 import PaperDetailPage from './paper/PaperDetailPage';
 import OnboardingScreen from './screens/OnboardingScreen';
 
@@ -47,9 +48,17 @@ export default function App() {
   const [authChecked,setAuthChecked]=useState(false);
   const [showOnboarding,setShowOnboarding]=useState(false);
   const [exploreQuery,setExploreQuery]=useState('');
+  const [unreadMessages,setUnreadMessages]=useState(0);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
+  const onMessage   = async (otherUserId) => {
+    const uid = session?.user?.id;
+    if(!uid) return;
+    const convId = await startConversation(uid, otherUserId, supabase);
+    if(convId){ sessionStorage.setItem('open_conversation', convId); }
+    setScreen('messages');
+  };
 
   useEffect(()=>{
     if(publicSlug || publicPostId || publicPaperDoi) return; // no auth needed for public pages
@@ -75,6 +84,28 @@ export default function App() {
     });
   },[profile]);
 
+  // Unread message badge — fetch on login and poll every 30s
+  useEffect(()=>{
+    if(!session?.user) return;
+    const fetchUnread = async () => {
+      const { data: convs } = await supabase
+        .from('conversations')
+        .select('id')
+        .or(`user_id_a.eq.${session.user.id},user_id_b.eq.${session.user.id}`);
+      if (!convs?.length){ setUnreadMessages(0); return; }
+      const { count } = await supabase
+        .from('messages')
+        .select('id',{count:'exact',head:true})
+        .in('conversation_id', convs.map(c=>c.id))
+        .neq('sender_id', session.user.id)
+        .is('read_at', null);
+      setUnreadMessages(count||0);
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return ()=>clearInterval(interval);
+  },[session]);
+
   const signOut=async()=>{ await supabase.auth.signOut(); setScreen('feed'); };
 
   const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>;
@@ -91,12 +122,13 @@ export default function App() {
   const screens={
     feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}}/>,
     explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')}/>,
-    network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
+    network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onMessage={onMessage}/>,
+    messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
     groups:       <GroupsScreen user={user}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,
     notifs:       <NotifsScreen user={user}/>,
     post:         <NewPostScreen user={user} profile={profile} onPostCreated={()=>setScreen('feed')}/>,
-    user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper}/>,
+    user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
   };
 
@@ -125,6 +157,11 @@ export default function App() {
                 style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",margin:"1px 8px",borderRadius:9,cursor:"pointer",fontSize:12.5,fontWeight:screen===n.id?700:500,color:screen===n.id?T.v:T.mu,background:screen===n.id?T.v2:"transparent"}}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{flexShrink:0}}><path d={n.p}/></svg>
                 {n.l}
+                {n.id==='messages' && unreadMessages>0 && (
+                  <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,background:T.ro,color:"#fff",padding:"1px 6px",borderRadius:20,minWidth:16,textAlign:"center"}}>
+                    {unreadMessages>9?'9+':unreadMessages}
+                  </span>
+                )}
               </div>
             ))}
           </div>

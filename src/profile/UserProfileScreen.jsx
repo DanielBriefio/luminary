@@ -8,7 +8,7 @@ import Spinner from '../components/Spinner';
 import PostCard from '../feed/PostCard';
 import { formatDateRange } from '../lib/linkedInUtils';
 
-export default function UserProfileScreen({ userId, currentUserId, currentProfile, onBack, onViewPaper }) {
+export default function UserProfileScreen({ userId, currentUserId, currentProfile, onBack, onViewPaper, onMessage }) {
   const [profile,  setProfile]  = useState(null);
   const [pubs,     setPubs]     = useState([]);
   const [posts,    setPosts]    = useState([]);
@@ -149,7 +149,21 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                 {p.bio && <div style={{ marginBottom: 12, maxWidth: 560 }}><ExpandableBio text={p.bio} /></div>}
               </div>
               {!isOwnProfile && (
-                <div style={{ flexShrink: 0, marginTop: 4 }}>
+                <div style={{ flexShrink: 0, marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {onMessage && (
+                    <button
+                      onClick={() => onMessage(userId)}
+                      style={{
+                        fontSize: 12, fontWeight: 600, color: T.v,
+                        border: `1.5px solid ${T.v}`, background: T.v2,
+                        borderRadius: 22, padding: '6px 14px',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                        display: 'flex', alignItems: 'center', gap: 5,
+                      }}
+                    >
+                      💬 Message
+                    </button>
+                  )}
                   <FollowBtn targetType="user" targetId={userId} currentUserId={currentUserId} />
                 </div>
               )}

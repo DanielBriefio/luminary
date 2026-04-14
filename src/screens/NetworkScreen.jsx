@@ -4,7 +4,7 @@ import { T } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 
-export default function NetworkScreen({ user, profile, onViewUser, onViewPaper }) {
+export default function NetworkScreen({ user, profile, onViewUser, onViewPaper, onMessage }) {
   const [loading,        setLoading]        = useState(true);
   const [friends,        setFriends]        = useState([]);
   const [followingOnly,  setFollowingOnly]  = useState([]);
@@ -234,6 +234,7 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper }
                               saving={saving[p.id]}
                               onView={() => onViewUser(p.id)}
                               onUnfollow={() => unfollowUser(p.id, 'friend')}
+                              onMessage={onMessage ? () => onMessage(p.id) : null}
                             />
                           ))}
                         </div>
@@ -255,6 +256,7 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper }
                           person={p}
                           isLast={i === followerOnly.length - 1}
                           onView={() => onViewUser(p.id)}
+                          onMessage={onMessage ? () => onMessage(p.id) : null}
                           action={
                             <ActionBtn
                               label="Follow back"
@@ -282,6 +284,7 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper }
                           person={p}
                           isLast={i === followingOnly.length - 1}
                           onView={() => onViewUser(p.id)}
+                          onMessage={onMessage ? () => onMessage(p.id) : null}
                           action={
                             <ActionBtn
                               label="Following"
@@ -412,6 +415,7 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper }
                           person={p}
                           isLast={i === modalList.length - 1}
                           onView={() => { setListModal(null); onViewUser(p.id); }}
+                          onMessage={onMessage ? () => { setListModal(null); onMessage(p.id); } : null}
                           action={
                             isFollowingType
                               ? <ActionBtn
@@ -464,7 +468,7 @@ function Empty({ icon, message }) {
   );
 }
 
-function FriendCard({ person, onView, onUnfollow, saving }) {
+function FriendCard({ person, onView, onUnfollow, saving, onMessage }) {
   return (
     <div
       onClick={onView}
@@ -478,18 +482,28 @@ function FriendCard({ person, onView, onUnfollow, saving }) {
         {person.title && <div style={{ fontSize: 11, color: T.mu, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{person.title}</div>}
         {person.institution && <div style={{ fontSize: 11, color: T.mu, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{person.institution}</div>}
       </div>
-      <button
-        onClick={e => { e.stopPropagation(); onUnfollow(); }}
-        disabled={saving}
-        style={{ fontSize: 10.5, padding: '3px 11px', borderRadius: 20, border: `1.5px solid ${T.bdr}`, background: T.w, color: T.mu, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontFamily: 'inherit', opacity: saving ? .6 : 1 }}
-      >
-        {saving ? '...' : '✓ Friends'}
-      </button>
+      <div style={{ display: 'flex', gap: 5 }} onClick={e => e.stopPropagation()}>
+        {onMessage && (
+          <button
+            onClick={onMessage}
+            style={{ fontSize: 10.5, padding: '3px 10px', borderRadius: 20, border: `1.5px solid ${T.v}`, background: T.v2, color: T.v, cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}
+          >
+            💬
+          </button>
+        )}
+        <button
+          onClick={onUnfollow}
+          disabled={saving}
+          style={{ fontSize: 10.5, padding: '3px 11px', borderRadius: 20, border: `1.5px solid ${T.bdr}`, background: T.w, color: T.mu, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontFamily: 'inherit', opacity: saving ? .6 : 1 }}
+        >
+          {saving ? '...' : '✓ Friends'}
+        </button>
+      </div>
     </div>
   );
 }
 
-function PersonRow({ person, onView, action, isLast }) {
+function PersonRow({ person, onView, action, isLast, onMessage }) {
   return (
     <div
       onClick={onView}
@@ -506,7 +520,18 @@ function PersonRow({ person, onView, action, isLast }) {
           </div>
         )}
       </div>
-      <div onClick={e => e.stopPropagation()}>{action}</div>
+      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {onMessage && (
+          <button
+            onClick={onMessage}
+            title="Send message"
+            style={{ width: 30, height: 30, borderRadius: '50%', border: `1px solid ${T.bdr}`, background: T.w, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            💬
+          </button>
+        )}
+        {action}
+      </div>
     </div>
   );
 }
