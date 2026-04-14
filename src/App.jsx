@@ -90,7 +90,7 @@ export default function App() {
   const user=session.user;
   const screens={
     feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}}/>,
-    explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onNavigateToPost={()=>setScreen('post')}/>,
+    explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     groups:       <GroupsScreen user={user}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,

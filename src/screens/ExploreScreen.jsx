@@ -58,6 +58,61 @@ function ResearcherCard({ user, currentUserId, onViewUser }) {
   );
 }
 
+// ─── Paper search result card (Posts tab — one card per unique DOI) ──────────
+
+function PaperSearchCard({ post, currentUserId, onViewPaper }) {
+  const doiUrl = post.paper_doi ? `https://doi.org/${post.paper_doi}` : null;
+  return (
+    <div style={{
+      background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12,
+      padding: '14px 16px', boxShadow: '0 1px 4px rgba(108,99,255,.06)',
+    }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+        <span style={{
+          fontSize: 10, fontWeight: 700, color: T.v, background: T.v2,
+          padding: '2px 8px', borderRadius: 20,
+        }}>PAPER</span>
+        {post._discussionCount > 0 && (
+          <span style={{ fontSize: 11, color: T.mu }}>
+            {post._discussionCount} discussion{post._discussionCount !== 1 ? 's' : ''} on Luminary
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, marginBottom: 4 }}>
+        {post.paper_title}
+      </div>
+      {post.paper_authors && (
+        <div style={{
+          fontSize: 12, color: T.mu, marginBottom: 3,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {post.paper_authors}
+        </div>
+      )}
+      {(post.paper_journal || post.paper_year) && (
+        <div style={{ fontSize: 12, color: T.v, fontWeight: 600, marginBottom: 10 }}>
+          {[post.paper_journal, post.paper_year].filter(Boolean).join(' · ')}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {doiUrl && (
+          <Btn style={{ fontSize: 11.5 }} onClick={() => window.open(doiUrl, '_blank')}>
+            Open paper
+          </Btn>
+        )}
+        {post.paper_doi && (
+          <Btn variant="v" style={{ fontSize: 11.5 }} onClick={() => onViewPaper && onViewPaper(post.paper_doi)}>
+            Discussion
+          </Btn>
+        )}
+        {post.paper_doi && currentUserId && (
+          <FollowBtn targetType="paper" targetId={post.paper_doi} currentUserId={currentUserId} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Papers tab helper components ────────────────────────────────────────────
 
 function SectionHeader({ label }) {
@@ -240,6 +295,7 @@ export default function ExploreScreen({
   currentProfile,
   initialQuery = '',
   onViewUser,
+  onViewPaper,
   onNavigateToPost,
 }) {
   const [q, setQ]                   = useState(initialQuery);
@@ -296,7 +352,26 @@ export default function ExploreScreen({
       .filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; })
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    setPostResults(merged);
+    // Deduplicate paper posts by DOI → one card per paper, track discussion count
+    const paperByDoi = new Map();
+    const otherPosts = [];
+    for (const p of merged) {
+      if (p.post_type === 'paper' && p.paper_doi) {
+        const doi = p.paper_doi.toLowerCase();
+        if (!paperByDoi.has(doi)) {
+          paperByDoi.set(doi, { ...p, _discussionCount: 1 });
+        } else {
+          paperByDoi.get(doi)._discussionCount++;
+        }
+      } else {
+        otherPosts.push(p);
+      }
+    }
+    const dedupedPapers = Array.from(paperByDoi.values())
+      .sort((a, b) => b._discussionCount - a._discussionCount)
+      .map(p => ({ ...p, _isPaperCard: true }));
+
+    setPostResults([...dedupedPapers, ...otherPosts]);
     setPostSearching(false);
   }, []);
 
@@ -503,15 +578,25 @@ export default function ExploreScreen({
                     )
                     : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {postResults.map(p => (
-                          <PostCard
-                            key={p.id}
-                            post={p}
-                            currentUserId={currentUserId}
-                            currentProfile={currentProfile}
-                            onViewUser={onViewUser}
-                          />
-                        ))}
+                        {postResults.map(p => p._isPaperCard
+                          ? (
+                            <PaperSearchCard
+                              key={p.paper_doi}
+                              post={p}
+                              currentUserId={currentUserId}
+                              onViewPaper={onViewPaper}
+                            />
+                          ) : (
+                            <PostCard
+                              key={p.id}
+                              post={p}
+                              currentUserId={currentUserId}
+                              currentProfile={currentProfile}
+                              onViewUser={onViewUser}
+                              onViewPaper={onViewPaper}
+                            />
+                          )
+                        )}
                       </div>
                     )
                 }
@@ -608,7 +693,9 @@ export default function ExploreScreen({
                       <DiscussedCard
                         key={post.id}
                         post={post}
-                        onViewPost={(p) => window.open(`/s/${p.id}`, '_blank')}
+                        onViewPost={(p) => p.paper_doi && onViewPaper
+                          ? onViewPaper(p.paper_doi)
+                          : window.open(`/s/${p.id}`, '_blank')}
                       />
                     ))}
                     {paperResults.posts.length > 5 && (
