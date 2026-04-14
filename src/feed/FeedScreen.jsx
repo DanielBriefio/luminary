@@ -200,9 +200,9 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         )}
       </div>
       <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
-        <div style={{padding:"16px 18px"}}>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 264px",gap:16,alignItems:"start"}}>
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{padding:"16px 18px",boxSizing:"border-box",width:"100%"}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 264px",gap:16,alignItems:"start",minWidth:0,width:"100%"}}>
+            <div style={{display:"flex",flexDirection:"column",gap:12,minWidth:0}}>
               {fp==='sug'&&feedMode==='personalised'&&!profile?.topic_interests?.length&&(
                 <div style={{fontSize:12.5,color:T.mu,padding:'10px 16px',background:T.s2,borderRadius:9,display:'flex',alignItems:'center',gap:8}}>
                   <span>✨</span>
