@@ -13,6 +13,7 @@ import LinkedInImporter from './LinkedInImporter';
 import OrcidImporter from './OrcidImporter';
 import PublicationsTab from './PublicationsTab';
 import ShareProfilePanel from './ShareProfilePanel';
+import CvExportPanel from './CvExportPanel';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
 function EF({label,val,onChange,placeholder=""}) {
@@ -48,7 +49,8 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const [profileCvPending,setProfileCvPending] = useState(null);
   const [pendingCvPubs, setPendingCvPubs] = useState([]);
   const [showImportMenu, setShowImportMenu] = useState(false);
-  const [showSharePanel, setShowSharePanel] = useState(false);
+  const [showSharePanel,  setShowSharePanel]  = useState(false);
+  const [showCvExport,   setShowCvExport]   = useState(false);
   const [editingTopics,  setEditingTopics]  = useState(false);
   const [topicDraft,     setTopicDraft]     = useState([]);
   const [savingTopics,   setSavingTopics]   = useState(false);
@@ -463,6 +465,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       {showLinkedIn&&<LinkedInImporter user={user} profile={profile} setProfile={setProfile} onClose={()=>setShowLinkedIn(false)}/>}
       {showOrcid&&<OrcidImporter user={user} profile={profile} setProfile={setProfile} onClose={()=>setShowOrcid(false)}/>}
       {showSharePanel&&<ShareProfilePanel user={user} profile={profile} onClose={()=>setShowSharePanel(false)} onProfileUpdate={setProfile}/>}
+      {showCvExport&&<CvExportPanel user={user} profile={profile} onClose={()=>setShowCvExport(false)}/>}
 
       {showOrcidGrants&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:'20px 0',overflowY:'auto'}}>
@@ -624,7 +627,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
             )}
             {editing
               ?<><Btn onClick={()=>setEditing(false)}>Cancel</Btn><Btn variant="s" onClick={save} disabled={saving}>{saving?'Saving...':'Save Profile'}</Btn></>
-              :<><Btn variant="v" onClick={()=>setEditing(true)}>✏️ Edit</Btn><Btn variant="s" onClick={()=>setShowSharePanel(true)}>🔗 Share</Btn></>}
+              :<><Btn variant="v" onClick={()=>setEditing(true)}>✏️ Edit</Btn><Btn onClick={()=>setShowCvExport(true)}>↓ Export CV</Btn><Btn variant="s" onClick={()=>setShowSharePanel(true)}>🔗 Share</Btn></>}
           </div>
 
           {editing?(
