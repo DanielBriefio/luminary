@@ -268,15 +268,35 @@ export default function ExploreScreen({
   const searchPosts = useCallback(async (query) => {
     if (!query.trim()) { setPostResults([]); return; }
     setPostSearching(true);
-    // Strip leading # so "#GLP1" and "GLP1" behave the same
+    // Strip leading # so "#GLP1" and "GLP1" behave identically
     const cleanQ = query.trim().replace(/^#+/, '');
-    const { data } = await supabase
-      .from('posts_with_meta')
-      .select('*')
-      .or(`content.ilike.%${cleanQ}%,paper_title.ilike.%${cleanQ}%,paper_authors.ilike.%${cleanQ}%,tags.cs.{"${cleanQ}"}`)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    setPostResults(data || []);
+    // Tags are stored WITH # prefix (e.g. "#family"), so tag search uses "#cleanQ"
+    const tagQ = `#${cleanQ}`;
+
+    // Two queries: (1) full-text across text fields, (2) exact tag array match
+    // Separate queries are more reliable than cs inside or() in PostgREST
+    const [textRes, tagRes] = await Promise.all([
+      supabase
+        .from('posts_with_meta')
+        .select('*')
+        .or(`content.ilike.%${cleanQ}%,paper_title.ilike.%${cleanQ}%,paper_authors.ilike.%${cleanQ}%`)
+        .order('created_at', { ascending: false })
+        .limit(40),
+      supabase
+        .from('posts_with_meta')
+        .select('*')
+        .contains('tags', [tagQ])
+        .order('created_at', { ascending: false })
+        .limit(40),
+    ]);
+
+    // Merge and deduplicate by post id, preserve recency order
+    const seen = new Set();
+    const merged = [...(textRes.data || []), ...(tagRes.data || [])]
+      .filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    setPostResults(merged);
     setPostSearching(false);
   }, []);
 
@@ -431,19 +451,22 @@ export default function ExploreScreen({
                   Browse by Topic
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-                  {topicChips.map(tag => (
-                    <span
-                      key={tag}
-                      onClick={() => handleChipClick(tag)}
-                      style={{
-                        cursor: 'pointer', display: 'inline-flex', padding: '5px 14px',
-                        borderRadius: 20, fontSize: 12, fontWeight: 700,
-                        background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.2)`,
-                      }}
-                    >
-                      #{tag}
-                    </span>
-                  ))}
+                  {topicChips.map(tag => {
+                    const label = tag.replace(/^#+/, ''); // strip # if DB returns it with prefix
+                    return (
+                      <span
+                        key={tag}
+                        onClick={() => handleChipClick(tag)}
+                        style={{
+                          cursor: 'pointer', display: 'inline-flex', padding: '5px 14px',
+                          borderRadius: 20, fontSize: 12, fontWeight: 700,
+                          background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.2)`,
+                        }}
+                      >
+                        #{label}
+                      </span>
+                    );
+                  })}
                 </div>
                 <div style={{
                   background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14,
@@ -582,7 +605,11 @@ export default function ExploreScreen({
                   <>
                     <SectionHeader label={`💬 Discussed on Luminary  (${paperResults.posts.length})`} />
                     {(showMoreDiscussed ? paperResults.posts : paperResults.posts.slice(0, 5)).map(post => (
-                      <DiscussedCard key={post.id} post={post} />
+                      <DiscussedCard
+                        key={post.id}
+                        post={post}
+                        onViewPost={(p) => window.open(`/s/${p.id}`, '_blank')}
+                      />
                     ))}
                     {paperResults.posts.length > 5 && (
                       <button
