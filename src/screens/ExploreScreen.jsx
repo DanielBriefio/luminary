@@ -256,6 +256,8 @@ export default function ExploreScreen({
   // Papers tab state
   const [paperResults, setPaperResults]     = useState({ posts: [], profiles: [], epmc: [] });
   const [paperSearching, setPaperSearching] = useState(false);
+  const [showMoreDiscussed, setShowMoreDiscussed]   = useState(false);
+  const [showMoreInProfiles, setShowMoreInProfiles] = useState(false);
 
   const { suggested: topicChips } = useSuggestedTopics([], 20);
 
@@ -266,12 +268,14 @@ export default function ExploreScreen({
   const searchPosts = useCallback(async (query) => {
     if (!query.trim()) { setPostResults([]); return; }
     setPostSearching(true);
+    // Strip leading # so "#GLP1" and "GLP1" behave the same
+    const cleanQ = query.trim().replace(/^#+/, '');
     const { data } = await supabase
       .from('posts_with_meta')
       .select('*')
-      .ilike('content', `%${query}%`)
+      .or(`content.ilike.%${cleanQ}%,paper_title.ilike.%${cleanQ}%,paper_authors.ilike.%${cleanQ}%,tags.cs.{"${cleanQ}"}`)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
     setPostResults(data || []);
     setPostSearching(false);
   }, []);
@@ -292,26 +296,30 @@ export default function ExploreScreen({
     if (!query.trim()) { setPaperResults({ posts: [], profiles: [], epmc: [] }); return; }
     setPaperSearching(true);
     setPaperResults({ posts: [], profiles: [], epmc: [] });
+    setShowMoreDiscussed(false);
+    setShowMoreInProfiles(false);
+
+    const cleanQ = query.trim().replace(/^#+/, '');
 
     const [postsRes, profilesRes, epmcRes] = await Promise.all([
       supabase
         .from('posts_with_meta')
         .select('*')
-        .or(`content.ilike.%${query}%,paper_title.ilike.%${query}%`)
+        .or(`content.ilike.%${cleanQ}%,paper_title.ilike.%${cleanQ}%,paper_authors.ilike.%${cleanQ}%`)
         .eq('post_type', 'paper')
         .order('created_at', { ascending: false })
-        .limit(5),
+        .limit(20),
 
       supabase
         .from('publications')
         .select('*, profiles(id, name, avatar_url, avatar_color, title, institution)')
-        .or(`title.ilike.%${query}%,authors.ilike.%${query}%,journal.ilike.%${query}%`)
+        .or(`title.ilike.%${cleanQ}%,authors.ilike.%${cleanQ}%,journal.ilike.%${cleanQ}%`)
         .order('year', { ascending: false })
-        .limit(5),
+        .limit(20),
 
       fetch(
         `https://www.ebi.ac.uk/europepmc/webservices/rest/search` +
-        `?query=${encodeURIComponent(query)}&resultType=core&pageSize=8&format=json`
+        `?query=${encodeURIComponent(cleanQ)}&resultType=core&pageSize=10&format=json`
       ).then(r => r.json()).then(d => d.resultList?.result || []).catch(() => []),
     ]);
 
@@ -573,9 +581,23 @@ export default function ExploreScreen({
                 {paperResults.posts.length > 0 && (
                   <>
                     <SectionHeader label={`💬 Discussed on Luminary  (${paperResults.posts.length})`} />
-                    {paperResults.posts.map(post => (
+                    {(showMoreDiscussed ? paperResults.posts : paperResults.posts.slice(0, 5)).map(post => (
                       <DiscussedCard key={post.id} post={post} />
                     ))}
+                    {paperResults.posts.length > 5 && (
+                      <button
+                        onClick={() => setShowMoreDiscussed(v => !v)}
+                        style={{
+                          width: '100%', padding: '8px', borderRadius: 9, border: `1px solid ${T.bdr}`,
+                          background: T.s2, color: T.v, fontWeight: 600, fontSize: 12,
+                          fontFamily: 'inherit', cursor: 'pointer', marginBottom: 8,
+                        }}
+                      >
+                        {showMoreDiscussed
+                          ? 'Show less'
+                          : `Show ${paperResults.posts.length - 5} more discussions`}
+                      </button>
+                    )}
                   </>
                 )}
 
@@ -583,9 +605,23 @@ export default function ExploreScreen({
                 {paperResults.profiles.length > 0 && (
                   <>
                     <SectionHeader label={`👤 In researcher profiles  (${paperResults.profiles.length})`} />
-                    {paperResults.profiles.map(pub => (
+                    {(showMoreInProfiles ? paperResults.profiles : paperResults.profiles.slice(0, 5)).map(pub => (
                       <ProfilePubCard key={pub.id} pub={pub} onViewUser={onViewUser} />
                     ))}
+                    {paperResults.profiles.length > 5 && (
+                      <button
+                        onClick={() => setShowMoreInProfiles(v => !v)}
+                        style={{
+                          width: '100%', padding: '8px', borderRadius: 9, border: `1px solid ${T.bdr}`,
+                          background: T.s2, color: T.v, fontWeight: 600, fontSize: 12,
+                          fontFamily: 'inherit', cursor: 'pointer', marginBottom: 8,
+                        }}
+                      >
+                        {showMoreInProfiles
+                          ? 'Show less'
+                          : `Show ${paperResults.profiles.length - 5} more in profiles`}
+                      </button>
+                    )}
                   </>
                 )}
 
