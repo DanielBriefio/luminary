@@ -19,6 +19,7 @@ import NetworkScreen from './screens/NetworkScreen';
 import MessagesScreen, { startConversation } from './screens/MessagesScreen';
 import PaperDetailPage from './paper/PaperDetailPage';
 import OnboardingScreen from './screens/OnboardingScreen';
+import CardQROverlay from './components/CardQROverlay';
 
 // Detect public profile route: /p/:slug
 const getPublicSlug = () => {
@@ -53,6 +54,7 @@ export default function App() {
   const [exploreQuery,setExploreQuery]=useState('');
   const [unreadMessages,setUnreadMessages]=useState(0);
   const [unreadNotifs,setUnreadNotifs]=useState(0);
+  const [showCardQR,setShowCardQR]=useState(false);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -165,6 +167,7 @@ export default function App() {
   return (
     <>
       {fonts}
+      {showCardQR && profile && <CardQROverlay profile={profile} onClose={()=>setShowCardQR(false)}/>}
       <div style={{display:"flex",height:"100vh",fontFamily:"'DM Sans',sans-serif",fontSize:13,color:T.text,background:T.bg,overflow:"hidden"}}>
         {/* Onboarding overlay */}
         {showOnboarding && (
@@ -179,8 +182,14 @@ export default function App() {
         {/* Sidebar — desktop only */}
         {!isMobile && (
           <div style={{width:200,flexShrink:0,background:T.w,borderRight:`1px solid ${T.bdr}`,display:"flex",flexDirection:"column"}}>
-            <div style={{padding:"16px 14px 14px",borderBottom:`1px solid ${T.bdr}`}}>
+            <div style={{padding:"16px 14px 14px",borderBottom:`1px solid ${T.bdr}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div style={{fontFamily:"'DM Serif Display',serif",fontSize:21}}>Lumi<span style={{color:T.v}}>nary</span></div>
+              {profile?.profile_slug && (
+                <button onClick={()=>setShowCardQR(true)} title="Share my card"
+                  style={{width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:7,fontSize:16}}>
+                  🪪
+                </button>
+              )}
             </div>
             <div style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
               {NAV.map(n=>(
@@ -245,6 +254,13 @@ export default function App() {
                     </span>
                   )}
                 </button>
+                {/* Card QR button — mobile */}
+                {profile?.profile_slug && (
+                  <button onClick={()=>setShowCardQR(true)} title="Share my card"
+                    style={{width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:9,fontSize:18}}>
+                    🪪
+                  </button>
+                )}
                 <button onClick={signOut} title="Sign out"
                   style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:9}}>
                   ↩

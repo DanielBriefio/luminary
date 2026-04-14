@@ -37,6 +37,17 @@ function PF({label,field,form,setForm,placeholder=""}) {
   );
 }
 
+function VisibilityToggle({ label, value, onChange }) {
+  return (
+    <label style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom:`1px solid ${T.bdr}`, cursor:'pointer' }}>
+      <span style={{ fontSize:12.5, color:T.text }}>{label}</span>
+      <div onClick={() => onChange(!value)} style={{ width:36, height:20, borderRadius:10, position:'relative', background:value?T.v:T.s3, transition:'background .2s', cursor:'pointer', flexShrink:0 }}>
+        <div style={{ position:'absolute', top:2, left:value?18:2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left .2s', boxShadow:'0 1px 3px rgba(0,0,0,.2)' }}/>
+      </div>
+    </label>
+  );
+}
+
 export default function ProfileScreen({ user, profile, setProfile }) {
   const { isMobile } = useWindowSize();
   const [editing,setEditing]     = useState(false);
@@ -289,7 +300,23 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       else if(parts.length===2){ fn=parts[0]; ln=parts[1]; }
       else { fn=parts[0]; ln=parts[parts.length-1]; mn=parts.slice(1,-1).join(' '); }
     }
-    setForm({name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',orcid:profile.orcid||'',twitter:profile.twitter||''});
+    setForm({
+      name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',
+      title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',
+      orcid:profile.orcid||'',twitter:profile.twitter||'',
+      card_email:   profile.card_email   ||'',
+      card_phone:   profile.card_phone   ||'',
+      card_address: profile.card_address ||'',
+      card_linkedin:profile.card_linkedin||'',
+      card_website: profile.card_website ||'',
+      card_show_email:    profile.card_show_email    ??false,
+      card_show_phone:    profile.card_show_phone    ??false,
+      card_show_address:  profile.card_show_address  ??false,
+      card_show_linkedin: profile.card_show_linkedin ??true,
+      card_show_website:  profile.card_show_website  ??true,
+      card_show_orcid:    profile.card_show_orcid    ??true,
+      card_show_twitter:  profile.card_show_twitter  ??true,
+    });
   },[profile]);
   useEffect(()=>{ if(!user) return; supabase.from('posts_with_meta').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).then(({data})=>setUserPosts(data||[])); },[user]);
   useEffect(()=>{
@@ -690,6 +717,37 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                 <PF label="ORCID" field="orcid" form={form} setForm={setForm} placeholder="0000-0000-0000-0000"/>
                 <PF label="Twitter / X" field="twitter" form={form} setForm={setForm} placeholder="@yourhandle"/>
               </div>
+
+              {/* Business Card section */}
+              <div style={{marginTop:24,paddingTop:20,borderTop:`2px solid ${T.bdr}`}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                  <div style={{fontSize:14,fontWeight:700,color:T.text}}>🪪 Business Card</div>
+                  {profile?.profile_slug&&(
+                    <a href={`/p/${profile.profile_slug}`} target="_blank" rel="noopener noreferrer"
+                      style={{fontSize:12,color:T.v,fontWeight:600,textDecoration:'none'}}>Preview card →</a>
+                  )}
+                </div>
+                <div style={{fontSize:12,color:T.mu,marginBottom:16,lineHeight:1.6}}>
+                  Your card is shown when someone scans your QR code. Add contact details to make it useful.
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                  <PF label="Work email" field="card_email" form={form} setForm={setForm} placeholder="daniel@organon.com"/>
+                  <PF label="Work phone" field="card_phone" form={form} setForm={setForm} placeholder="+81 3 1234 5678"/>
+                  <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/danielruzicka"/>
+                  <PF label="Personal website" field="card_website" form={form} setForm={setForm} placeholder="danielruzicka.com"/>
+                  <div style={{gridColumn:'span 2'}}>
+                    <PF label="Office address" field="card_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005"/>
+                  </div>
+                </div>
+                <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Visibility on public card</div>
+                <VisibilityToggle label="Show work email" value={form.card_show_email}    onChange={v=>setForm(f=>({...f,card_show_email:v}))}/>
+                <VisibilityToggle label="Show work phone" value={form.card_show_phone}    onChange={v=>setForm(f=>({...f,card_show_phone:v}))}/>
+                <VisibilityToggle label="Show office address" value={form.card_show_address} onChange={v=>setForm(f=>({...f,card_show_address:v}))}/>
+                <VisibilityToggle label="Show LinkedIn"    value={form.card_show_linkedin} onChange={v=>setForm(f=>({...f,card_show_linkedin:v}))}/>
+                <VisibilityToggle label="Show personal website" value={form.card_show_website}  onChange={v=>setForm(f=>({...f,card_show_website:v}))}/>
+                <VisibilityToggle label="Show ORCID"      value={form.card_show_orcid}    onChange={v=>setForm(f=>({...f,card_show_orcid:v}))}/>
+                <VisibilityToggle label="Show Twitter / X" value={form.card_show_twitter}  onChange={v=>setForm(f=>({...f,card_show_twitter:v}))}/>
+              </div>
             </div>
           ):(
             <>
@@ -1043,6 +1101,32 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                   </div>
                 </div>
               )}
+
+              {/* Business Card summary — view mode */}
+              <SectionHead label="🪪 Business Card"/>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
+                <div style={{fontSize:12.5,color:T.mu,lineHeight:1.6}}>
+                  {profile?.profile_slug
+                    ? <>Your card is live at <a href={`/p/${profile.profile_slug}`} target="_blank" rel="noopener noreferrer" style={{color:T.v,fontWeight:600,textDecoration:'none'}}>luminary.to/p/{profile.profile_slug} ↗</a></>
+                    : 'Set a profile slug in Share settings to activate your card URL.'}
+                </div>
+                <Btn variant="v" onClick={()=>setEditing(true)} style={{flexShrink:0,fontSize:12}}>✏️ Edit card details</Btn>
+              </div>
+              {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website)
+                ? (
+                  <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:7}}>
+                    {profile.card_email    &&<div style={{fontSize:12,color:T.text}}>✉️ {profile.card_email}   {!profile.card_show_email   &&<span style={{color:T.mu,fontSize:11}}> (hidden)</span>}</div>}
+                    {profile.card_phone    &&<div style={{fontSize:12,color:T.text}}>📞 {profile.card_phone}   {!profile.card_show_phone   &&<span style={{color:T.mu,fontSize:11}}> (hidden)</span>}</div>}
+                    {profile.card_linkedin &&<div style={{fontSize:12,color:T.text}}>💼 {profile.card_linkedin} {!profile.card_show_linkedin &&<span style={{color:T.mu,fontSize:11}}> (hidden)</span>}</div>}
+                    {profile.card_website  &&<div style={{fontSize:12,color:T.text}}>🌐 {profile.card_website}  {!profile.card_show_website  &&<span style={{color:T.mu,fontSize:11}}> (hidden)</span>}</div>}
+                    {profile.card_address  &&<div style={{fontSize:12,color:T.text}}>📍 {profile.card_address}  {!profile.card_show_address  &&<span style={{color:T.mu,fontSize:11}}> (hidden)</span>}</div>}
+                  </div>
+                ) : (
+                  <div style={{background:T.v2,border:`1px dashed rgba(108,99,255,.3)`,borderRadius:10,padding:'14px 16px',fontSize:12.5,color:T.mu,lineHeight:1.7}}>
+                    No contact details added yet. Click <strong>Edit card details</strong> to add your work email, phone, LinkedIn, and more. These will appear when someone scans your QR code.
+                  </div>
+                )
+              }
             </div>
           )}
 
