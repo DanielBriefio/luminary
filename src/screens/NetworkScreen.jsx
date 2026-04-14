@@ -189,7 +189,7 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper, 
         <div style={{ fontSize: 12, color: T.mu, marginTop: 2 }}>Manage your connections and discover researchers</div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         {loading
           ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}><Spinner /></div>
           : (

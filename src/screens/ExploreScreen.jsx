@@ -521,7 +521,7 @@ export default function ExploreScreen({
       </div>
 
       {/* ── Tab content ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 18px' }}>
 
         {/* ═══ Posts tab ═════════════════════════════════════════════════ */}
         {exploreTab === 'posts' && (

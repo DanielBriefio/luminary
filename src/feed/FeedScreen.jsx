@@ -199,7 +199,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
           </div>
         )}
       </div>
-      <div style={{flex:1,overflowY:"auto"}}>
+      <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
         <div style={{padding:"16px 18px"}}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 264px",gap:16,alignItems:"start"}}>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>

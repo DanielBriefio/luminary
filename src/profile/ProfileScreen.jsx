@@ -459,7 +459,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   }
 
   return (
-    <div style={{flex:1,overflowY:'auto'}}>
+    <div style={{flex:1,overflowY:'auto',overflowX:'hidden'}}>
       {showLinkedIn&&<LinkedInImporter user={user} profile={profile} setProfile={setProfile} onClose={()=>setShowLinkedIn(false)}/>}
       {showOrcid&&<OrcidImporter user={user} profile={profile} setProfile={setProfile} onClose={()=>setShowOrcid(false)}/>}
       {showSharePanel&&<ShareProfilePanel user={user} profile={profile} onClose={()=>setShowSharePanel(false)} onProfileUpdate={setProfile}/>}

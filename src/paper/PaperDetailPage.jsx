@@ -330,7 +330,7 @@ export default function PaperDetailPage({
           <div style={{ fontSize: 11, color: T.mu }}>Paper discussion</div>
         </div>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         {pageContent}
       </div>
     </div>

@@ -68,7 +68,7 @@ export default function NotifsScreen({ user }) {
         </div>
         <button onClick={fetchNotifs} style={{fontSize:11,color:T.mu,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>↻ Refresh</button>
       </div>
-      <div style={{flex:1,overflowY:"auto"}}>
+      <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
         {loading ? (
           <div style={{display:"flex",justifyContent:"center",padding:32}}><Spinner/></div>
         ) : notifs.length === 0 ? (

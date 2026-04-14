@@ -60,7 +60,7 @@ export default function GroupsScreen({ user }) {
           <div style={{fontSize:10.5,color:T.mu}}>Private group feed 🔒</div>
         </div>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
+      <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"16px 18px"}}>
         <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:16,marginBottom:14,boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
           <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:10}}>
             <Av color="me" size={32} name=""/>
@@ -100,7 +100,7 @@ export default function GroupsScreen({ user }) {
         <div style={{fontWeight:700,fontSize:15,flex:1}}>Research Groups</div>
         <Btn variant="s" onClick={()=>setShowCreate(!showCreate)}>+ Create Group</Btn>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
+      <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"16px 18px"}}>
         {showCreate&&(
           <div style={{background:T.w,border:`2px solid ${T.v}`,borderRadius:14,padding:20,marginBottom:16,boxShadow:"0 4px 20px rgba(108,99,255,.15)"}}>
             <div style={{fontSize:14,fontWeight:700,marginBottom:14,fontFamily:"'DM Serif Display',serif"}}>Create a new research group</div>

@@ -96,7 +96,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
       <TopBar onBack={onBack} />
 
-      <div style={{ flex: 1, overflowY: 'auto', background: T.bg }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: T.bg }}>
         <div style={{ maxWidth: 740, margin: '0 auto', padding: '20px 18px 48px' }}>
 
           {/* Banner + Avatar */}
