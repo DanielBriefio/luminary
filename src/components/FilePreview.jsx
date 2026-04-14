@@ -1,13 +1,15 @@
 import { T } from '../lib/constants';
+import { useWindowSize } from '../lib/useWindowSize';
 
 export default function FilePreview({ url, fileType, fileName }) {
+  const { isMobile } = useWindowSize();
   if (!url) return null;
 
   if (fileType === 'image') {
     return (
       <div style={{borderRadius:12,overflow:"hidden",margin:"8px 0",border:`1px solid ${T.bdr}`}}>
         <img src={url} alt={fileName||"Image"}
-          style={{width:"100%",maxHeight:520,objectFit:"cover",display:"block",cursor:"pointer"}}
+          style={{width:"100%",maxHeight:isMobile?300:520,objectFit:"cover",display:"block",cursor:"pointer"}}
           onClick={()=>window.open(url,'_blank')}/>
       </div>
     );
@@ -17,7 +19,7 @@ export default function FilePreview({ url, fileType, fileName }) {
     return (
       <div style={{borderRadius:12,overflow:"hidden",margin:"8px 0",border:`1px solid ${T.bdr}`,background:"#000"}}>
         <video src={url} controls autoPlay muted playsInline loop
-          style={{width:"100%",maxHeight:480,display:"block",outline:"none"}}/>
+          style={{width:"100%",maxHeight:isMobile?260:480,display:"block",outline:"none"}}/>
         <div style={{padding:"7px 12px",background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <span style={{fontSize:11,color:"rgba(255,255,255,.7)",fontWeight:600}}>{fileName}</span>
           <a href={url} target="_blank" rel="noopener noreferrer"
@@ -47,7 +49,7 @@ export default function FilePreview({ url, fileType, fileName }) {
   if (fileType === 'pdf') {
     return (
       <div style={{border:`1px solid ${T.bdr}`,borderRadius:12,overflow:"hidden",margin:"8px 0"}}>
-        <div style={{position:"relative",height:320,background:T.s2}}>
+        <div style={{position:"relative",height:isMobile?220:320,background:T.s2}}>
           <iframe
             src={`${url}#toolbar=0&navpanes=0&scrollbar=0&page=1&view=FitH`}
             title={fileName||"PDF preview"}

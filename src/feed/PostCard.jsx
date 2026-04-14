@@ -222,6 +222,28 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           );
           if(ytMatch) {
             const videoId = ytMatch[1];
+            const thumbUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+            // On mobile: thumbnail + tap-to-open (iframes steal all touch events)
+            if (isMobile) {
+              return (
+                <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none",display:"block",margin:"8px 0",borderRadius:10,overflow:"hidden",border:`1px solid ${T.bdr}`}}>
+                  <div style={{position:"relative"}}>
+                    <img src={thumbUrl} alt={post.link_title} style={{width:"100%",display:"block",maxHeight:200,objectFit:"cover"}}/>
+                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,.3)"}}>
+                      <div style={{width:52,height:52,borderRadius:"50%",background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{fontSize:22,marginLeft:4}}>▶</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{padding:"9px 13px",background:T.s2,display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{post.link_title}</div>
+                      <div style={{fontSize:10.5,color:T.v}}>Tap to watch on YouTube ↗</div>
+                    </div>
+                  </div>
+                </a>
+              );
+            }
             return (
               <div style={{margin:"8px 0",borderRadius:10,overflow:"hidden",border:`1px solid ${T.bdr}`}}>
                 <div style={{position:"relative",paddingBottom:"56.25%",height:0,background:"#000"}}>
