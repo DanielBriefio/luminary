@@ -5,7 +5,7 @@ const ICONS = {
   feed:     "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   explore:  "M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0 M21 21l-4.35-4.35",
   post:     "M12 5v14 M5 12h14",   // plus icon for new post
-  messages: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+  notifs:   "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0",
   profile:  "M12 8a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 20c0-4 3.6-7 8-7s8 3 8 7",
 };
 
@@ -13,10 +13,11 @@ const TABS = [
   { id: 'feed',    label: 'Home',    icon: ICONS.feed },
   { id: 'explore', label: 'Explore', icon: ICONS.explore },
   { id: 'post',    label: 'Post',    icon: ICONS.post, isCenter: true },
+  { id: 'notifs',  label: 'Alerts',  icon: ICONS.notifs },
   { id: 'profile', label: 'Profile', icon: ICONS.profile },
 ];
 
-export default function BottomNav({ screen, setScreen }) {
+export default function BottomNav({ screen, setScreen, unreadNotifs = 0 }) {
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -71,6 +72,16 @@ export default function BottomNav({ screen, setScreen }) {
                     strokeLinecap="round" strokeLinejoin="round">
                     <path d={tab.icon} />
                   </svg>
+                  {tab.id === 'notifs' && unreadNotifs > 0 && (
+                    <span style={{
+                      position: 'absolute', top: -3, right: -5,
+                      fontSize: 9, fontWeight: 700, background: T.ro, color: '#fff',
+                      padding: '1px 4px', borderRadius: 20, minWidth: 14,
+                      textAlign: 'center', lineHeight: '14px',
+                    }}>
+                      {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                    </span>
+                  )}
                 </div>
                 <span style={{ fontSize: 10, fontWeight: active ? 700 : 500 }}>
                   {tab.label}

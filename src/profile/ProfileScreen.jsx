@@ -248,6 +248,10 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const [userPosts,setUserPosts] = useState([]);
   const [pubStats,setPubStats]   = useState({hIndex:0,totalCitations:0,pubCount:0});
   const [followStats,setFollowStats] = useState({followers:0,following:0});
+  const [networkTab,setNetworkTab]   = useState('followers'); // 'followers'|'following'
+  const [networkOpen,setNetworkOpen] = useState(false);
+  const [networkList,setNetworkList] = useState([]);
+  const [networkLoading,setNetworkLoading] = useState(false);
   const [avatarUploading,setAvatarUploading] = useState(false);
   const [avatarHover,setAvatarHover]         = useState(false);
 
@@ -461,6 +465,33 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       </div>
     );
   }
+
+  const openNetwork = async (tab) => {
+    const newTab = networkOpen && networkTab === tab ? null : tab;
+    if (!newTab) { setNetworkOpen(false); return; }
+    setNetworkTab(tab);
+    setNetworkOpen(true);
+    setNetworkLoading(true);
+    setNetworkList([]);
+    try {
+      if (tab === 'followers') {
+        const { data } = await supabase
+          .from('follows')
+          .select('follower_id, profiles!follows_follower_id_fkey(id,name,title,institution,avatar_color,avatar_url)')
+          .eq('target_type','user').eq('target_id', user.id)
+          .order('created_at',{ascending:false}).limit(50);
+        setNetworkList((data||[]).map(r=>r.profiles).filter(Boolean));
+      } else {
+        const { data } = await supabase
+          .from('follows')
+          .select('target_id, profiles!follows_target_id_fkey(id,name,title,institution,avatar_color,avatar_url)')
+          .eq('follower_id', user.id).eq('target_type','user')
+          .order('created_at',{ascending:false}).limit(50);
+        setNetworkList((data||[]).map(r=>r.profiles).filter(Boolean));
+      }
+    } catch(e) { setNetworkList([]); }
+    setNetworkLoading(false);
+  };
 
   return (
     <div style={{flex:1,overflowY:'auto',overflowX:'hidden'}}>
@@ -689,18 +720,52 @@ export default function ProfileScreen({ user, profile, setProfile }) {
               )}
               <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:9,margin:'14px 0'}}>
                 {[
-                  [followStats.followers,'Followers'],
-                  [followStats.following,'Following'],
-                  [pubStats.pubCount||'—','Publications'],
-                  [pubStats.totalCitations||'—','Citations'],
-                  [pubStats.hIndex>0?`h${pubStats.hIndex}`:'—','h-index'],
-                ].map(([v,l])=>(
-                  <div key={l} style={{background:T.s2,borderRadius:10,padding:'10px 8px',textAlign:'center'}}>
-                    <div style={{fontSize:19,fontWeight:700,fontFamily:"'DM Serif Display',serif",color:T.v}}>{v}</div>
-                    <div style={{fontSize:9.5,color:T.mu,textTransform:'uppercase',letterSpacing:'.05em',marginTop:2,fontWeight:600}}>{l}</div>
-                  </div>
-                ))}
+                  [followStats.followers,'Followers','followers'],
+                  [followStats.following,'Following','following'],
+                  [pubStats.pubCount||'—','Publications',null],
+                  [pubStats.totalCitations||'—','Citations',null],
+                  [pubStats.hIndex>0?`h${pubStats.hIndex}`:'—','h-index',null],
+                ].map(([v,l,networkKey])=>{
+                  const isActive = networkOpen && networkTab===networkKey;
+                  const clickable = !isMobile && networkKey;
+                  return (
+                    <div key={l}
+                      onClick={clickable ? ()=>openNetwork(networkKey) : undefined}
+                      style={{background:isActive?T.v2:T.s2,borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:clickable?'pointer':undefined,border:isActive?`1.5px solid rgba(108,99,255,.3)`:'1.5px solid transparent',transition:'background .15s'}}>
+                      <div style={{fontSize:19,fontWeight:700,fontFamily:"'DM Serif Display',serif",color:isActive?T.v3:T.v}}>{v}</div>
+                      <div style={{fontSize:9.5,color:isActive?T.v:T.mu,textTransform:'uppercase',letterSpacing:'.05em',marginTop:2,fontWeight:600}}>{l}{clickable?' ▾':''}</div>
+                    </div>
+                  );
+                })}
               </div>
+              {/* My Network inline panel — desktop only */}
+              {!isMobile && networkOpen && (
+                <div style={{background:T.s2,borderRadius:12,padding:'14px 16px',marginBottom:10,border:`1px solid ${T.bdr}`}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                    <span style={{fontSize:11.5,fontWeight:700,color:T.v,textTransform:'uppercase',letterSpacing:'.06em'}}>
+                      {networkTab==='followers'?'Followers':'Following'}
+                    </span>
+                    <button onClick={()=>setNetworkOpen(false)} style={{border:'none',background:'transparent',cursor:'pointer',color:T.mu,fontSize:14,lineHeight:1,padding:'2px 4px'}}>✕</button>
+                  </div>
+                  {networkLoading ? (
+                    <div style={{textAlign:'center',padding:'12px 0',color:T.mu,fontSize:12}}>Loading…</div>
+                  ) : networkList.length === 0 ? (
+                    <div style={{textAlign:'center',padding:'12px 0',color:T.mu,fontSize:12}}>No {networkTab} yet.</div>
+                  ) : (
+                    <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                      {networkList.map(p=>(
+                        <div key={p.id} style={{display:'flex',alignItems:'center',gap:7,background:T.w,borderRadius:9,padding:'7px 10px',border:`1px solid ${T.bdr}`,minWidth:0,maxWidth:200}}>
+                          <Av color={p.avatar_color||'me'} size={28} name={p.name} url={p.avatar_url||''}/>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:11.5,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name||'Unknown'}</div>
+                            {(p.title||p.institution)&&<div style={{fontSize:10,color:T.mu,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.title||p.institution}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 

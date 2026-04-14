@@ -52,6 +52,7 @@ export default function App() {
   const [showOnboarding,setShowOnboarding]=useState(false);
   const [exploreQuery,setExploreQuery]=useState('');
   const [unreadMessages,setUnreadMessages]=useState(0);
+  const [unreadNotifs,setUnreadNotifs]=useState(0);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -106,6 +107,22 @@ export default function App() {
     };
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
+    return ()=>clearInterval(interval);
+  },[session]);
+
+  // Unread notification badge
+  useEffect(()=>{
+    if(!session?.user) return;
+    const fetchUnreadNotifs = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('id',{count:'exact',head:true})
+        .eq('user_id', session.user.id)
+        .eq('read', false);
+      setUnreadNotifs(count||0);
+    };
+    fetchUnreadNotifs();
+    const interval = setInterval(fetchUnreadNotifs, 30000);
     return ()=>clearInterval(interval);
   },[session]);
 
@@ -213,16 +230,18 @@ export default function App() {
                 Lumi<span style={{color:T.v}}>nary</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                {/* Inbox icon with unread badge */}
+                {/* Inbox icon with unread count */}
                 <button onClick={()=>setScreen('messages')} title="Messages"
-                  style={{position:"relative",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:screen==='messages'?T.v2:"transparent",borderRadius:9,cursor:"pointer",color:screen==='messages'?T.v:T.mu}}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",height:36,border:"none",
+                    background:screen==='messages'?T.v2:(unreadMessages>0?T.ro2:"transparent"),
+                    borderRadius:9,cursor:"pointer",color:screen==='messages'?T.v:(unreadMessages>0?T.ro:T.mu)}}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="4" width="20" height="16" rx="2"/>
                     <polyline points="2,4 12,13 22,4"/>
                   </svg>
                   {unreadMessages>0 && (
-                    <span style={{position:"absolute",top:3,right:3,fontSize:9,fontWeight:700,background:T.ro,color:"#fff",padding:"1px 4px",borderRadius:20,minWidth:14,textAlign:"center",lineHeight:"14px"}}>
-                      {unreadMessages>9?"9+":unreadMessages}
+                    <span style={{fontSize:12,fontWeight:700,lineHeight:1}}>
+                      {unreadMessages>99?"99+":unreadMessages}
                     </span>
                   )}
                 </button>
@@ -238,7 +257,7 @@ export default function App() {
 
         {/* Bottom nav — mobile only */}
         {isMobile && (
-          <BottomNav screen={screen} setScreen={setScreen}/>
+          <BottomNav screen={screen} setScreen={(s)=>{ if(s==='notifs') setUnreadNotifs(0); setScreen(s); }} unreadNotifs={unreadNotifs}/>
         )}
       </div>
     </>
