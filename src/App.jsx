@@ -202,7 +202,7 @@ export default function App() {
           // On mobile, reserve space for the fixed bottom nav
           paddingBottom: isMobile ? 60 : 0,
         }}>
-          {/* Mobile header — logo + sign out */}
+          {/* Mobile header — logo + inbox icon + sign out */}
           {isMobile && (
             <div style={{
               display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -212,10 +212,25 @@ export default function App() {
               <div style={{fontFamily:"'DM Serif Display',serif",fontSize:19}}>
                 Lumi<span style={{color:T.v}}>nary</span>
               </div>
-              <button onClick={signOut} title="Sign out"
-                style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu}}>
-                ↩
-              </button>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                {/* Inbox icon with unread badge */}
+                <button onClick={()=>setScreen('messages')} title="Messages"
+                  style={{position:"relative",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:screen==='messages'?T.v2:"transparent",borderRadius:9,cursor:"pointer",color:screen==='messages'?T.v:T.mu}}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <polyline points="2,4 12,13 22,4"/>
+                  </svg>
+                  {unreadMessages>0 && (
+                    <span style={{position:"absolute",top:3,right:3,fontSize:9,fontWeight:700,background:T.ro,color:"#fff",padding:"1px 4px",borderRadius:20,minWidth:14,textAlign:"center",lineHeight:"14px"}}>
+                      {unreadMessages>9?"9+":unreadMessages}
+                    </span>
+                  )}
+                </button>
+                <button onClick={signOut} title="Sign out"
+                  style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:9}}>
+                  ↩
+                </button>
+              </div>
             </div>
           )}
           {screens[screen]||screens.feed}
@@ -223,7 +238,7 @@ export default function App() {
 
         {/* Bottom nav — mobile only */}
         {isMobile && (
-          <BottomNav screen={screen} setScreen={setScreen} unreadMessages={unreadMessages}/>
+          <BottomNav screen={screen} setScreen={setScreen}/>
         )}
       </div>
     </>

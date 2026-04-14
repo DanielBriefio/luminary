@@ -10,14 +10,13 @@ const ICONS = {
 };
 
 const TABS = [
-  { id: 'feed',     label: 'Home',    icon: ICONS.feed },
-  { id: 'explore',  label: 'Explore', icon: ICONS.explore },
-  { id: 'post',     label: 'Post',    icon: ICONS.post, isCenter: true },
-  { id: 'messages', label: 'Inbox',   icon: ICONS.messages },
-  { id: 'profile',  label: 'Profile', icon: ICONS.profile },
+  { id: 'feed',    label: 'Home',    icon: ICONS.feed },
+  { id: 'explore', label: 'Explore', icon: ICONS.explore },
+  { id: 'post',    label: 'Post',    icon: ICONS.post, isCenter: true },
+  { id: 'profile', label: 'Profile', icon: ICONS.profile },
 ];
 
-export default function BottomNav({ screen, setScreen, unreadMessages }) {
+export default function BottomNav({ screen, setScreen }) {
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -72,18 +71,6 @@ export default function BottomNav({ screen, setScreen, unreadMessages }) {
                     strokeLinecap="round" strokeLinejoin="round">
                     <path d={tab.icon} />
                   </svg>
-                  {/* Unread badge on Messages */}
-                  {tab.id === 'messages' && unreadMessages > 0 && (
-                    <span style={{
-                      position: 'absolute', top: -4, right: -6,
-                      fontSize: 9, fontWeight: 700,
-                      background: T.ro, color: '#fff',
-                      padding: '1px 4px', borderRadius: 20,
-                      minWidth: 14, textAlign: 'center', lineHeight: '14px',
-                    }}>
-                      {unreadMessages > 9 ? '9+' : unreadMessages}
-                    </span>
-                  )}
                 </div>
                 <span style={{ fontSize: 10, fontWeight: active ? 700 : 500 }}>
                   {tab.label}

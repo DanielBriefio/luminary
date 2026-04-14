@@ -93,11 +93,20 @@ export default function PublicProfilePage({ slug }) {
   return (
     <div style={{ minHeight: '100vh', background: T.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.text }}>
       {/* Top bar */}
-      <div style={{ background: T.w, borderBottom: `1px solid ${T.bdr}`, padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52, position: 'sticky', top: 0, zIndex: 10 }}>
-        <a href="/" style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, textDecoration: 'none', color: T.text }}>
+      <div style={{ background: T.w, borderBottom: `1px solid ${T.bdr}`, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 12, height: 52, position: 'sticky', top: 0, zIndex: 10 }}>
+        {/* Back / home button — especially useful in PWA standalone mode */}
+        <button
+          onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.href = '/'; }}
+          title="Back"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', border: `1px solid ${T.bdr}`, background: T.s2, cursor: 'pointer', color: T.mu, flexShrink: 0 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <a href="/" style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, textDecoration: 'none', color: T.text, flex: 1 }}>
           Lumi<span style={{ color: T.v }}>nary</span>
         </a>
-        <a href="/" style={{ fontSize: 12.5, color: T.v, fontWeight: 600, textDecoration: 'none', background: T.v2, border: `1px solid rgba(108,99,255,.2)`, borderRadius: 8, padding: '7px 16px' }}>
+        <a href="/" style={{ fontSize: 12.5, color: T.v, fontWeight: 600, textDecoration: 'none', background: T.v2, border: `1px solid rgba(108,99,255,.2)`, borderRadius: 8, padding: '7px 16px', whiteSpace: 'nowrap' }}>
           Join Luminary →
         </a>
       </div>

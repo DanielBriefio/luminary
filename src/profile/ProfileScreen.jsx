@@ -14,6 +14,7 @@ import OrcidImporter from './OrcidImporter';
 import PublicationsTab from './PublicationsTab';
 import ShareProfilePanel from './ShareProfilePanel';
 import CvExportPanel from './CvExportPanel';
+import { useWindowSize } from '../lib/useWindowSize';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
 function EF({label,val,onChange,placeholder=""}) {
@@ -37,6 +38,7 @@ function PF({label,field,form,setForm,placeholder=""}) {
 }
 
 export default function ProfileScreen({ user, profile, setProfile }) {
+  const { isMobile } = useWindowSize();
   const [editing,setEditing]     = useState(false);
   const [form,setForm]           = useState({name_prefix:'',first_name:'',middle_name:'',last_name:'',name_suffix:'',title:'',institution:'',location:'',bio:'',orcid:'',twitter:''});
   const [saving,setSaving]       = useState(false);
@@ -605,29 +607,31 @@ export default function ProfileScreen({ user, profile, setProfile }) {
 
         <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderTop:'none',borderRadius:'0 0 14px 14px',padding:'0 24px 20px',boxShadow:'0 2px 12px rgba(108,99,255,.07)'}}>
           <div style={{display:'flex',justifyContent:'flex-end',paddingTop:14,gap:8,marginBottom:16,flexWrap:'wrap'}}>
-            {!editing&&(
-              <div style={{position:'relative'}}>
-                {showImportMenu&&<div onClick={()=>setShowImportMenu(false)} style={{position:'fixed',inset:0,zIndex:99}}/>}
-                <Btn onClick={()=>setShowImportMenu(v=>!v)} style={{fontSize:12}}>⬇ Import</Btn>
-                {showImportMenu&&(
-                  <div style={{position:'absolute',right:0,top:'calc(100% + 6px)',background:T.w,border:`1px solid ${T.bdr}`,borderRadius:10,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,minWidth:200,padding:6,display:'flex',flexDirection:'column',gap:4}}>
-                    <input id="profile-cv-input" type="file" accept=".pdf,.docx,.txt,.md" onChange={e=>{if(e.target.files?.[0]){handleProfileCvUpload(e.target.files[0]);setShowImportMenu(false);}}} style={{display:'none'}}/>
-                    <button onClick={()=>{setShowLinkedIn(true);setShowImportMenu(false);}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:7,border:'none',background:'none',cursor:'pointer',fontSize:13,fontWeight:600,color:T.bl,textAlign:'left'}}>
-                      <span style={{fontWeight:800,fontSize:14}}>in</span> Import from LinkedIn
-                    </button>
-                    <button onClick={()=>{setShowOrcid(true);setShowImportMenu(false);}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:7,border:'none',background:'none',cursor:'pointer',fontSize:13,fontWeight:600,color:T.gr,textAlign:'left'}}>
-                      🔬 Import from ORCID
-                    </button>
-                    <button onClick={()=>{document.getElementById('profile-cv-input').click();}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:7,border:'none',background:'none',cursor:'pointer',fontSize:13,fontWeight:600,color:'#92400e',textAlign:'left'}}>
-                      📋 Import full CV
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
             {editing
               ?<><Btn onClick={()=>setEditing(false)}>Cancel</Btn><Btn variant="s" onClick={save} disabled={saving}>{saving?'Saving...':'Save Profile'}</Btn></>
-              :<><Btn variant="v" onClick={()=>setEditing(true)}>✏️ Edit</Btn><Btn onClick={()=>setShowCvExport(true)}>↓ Export CV</Btn><Btn variant="s" onClick={()=>setShowSharePanel(true)}>🔗 Share</Btn></>}
+              :<>
+                {!isMobile&&<div style={{position:'relative'}}>
+                  {showImportMenu&&<div onClick={()=>setShowImportMenu(false)} style={{position:'fixed',inset:0,zIndex:99}}/>}
+                  <Btn onClick={()=>setShowImportMenu(v=>!v)} style={{fontSize:12}}>⬇ Import</Btn>
+                  {showImportMenu&&(
+                    <div style={{position:'absolute',right:0,top:'calc(100% + 6px)',background:T.w,border:`1px solid ${T.bdr}`,borderRadius:10,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,minWidth:200,padding:6,display:'flex',flexDirection:'column',gap:4}}>
+                      <input id="profile-cv-input" type="file" accept=".pdf,.docx,.txt,.md" onChange={e=>{if(e.target.files?.[0]){handleProfileCvUpload(e.target.files[0]);setShowImportMenu(false);}}} style={{display:'none'}}/>
+                      <button onClick={()=>{setShowLinkedIn(true);setShowImportMenu(false);}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:7,border:'none',background:'none',cursor:'pointer',fontSize:13,fontWeight:600,color:T.bl,textAlign:'left'}}>
+                        <span style={{fontWeight:800,fontSize:14}}>in</span> Import from LinkedIn
+                      </button>
+                      <button onClick={()=>{setShowOrcid(true);setShowImportMenu(false);}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:7,border:'none',background:'none',cursor:'pointer',fontSize:13,fontWeight:600,color:T.gr,textAlign:'left'}}>
+                        🔬 Import from ORCID
+                      </button>
+                      <button onClick={()=>{document.getElementById('profile-cv-input').click();}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:7,border:'none',background:'none',cursor:'pointer',fontSize:13,fontWeight:600,color:'#92400e',textAlign:'left'}}>
+                        📋 Import full CV
+                      </button>
+                    </div>
+                  )}
+                </div>}
+                {!isMobile&&<Btn onClick={()=>setShowCvExport(true)}>↓ Export CV</Btn>}
+                <Btn variant="v" onClick={()=>setEditing(true)}>✏️ Edit</Btn>
+                <Btn variant="s" onClick={()=>setShowSharePanel(true)}>🔗 Share</Btn>
+              </>}
           </div>
 
           {editing?(
