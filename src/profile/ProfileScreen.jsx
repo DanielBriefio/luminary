@@ -713,9 +713,10 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                 <textarea value={form.bio} onChange={e=>setForm(f=>({...f,bio:e.target.value}))} placeholder="Brief summary of your research focus and background..."
                   style={{width:'100%',background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 13px',fontSize:13,fontFamily:'inherit',outline:'none',color:T.text,resize:'none',height:90,lineHeight:1.65}}/>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
                 <PF label="ORCID" field="orcid" form={form} setForm={setForm} placeholder="0000-0000-0000-0000"/>
                 <PF label="Twitter / X" field="twitter" form={form} setForm={setForm} placeholder="@yourhandle"/>
+                <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/yourname"/>
               </div>
 
               {/* Business Card section */}
@@ -733,12 +734,12 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
                   <PF label="Work email" field="card_email" form={form} setForm={setForm} placeholder="daniel@organon.com"/>
                   <PF label="Work phone" field="card_phone" form={form} setForm={setForm} placeholder="+81 3 1234 5678"/>
-                  <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/danielruzicka"/>
                   <PF label="Personal website" field="card_website" form={form} setForm={setForm} placeholder="danielruzicka.com"/>
                   <div style={{gridColumn:'span 2'}}>
                     <PF label="Office address" field="card_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005"/>
                   </div>
                 </div>
+                <div style={{fontSize:11,color:T.mu,marginBottom:12,lineHeight:1.5}}>LinkedIn, ORCID, and Twitter/X are set above in your main profile fields.</div>
                 <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Visibility on public card</div>
                 <VisibilityToggle label="Show work email" value={form.card_show_email}    onChange={v=>setForm(f=>({...f,card_show_email:v}))}/>
                 <VisibilityToggle label="Show work phone" value={form.card_show_phone}    onChange={v=>setForm(f=>({...f,card_show_phone:v}))}/>
@@ -1112,7 +1113,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                 </div>
                 <Btn variant="v" onClick={()=>setEditing(true)} style={{flexShrink:0,fontSize:12}}>✏️ Edit card details</Btn>
               </div>
-              {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website)
+              {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter)
                 ? (
                   <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:7}}>
                     {profile.card_email    &&<div style={{fontSize:12,color:T.text}}>✉️ {profile.card_email}   {!profile.card_show_email   &&<span style={{color:T.mu,fontSize:11}}> (hidden)</span>}</div>}
