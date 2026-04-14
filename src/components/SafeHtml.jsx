@@ -2,7 +2,7 @@ import { T } from '../lib/constants';
 import { sanitiseHtml, isHtml } from '../lib/htmlUtils';
 import Linkify from './Linkify';
 
-export default function SafeHtml({ html, tags }) {
+export default function SafeHtml({ html, tags, onTagClick }) {
   if (!html) return null;
   if (isHtml(html)) {
     return (
@@ -25,7 +25,7 @@ export default function SafeHtml({ html, tags }) {
           className="rc"
           dangerouslySetInnerHTML={{ __html: sanitiseHtml(html) }}/>
         {tags?.length>0&&<div style={{marginTop:8}}>
-          {tags.map(t=><span key={t} style={{color:'#6c63ff',fontWeight:600,cursor:"pointer",marginRight:4}}>{t}</span>)}
+          {tags.map(t=><span key={t} onClick={()=>onTagClick&&onTagClick(t)} style={{color:'#6c63ff',fontWeight:600,cursor:"pointer",marginRight:4}}>{t}</span>)}
         </div>}
       </div>
     );
@@ -33,7 +33,7 @@ export default function SafeHtml({ html, tags }) {
   return (
     <div style={{fontSize:13,lineHeight:1.7,marginBottom:10}}>
       <Linkify text={html}/>
-      {" "}{tags?.map(t=><span key={t} style={{color:T.v,fontWeight:600,cursor:"pointer"}}>{t} </span>)}
+      {" "}{tags?.map(t=><span key={t} onClick={()=>onTagClick&&onTagClick(t)} style={{color:T.v,fontWeight:600,cursor:"pointer"}}>{t} </span>)}
     </div>
   );
 }

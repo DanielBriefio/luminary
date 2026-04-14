@@ -46,6 +46,7 @@ export default function App() {
   const [viewedPaperDoi,setViewedPaperDoi]= useState(null);
   const [authChecked,setAuthChecked]=useState(false);
   const [showOnboarding,setShowOnboarding]=useState(false);
+  const [exploreQuery,setExploreQuery]=useState('');
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -88,8 +89,8 @@ export default function App() {
 
   const user=session.user;
   const screens={
-    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')}/>,
-    explore:      <ExploreScreen user={user}/>,
+    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}}/>,
+    explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onNavigateToPost={()=>setScreen('post')}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     groups:       <GroupsScreen user={user}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,

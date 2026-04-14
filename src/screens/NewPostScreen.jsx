@@ -102,6 +102,24 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
     return () => clearTimeout(urlDebounceRef.current);
   }, [content, postType]);
 
+  // Pre-fill paper fields from Explore "Share this paper"
+  useEffect(() => {
+    const raw = sessionStorage.getItem('prefill_paper');
+    if (!raw) return;
+    try {
+      const paper = JSON.parse(raw);
+      sessionStorage.removeItem('prefill_paper');
+      setPostType('paper');
+      if (paper.title)    setPaperTitle(paper.title);
+      if (paper.journal)  setPaperJournal(paper.journal);
+      if (paper.authors)  setPaperAuthors(paper.authors);
+      if (paper.abstract) setPaperAbstract(paper.abstract);
+      if (paper.year)     setPaperYear(paper.year);
+      if (paper.doi)      setPaperDoi(paper.doi);
+      if (paper.doi)      setDoiFetched(true);
+    } catch(e) {}
+  }, []); // eslint-disable-line
+
   const FILE_LIMITS = { image:10, video:200, audio:50, pdf:25, data:5, file:10 };
 
   const handleDoiLookup = async (doi) => {

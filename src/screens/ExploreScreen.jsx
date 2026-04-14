@@ -1,55 +1,610 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import PostCard from '../feed/PostCard';
+import Av from '../components/Av';
+import Btn from '../components/Btn';
+import FollowBtn from '../components/FollowBtn';
+import { useSuggestedTopics } from '../lib/useSuggestedTopics';
+import { timeAgo } from '../lib/utils';
 
-export default function ExploreScreen({ user }) {
-  const [q,setQ]=useState('');
-  const [results,setResults]=useState([]);
-  const [searching,setSearching]=useState(false);
+// ─── Researcher result card ───────────────────────────────────────────────────
 
-  useEffect(()=>{
-    if(!q.trim()){setResults([]);return;}
-    const t=setTimeout(async()=>{
-      setSearching(true);
-      const {data}=await supabase.from('posts_with_meta').select('*').ilike('content',`%${q}%`).limit(10);
-      setResults(data||[]); setSearching(false);
-    },400);
-    return ()=>clearTimeout(t);
-  },[q]);
+function ResearcherCard({ user, currentUserId, onViewUser }) {
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 14,
+        padding: '14px 0', borderBottom: `1px solid ${T.bdr}`,
+      }}
+    >
+      <div
+        onClick={() => onViewUser && onViewUser(user.id)}
+        style={{ cursor: onViewUser ? 'pointer' : 'default', flexShrink: 0 }}
+      >
+        <Av size={44} color={user.avatar_color} name={user.name} url={user.avatar_url} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          onClick={() => onViewUser && onViewUser(user.id)}
+          style={{ fontSize: 13, fontWeight: 700, cursor: onViewUser ? 'pointer' : 'default' }}
+        >
+          {user.name}
+        </div>
+        {user.title && (
+          <div style={{ fontSize: 12, color: T.v, fontWeight: 600 }}>{user.title}</div>
+        )}
+        {user.institution && (
+          <div style={{ fontSize: 12, color: T.mu }}>{user.institution}</div>
+        )}
+        {user.topic_interests?.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+            {user.topic_interests.slice(0, 4).map(t => (
+              <span key={t} style={{
+                fontSize: 10.5, padding: '2px 8px', borderRadius: 20,
+                background: T.v2, color: T.v, fontWeight: 600,
+              }}>
+                #{t}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      {currentUserId && currentUserId !== user.id && (
+        <FollowBtn targetType="user" targetId={user.id} currentUserId={currentUserId} />
+      )}
+    </div>
+  );
+}
 
-  const topics=[["#GLP1","v"],["#CryoEM","b"],["#CRISPR","a"],["#OpenScience","g"],["#DigitalHealth","r"],["#MedicalAffairs","v"],["#RWE","t"],["#WomensHealth","g"]];
+// ─── Papers tab helper components ────────────────────────────────────────────
+
+function SectionHeader({ label }) {
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase',
+      letterSpacing: '.06em', marginBottom: 10, marginTop: 4,
+    }}>
+      {label}
+    </div>
+  );
+}
+
+function DiscussedCard({ post, onViewPost }) {
+  return (
+    <div style={{
+      background: T.s2, borderRadius: 12, padding: '12px 14px',
+      marginBottom: 8, border: `1px solid ${T.bdr}`,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: T.v, marginBottom: 4 }}>
+        💬 {post.author_name} · {timeAgo(post.created_at)}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4, marginBottom: 4 }}>
+        {post.paper_title || post.content?.slice(0, 120)}
+      </div>
+      <div style={{ display: 'flex', gap: 12, fontSize: 11.5, color: T.mu, alignItems: 'center' }}>
+        <span>❤️ {post.like_count || 0}</span>
+        <span>💬 {post.comment_count || 0}</span>
+        {onViewPost && (
+          <button
+            onClick={() => onViewPost(post)}
+            style={{
+              color: T.v, fontWeight: 600, border: 'none', background: 'transparent',
+              cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', marginLeft: 'auto',
+            }}
+          >
+            View discussion →
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProfilePubCard({ pub, onViewUser }) {
+  return (
+    <div style={{
+      display: 'flex', gap: 12, padding: '12px 14px',
+      background: T.s2, borderRadius: 12, marginBottom: 8, border: `1px solid ${T.bdr}`,
+      alignItems: 'flex-start',
+    }}>
+      <Av
+        size={32}
+        color={pub.profiles?.avatar_color}
+        name={pub.profiles?.name}
+        url={pub.profiles?.avatar_url}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4, marginBottom: 2 }}>
+          {pub.title}
+        </div>
+        <div style={{ fontSize: 11.5, color: T.mu }}>
+          {pub.journal}{pub.year ? ` · ${pub.year}` : ''}
+          {pub.cited_by_count > 0 ? ` · ${pub.cited_by_count} citations` : ''}
+        </div>
+        <div style={{ fontSize: 11.5, color: T.v, marginTop: 3 }}>
+          In {pub.profiles?.name}'s publications
+        </div>
+      </div>
+      {onViewUser && pub.profiles?.id && (
+        <button
+          onClick={() => onViewUser(pub.profiles.id)}
+          style={{
+            color: T.v, fontWeight: 600, border: 'none', background: 'transparent',
+            cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, flexShrink: 0,
+          }}
+        >
+          View profile →
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
+  const [added, setAdded] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  const cleanTitle = (t) => t?.replace(/<[^>]+>/g, '') || '';
+
+  const handleShare = () => {
+    sessionStorage.setItem('prefill_paper', JSON.stringify({
+      doi:      paper.doi || '',
+      title:    cleanTitle(paper.title),
+      journal:  paper.journalTitle || '',
+      year:     paper.pubYear || '',
+      authors:  paper.authorString || '',
+      abstract: paper.abstractText?.slice(0, 500) || '',
+    }));
+    onNavigateToPost && onNavigateToPost();
+  };
+
+  const handleAdd = async () => {
+    if (!currentUserId || adding || added) return;
+    setAdding(true);
+    await supabase.from('publications').insert({
+      user_id:        currentUserId,
+      title:          cleanTitle(paper.title),
+      journal:        paper.journalTitle || '',
+      year:           paper.pubYear || '',
+      doi:            paper.doi || '',
+      authors:        paper.authorString || '',
+      pmid:           paper.pmid || '',
+      epmc_id:        paper.id || '',
+      cited_by_count: paper.citedByCount || 0,
+      is_open_access: paper.isOpenAccess === 'Y',
+      source:         'explore',
+    });
+    setAdding(false);
+    setAdded(true);
+  };
 
   return (
-    <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-      <div style={{background:"rgba(255,255,255,.96)",borderBottom:`1px solid ${T.bdr}`,padding:"9px 18px",flexShrink:0}}>
-        <input style={{width:"100%",background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:"9px 16px",fontSize:13,outline:"none",fontFamily:"inherit"}}
-          placeholder="Search posts, papers, researchers..." value={q} onChange={e=>setQ(e.target.value)}/>
+    <div style={{
+      padding: '12px 14px', background: T.s2, borderRadius: 12,
+      marginBottom: 8, border: `1px solid ${T.bdr}`,
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4, marginBottom: 3 }}>
+        {cleanTitle(paper.title)}
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
-        {q?(
-          <div style={{marginBottom:20}}>
-            <div style={{fontSize:12,fontWeight:700,color:T.mu,textTransform:"uppercase",letterSpacing:".07em",marginBottom:10}}>
-              {searching?"Searching...":`${results.length} result${results.length!==1?"s":""} for "${q}"`}
+      <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+        {paper.authorString?.length > 80
+          ? paper.authorString.slice(0, 80) + '…'
+          : paper.authorString}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        {paper.journalTitle && (
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: T.v }}>{paper.journalTitle}</span>
+        )}
+        {paper.pubYear && (
+          <span style={{ fontSize: 11.5, color: T.mu }}>· {paper.pubYear}</span>
+        )}
+        {paper.citedByCount > 0 && (
+          <span style={{
+            fontSize: 10.5, background: T.bl2, color: T.bl,
+            padding: '2px 8px', borderRadius: 20, fontWeight: 600,
+          }}>
+            {paper.citedByCount} citations
+          </span>
+        )}
+        {paper.isOpenAccess === 'Y' && (
+          <span style={{
+            fontSize: 10.5, background: T.gr2, color: T.gr,
+            padding: '2px 8px', borderRadius: 20, fontWeight: 700,
+          }}>
+            Open Access
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        {onNavigateToPost && (
+          <Btn variant="s" style={{ fontSize: 11.5 }} onClick={handleShare}>
+            Share this paper
+          </Btn>
+        )}
+        {currentUserId && (
+          <Btn style={{ fontSize: 11.5 }} onClick={handleAdd} disabled={added || adding}>
+            {added ? 'Added ✓' : adding ? 'Adding…' : 'Add to my publications'}
+          </Btn>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main ExploreScreen ───────────────────────────────────────────────────────
+
+export default function ExploreScreen({
+  user,
+  currentProfile,
+  initialQuery = '',
+  onViewUser,
+  onNavigateToPost,
+}) {
+  const [q, setQ]                   = useState(initialQuery);
+  const [exploreTab, setExploreTab] = useState('posts');
+
+  // Posts tab state
+  const [postResults, setPostResults]     = useState([]);
+  const [postSearching, setPostSearching] = useState(false);
+
+  // Researchers tab state
+  const [resResults, setResResults]     = useState([]);
+  const [resSearching, setResSearching] = useState(false);
+
+  // Papers tab state
+  const [paperResults, setPaperResults]     = useState({ posts: [], profiles: [], epmc: [] });
+  const [paperSearching, setPaperSearching] = useState(false);
+
+  const { suggested: topicChips } = useSuggestedTopics([], 20);
+
+  const currentUserId = user?.id;
+
+  // ── Search functions ─────────────────────────────────────────────────────
+
+  const searchPosts = useCallback(async (query) => {
+    if (!query.trim()) { setPostResults([]); return; }
+    setPostSearching(true);
+    const { data } = await supabase
+      .from('posts_with_meta')
+      .select('*')
+      .ilike('content', `%${query}%`)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    setPostResults(data || []);
+    setPostSearching(false);
+  }, []);
+
+  const searchResearchers = useCallback(async (query) => {
+    if (!query.trim()) { setResResults([]); return; }
+    setResSearching(true);
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, name, title, institution, location, avatar_url, avatar_color, bio, topic_interests')
+      .or(`name.ilike.%${query}%,institution.ilike.%${query}%,title.ilike.%${query}%`)
+      .limit(20);
+    setResResults(data || []);
+    setResSearching(false);
+  }, []);
+
+  const searchPapers = useCallback(async (query) => {
+    if (!query.trim()) { setPaperResults({ posts: [], profiles: [], epmc: [] }); return; }
+    setPaperSearching(true);
+    setPaperResults({ posts: [], profiles: [], epmc: [] });
+
+    const [postsRes, profilesRes, epmcRes] = await Promise.all([
+      supabase
+        .from('posts_with_meta')
+        .select('*')
+        .or(`content.ilike.%${query}%,paper_title.ilike.%${query}%`)
+        .eq('post_type', 'paper')
+        .order('created_at', { ascending: false })
+        .limit(5),
+
+      supabase
+        .from('publications')
+        .select('*, profiles(id, name, avatar_url, avatar_color, title, institution)')
+        .or(`title.ilike.%${query}%,authors.ilike.%${query}%,journal.ilike.%${query}%`)
+        .order('year', { ascending: false })
+        .limit(5),
+
+      fetch(
+        `https://www.ebi.ac.uk/europepmc/webservices/rest/search` +
+        `?query=${encodeURIComponent(query)}&resultType=core&pageSize=8&format=json`
+      ).then(r => r.json()).then(d => d.resultList?.result || []).catch(() => []),
+    ]);
+
+    const luminaryDois = new Set([
+      ...(postsRes.data || []).map(p => p.paper_doi).filter(Boolean),
+      ...(profilesRes.data || []).map(p => p.doi).filter(Boolean),
+    ]);
+
+    const filteredEpmc = epmcRes.filter(r =>
+      !r.doi || !luminaryDois.has(r.doi.toLowerCase())
+    );
+
+    setPaperResults({
+      posts:    postsRes.data    || [],
+      profiles: profilesRes.data || [],
+      epmc:     filteredEpmc,
+    });
+    setPaperSearching(false);
+  }, []);
+
+  // ── Run search when query or tab changes ─────────────────────────────────
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (exploreTab === 'posts')       searchPosts(q);
+      if (exploreTab === 'researchers') searchResearchers(q);
+      if (exploreTab === 'papers')      searchPapers(q);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [q, exploreTab, searchPosts, searchResearchers, searchPapers]);
+
+  // Run search immediately if initialQuery is provided
+  useEffect(() => {
+    if (initialQuery) {
+      setQ(initialQuery);
+    }
+  }, [initialQuery]); // eslint-disable-line
+
+  // ── Tab switch ──────────────────────────────────────────────────────────
+
+  const handleTabChange = (tab) => {
+    setExploreTab(tab);
+  };
+
+  // ── Handle chip click ────────────────────────────────────────────────────
+
+  const handleChipClick = (tag) => {
+    setQ(tag);
+    setExploreTab('posts');
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  const tabs = [
+    { id: 'posts',       label: 'Posts' },
+    { id: 'researchers', label: 'Researchers' },
+    { id: 'papers',      label: 'Papers' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      {/* ── Search bar + tab bar ── */}
+      <div style={{
+        background: 'rgba(255,255,255,.96)', borderBottom: `1px solid ${T.bdr}`,
+        flexShrink: 0,
+      }}>
+        <div style={{ padding: '10px 18px 0' }}>
+          <input
+            style={{
+              width: '100%', background: T.s2, border: `1.5px solid ${T.bdr}`,
+              borderRadius: 22, padding: '9px 16px', fontSize: 13, outline: 'none',
+              fontFamily: 'inherit', color: T.text, boxSizing: 'border-box',
+            }}
+            placeholder="Search posts, researchers, papers…"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+          />
+        </div>
+        <div style={{ display: 'flex', padding: '0 8px' }}>
+          {tabs.map(({ id, label }) => (
+            <div
+              key={id}
+              onClick={() => handleTabChange(id)}
+              style={{
+                padding: '8px 16px', fontSize: 12.5, fontWeight: 600,
+                color: exploreTab === id ? T.v : T.mu,
+                borderBottom: `2.5px solid ${exploreTab === id ? T.v : 'transparent'}`,
+                cursor: 'pointer',
+              }}
+            >
+              {label}
             </div>
-            {searching?<Spinner/>:results.length===0
-              ?<div style={{color:T.mu,fontSize:13,textAlign:"center",padding:20}}>No posts found. Try a different search.</div>
-              :<div style={{display:"flex",flexDirection:"column",gap:12}}>{results.map(p=><PostCard key={p.id} post={p} currentUserId={user?.id} currentProfile={profile}/>)}</div>}
-          </div>
-        ):(
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tab content ── */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+
+        {/* ═══ Posts tab ═════════════════════════════════════════════════ */}
+        {exploreTab === 'posts' && (
           <>
-            <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:"uppercase",letterSpacing:".07em",marginBottom:10}}>Browse by Topic</div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:24}}>
-              {topics.map(([t,c])=>(
-                <span key={t} onClick={()=>setQ(t)} style={{cursor:"pointer",display:"inline-flex",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.2)`}}>{t}</span>
-              ))}
-            </div>
-            <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:"24px",textAlign:"center",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
-              <div style={{fontSize:28,marginBottom:12}}>🔍</div>
-              <div style={{fontFamily:"'DM Serif Display',serif",fontSize:16,marginBottom:8}}>Discover scientific content</div>
-              <div style={{fontSize:13,color:T.mu}}>Search for papers, topics, or click a tag above to explore the feed.</div>
-            </div>
+            {!q.trim() && (
+              <>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase',
+                  letterSpacing: '.07em', marginBottom: 10,
+                }}>
+                  Browse by Topic
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+                  {topicChips.map(tag => (
+                    <span
+                      key={tag}
+                      onClick={() => handleChipClick(tag)}
+                      style={{
+                        cursor: 'pointer', display: 'inline-flex', padding: '5px 14px',
+                        borderRadius: 20, fontSize: 12, fontWeight: 700,
+                        background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.2)`,
+                      }}
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+                <div style={{
+                  background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14,
+                  padding: 24, textAlign: 'center', boxShadow: '0 2px 12px rgba(108,99,255,.07)',
+                }}>
+                  <div style={{ fontSize: 28, marginBottom: 12 }}>🔍</div>
+                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 8 }}>
+                    Discover scientific content
+                  </div>
+                  <div style={{ fontSize: 13, color: T.mu }}>
+                    Search for papers, topics, or click a tag above to explore the feed.
+                  </div>
+                </div>
+              </>
+            )}
+
+            {q.trim() && (
+              <>
+                <div style={{
+                  fontSize: 12, fontWeight: 700, color: T.mu, textTransform: 'uppercase',
+                  letterSpacing: '.07em', marginBottom: 10,
+                }}>
+                  {postSearching
+                    ? 'Searching…'
+                    : `${postResults.length} result${postResults.length !== 1 ? 's' : ''} for "${q}"`}
+                </div>
+                {postSearching
+                  ? <Spinner />
+                  : postResults.length === 0
+                    ? (
+                      <div style={{ color: T.mu, fontSize: 13, textAlign: 'center', padding: 20 }}>
+                        No results for "{q}" — try different keywords or check the spelling.
+                      </div>
+                    )
+                    : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {postResults.map(p => (
+                          <PostCard
+                            key={p.id}
+                            post={p}
+                            currentUserId={currentUserId}
+                            currentProfile={currentProfile}
+                            onViewUser={onViewUser}
+                          />
+                        ))}
+                      </div>
+                    )
+                }
+              </>
+            )}
+          </>
+        )}
+
+        {/* ═══ Researchers tab ════════════════════════════════════════════ */}
+        {exploreTab === 'researchers' && (
+          <>
+            {!q.trim() && (
+              <div style={{
+                background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14,
+                padding: 24, textAlign: 'center', boxShadow: '0 2px 12px rgba(108,99,255,.07)',
+              }}>
+                <div style={{ fontSize: 28, marginBottom: 12 }}>👩‍🔬</div>
+                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 8 }}>
+                  Find researchers
+                </div>
+                <div style={{ fontSize: 13, color: T.mu }}>
+                  Search by name, institution, or area of expertise.
+                </div>
+              </div>
+            )}
+
+            {q.trim() && (
+              <>
+                <div style={{
+                  fontSize: 12, fontWeight: 700, color: T.mu, textTransform: 'uppercase',
+                  letterSpacing: '.07em', marginBottom: 10,
+                }}>
+                  {resSearching
+                    ? 'Searching…'
+                    : `${resResults.length} researcher${resResults.length !== 1 ? 's' : ''} found`}
+                </div>
+                {resSearching
+                  ? <Spinner />
+                  : resResults.length === 0
+                    ? (
+                      <div style={{ color: T.mu, fontSize: 13, textAlign: 'center', padding: 20 }}>
+                        No results for "{q}" — try different keywords or check the spelling.
+                      </div>
+                    )
+                    : resResults.map(u => (
+                      <ResearcherCard
+                        key={u.id}
+                        user={u}
+                        currentUserId={currentUserId}
+                        onViewUser={onViewUser}
+                      />
+                    ))
+                }
+              </>
+            )}
+          </>
+        )}
+
+        {/* ═══ Papers tab ═════════════════════════════════════════════════ */}
+        {exploreTab === 'papers' && (
+          <>
+            {!q.trim() && (
+              <div style={{
+                background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14,
+                padding: 24, textAlign: 'center', boxShadow: '0 2px 12px rgba(108,99,255,.07)',
+              }}>
+                <div style={{ fontSize: 28, marginBottom: 12 }}>📄</div>
+                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 8 }}>
+                  Search scientific papers
+                </div>
+                <div style={{ fontSize: 13, color: T.mu }}>
+                  Find papers discussed on Luminary, in researcher profiles, or anywhere on Europe PMC.
+                </div>
+              </div>
+            )}
+
+            {q.trim() && paperSearching && <Spinner />}
+
+            {q.trim() && !paperSearching && (
+              <>
+                {paperResults.posts.length === 0 &&
+                 paperResults.profiles.length === 0 &&
+                 paperResults.epmc.length === 0 && (
+                  <div style={{ color: T.mu, fontSize: 13, textAlign: 'center', padding: 20 }}>
+                    No results for "{q}" — try different keywords or check the spelling.
+                  </div>
+                )}
+
+                {/* Section 1 — Discussed on Luminary */}
+                {paperResults.posts.length > 0 && (
+                  <>
+                    <SectionHeader label={`💬 Discussed on Luminary  (${paperResults.posts.length})`} />
+                    {paperResults.posts.map(post => (
+                      <DiscussedCard key={post.id} post={post} />
+                    ))}
+                  </>
+                )}
+
+                {/* Section 2 — In researcher profiles */}
+                {paperResults.profiles.length > 0 && (
+                  <>
+                    <SectionHeader label={`👤 In researcher profiles  (${paperResults.profiles.length})`} />
+                    {paperResults.profiles.map(pub => (
+                      <ProfilePubCard key={pub.id} pub={pub} onViewUser={onViewUser} />
+                    ))}
+                  </>
+                )}
+
+                {/* Section 3 — From Europe PMC */}
+                {paperResults.epmc.length > 0 && (
+                  <>
+                    <SectionHeader label={`🌍 From Europe PMC — not yet discussed on Luminary  (${paperResults.epmc.length})`} />
+                    {paperResults.epmc.map(paper => (
+                      <EpmcCard
+                        key={paper.id || paper.doi || paper.title}
+                        paper={paper}
+                        currentUserId={currentUserId}
+                        onNavigateToPost={onNavigateToPost}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
       </div>

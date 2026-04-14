@@ -12,7 +12,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 
-export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails }) {
+export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick }) {
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
   const [reposted,setReposted]       = useState(post.user_reposted||false);
@@ -204,7 +204,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           </div>
         ) : (
           <>
-            {post.content&&<SafeHtml html={post.content} tags={post.tags}/>}
+            {post.content&&<SafeHtml html={post.content} tags={post.tags} onTagClick={onTagClick}/>}
             {post.post_type==='text'&&(()=>{
               const url = extractFirstUrl(post.content||'');
               return url ? <LinkPreview url={url}/> : null;
