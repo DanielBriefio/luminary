@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Av from '../components/Av';
@@ -173,6 +173,169 @@ function MessageThread({
   );
 }
 
+// ─── New Message Panel ────────────────────────────────────────────────────────
+
+function NewMessagePanel({ user, onSelect, onClose }) {
+  const [query,       setQuery]       = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [results,     setResults]     = useState([]);
+  const [loadingSug,  setLoadingSug]  = useState(true);
+  const [loadingSrch, setLoadingSrch] = useState(false);
+  const searchRef = useRef(null);
+
+  // Focus search on mount
+  useEffect(() => { searchRef.current?.focus(); }, []);
+
+  // Load suggestions: union of people I follow + followers (user-type only)
+  useEffect(() => {
+    (async () => {
+      setLoadingSug(true);
+      const [{ data: following }, { data: followers }] = await Promise.all([
+        supabase
+          .from('follows')
+          .select('target_id')
+          .eq('follower_id', user.id)
+          .eq('target_type', 'user'),
+        supabase
+          .from('follows')
+          .select('follower_id')
+          .eq('target_id', user.id)
+          .eq('target_type', 'user'),
+      ]);
+
+      const ids = [
+        ...new Set([
+          ...(following || []).map(r => r.target_id),
+          ...(followers || []).map(r => r.follower_id),
+        ]),
+      ].filter(id => id !== user.id);
+
+      if (!ids.length) { setSuggestions([]); setLoadingSug(false); return; }
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, title, avatar_url, avatar_color')
+        .in('id', ids)
+        .order('name');
+
+      setSuggestions(profiles || []);
+      setLoadingSug(false);
+    })();
+  }, [user.id]);
+
+  // Debounced search
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); return; }
+    setLoadingSrch(true);
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, name, title, avatar_url, avatar_color')
+        .ilike('name', `%${query.trim()}%`)
+        .neq('id', user.id)
+        .order('name')
+        .limit(20);
+      setResults(data || []);
+      setLoadingSrch(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, user.id]);
+
+  const people = query.trim() ? results : suggestions;
+  const isLoading = query.trim() ? loadingSrch : loadingSug;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+
+      {/* Header */}
+      <div style={{
+        padding: '12px 16px', borderBottom: `1px solid ${T.bdr}`,
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <button
+          onClick={onClose}
+          style={{
+            width: 28, height: 28, borderRadius: '50%', border: 'none',
+            background: T.s3, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, color: T.mu, flexShrink: 0,
+          }}
+        >
+          ←
+        </button>
+        <span style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>New message</span>
+      </div>
+
+      {/* Search input */}
+      <div style={{ padding: '10px 16px', borderBottom: `1px solid ${T.bdr}` }}>
+        <input
+          ref={searchRef}
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search by name…"
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            background: T.s2, border: `1.5px solid ${T.bdr}`,
+            borderRadius: 20, padding: '8px 14px',
+            fontSize: 13, fontFamily: 'inherit',
+            outline: 'none', color: T.text,
+          }}
+        />
+      </div>
+
+      {/* Section label */}
+      {!query.trim() && (
+        <div style={{
+          padding: '8px 16px 4px', fontSize: 11, fontWeight: 700,
+          color: T.mu, textTransform: 'uppercase', letterSpacing: '.06em',
+        }}>
+          Suggested
+        </div>
+      )}
+
+      {/* People list */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {isLoading && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
+            <Spinner />
+          </div>
+        )}
+        {!isLoading && people.length === 0 && (
+          <div style={{ padding: 24, textAlign: 'center', color: T.mu, fontSize: 13 }}>
+            {query.trim() ? 'No users found.' : 'Follow people to see suggestions here.'}
+          </div>
+        )}
+        {!isLoading && people.map(p => (
+          <div
+            key={p.id}
+            onClick={() => onSelect(p)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 16px', cursor: 'pointer',
+              borderBottom: `1px solid ${T.bdr}`,
+              transition: 'background .1s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = T.s2}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <Av size={38} color={p.avatar_color} name={p.name} url={p.avatar_url || ''} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {p.name}
+              </div>
+              {p.title && (
+                <div style={{ fontSize: 11.5, color: T.mu, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {p.title}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main MessagesScreen ──────────────────────────────────────────────────────
 
 export default function MessagesScreen({ user, onViewUser }) {
@@ -184,6 +347,7 @@ export default function MessagesScreen({ user, onViewUser }) {
   const [loading,         setLoading]         = useState(true);
   const [sending,         setSending]         = useState(false);
   const [unreadCount,     setUnreadCount]     = useState(0);
+  const [showNewMessage,  setShowNewMessage]  = useState(false);
   const messagesEndRef = useRef(null);
 
   // Auto-scroll when messages update
@@ -354,6 +518,16 @@ export default function MessagesScreen({ user, onViewUser }) {
     fetchMessages(conv.id);
   };
 
+  const handleNewMessageSelect = useCallback(async (profile) => {
+    setShowNewMessage(false);
+    const convId = await startConversation(user.id, profile.id, supabase);
+    if (!convId) return;
+    setActiveConvId(convId);
+    setActiveOtherUser(profile);
+    fetchMessages(convId);
+    fetchConversations();
+  }, [user.id]); // eslint-disable-line
+
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
@@ -362,46 +536,85 @@ export default function MessagesScreen({ user, onViewUser }) {
         width: 280, flexShrink: 0,
         borderRight: `1px solid ${T.bdr}`,
         display: 'flex', flexDirection: 'column',
-        background: T.w,
+        background: T.w, overflow: 'hidden',
       }}>
-        <div style={{
-          padding: '14px 16px', borderBottom: `1px solid ${T.bdr}`,
-          fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          Messages
-          {unreadCount > 0 && (
-            <span style={{
-              fontSize: 11, fontWeight: 700,
-              background: T.v, color: '#fff',
-              padding: '2px 7px', borderRadius: 20,
+        {showNewMessage ? (
+          <NewMessagePanel
+            user={user}
+            onSelect={handleNewMessageSelect}
+            onClose={() => setShowNewMessage(false)}
+          />
+        ) : (
+          <>
+            <div style={{
+              padding: '14px 16px', borderBottom: `1px solid ${T.bdr}`,
+              fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              {unreadCount}
-            </span>
-          )}
-        </div>
+              <span style={{ flex: 1 }}>Messages</span>
+              {unreadCount > 0 && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700,
+                  background: T.v, color: '#fff',
+                  padding: '2px 7px', borderRadius: 20,
+                }}>
+                  {unreadCount}
+                </span>
+              )}
+              {/* Compose button */}
+              <button
+                onClick={() => setShowNewMessage(true)}
+                title="New message"
+                style={{
+                  width: 30, height: 30, borderRadius: '50%', border: 'none',
+                  background: T.v2, color: T.v, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, transition: 'background .15s, color .15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = T.v; e.currentTarget.style.color = '#fff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = T.v2; e.currentTarget.style.color = T.v; }}
+              >
+                {/* Compose / pencil icon */}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+              </button>
+            </div>
 
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {loading && (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-              <Spinner />
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {loading && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
+                  <Spinner />
+                </div>
+              )}
+              {!loading && conversations.length === 0 && (
+                <div style={{ padding: 24, textAlign: 'center', color: T.mu, fontSize: 13, lineHeight: 1.7 }}>
+                  No messages yet.
+                  <br />
+                  <button
+                    onClick={() => setShowNewMessage(true)}
+                    style={{
+                      marginTop: 8, fontSize: 13, color: T.v, fontWeight: 600,
+                      background: T.v2, border: 'none', borderRadius: 20,
+                      padding: '6px 14px', cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    Write a new message
+                  </button>
+                </div>
+              )}
+              {conversations.map(conv => (
+                <ConversationRow
+                  key={conv.id}
+                  conv={conv}
+                  isActive={conv.id === activeConvId}
+                  onClick={() => openConversation(conv)}
+                />
+              ))}
             </div>
-          )}
-          {!loading && conversations.length === 0 && (
-            <div style={{ padding: 24, textAlign: 'center', color: T.mu, fontSize: 13, lineHeight: 1.7 }}>
-              No messages yet.
-              <br />
-              Visit someone's profile to send them a message.
-            </div>
-          )}
-          {conversations.map(conv => (
-            <ConversationRow
-              key={conv.id}
-              conv={conv}
-              isActive={conv.id === activeConvId}
-              onClick={() => openConversation(conv)}
-            />
-          ))}
-        </div>
+          </>
+        )}
       </div>
 
       {/* ── Right panel — message thread ── */}
