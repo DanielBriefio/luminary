@@ -219,17 +219,12 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
     if (!currentUserId || adding || added) return;
     setAdding(true);
     await supabase.from('publications').insert({
-      user_id:        currentUserId,
-      title:          cleanTitle(paper.title),
-      journal:        paper.journalTitle || '',
-      year:           paper.pubYear || '',
-      doi:            paper.doi || '',
-      authors:        paper.authorString || '',
-      pmid:           paper.pmid || '',
-      epmc_id:        paper.id || '',
-      cited_by_count: paper.citedByCount || 0,
-      is_open_access: paper.isOpenAccess === 'Y',
-      source:         'explore',
+      user_id: currentUserId,
+      title:   cleanTitle(paper.title),
+      journal: paper.journalTitle || '',
+      year:    paper.pubYear     || '',
+      doi:     paper.doi         || '',
+      authors: paper.authorString|| '',
     });
     setAdding(false);
     setAdded(true);
@@ -427,8 +422,22 @@ export default function ExploreScreen({
       !r.doi || !luminaryDois.has(r.doi.toLowerCase())
     );
 
+    // Deduplicate Luminary paper posts by DOI (same logic as Posts tab)
+    const paperByDoi = new Map();
+    for (const p of (postsRes.data || [])) {
+      const doi = (p.paper_doi || '').toLowerCase();
+      const key = doi || p.id; // fall back to post id if no DOI
+      if (!paperByDoi.has(key)) {
+        paperByDoi.set(key, { ...p, _discussionCount: 1, _isPaperCard: true });
+      } else {
+        paperByDoi.get(key)._discussionCount++;
+      }
+    }
+    const dedupedPosts = Array.from(paperByDoi.values())
+      .sort((a, b) => b._discussionCount - a._discussionCount);
+
     setPaperResults({
-      posts:    postsRes.data    || [],
+      posts:    dedupedPosts,
       profiles: profilesRes.data || [],
       epmc:     filteredEpmc,
     });
@@ -690,12 +699,11 @@ export default function ExploreScreen({
                   <>
                     <SectionHeader label={`💬 Discussed on Luminary  (${paperResults.posts.length})`} />
                     {(showMoreDiscussed ? paperResults.posts : paperResults.posts.slice(0, 5)).map(post => (
-                      <DiscussedCard
-                        key={post.id}
+                      <PaperSearchCard
+                        key={post.paper_doi || post.id}
                         post={post}
-                        onViewPost={(p) => p.paper_doi && onViewPaper
-                          ? onViewPaper(p.paper_doi)
-                          : window.open(`/s/${p.id}`, '_blank')}
+                        currentUserId={currentUserId}
+                        onViewPaper={onViewPaper}
                       />
                     ))}
                     {paperResults.posts.length > 5 && (
@@ -707,9 +715,7 @@ export default function ExploreScreen({
                           fontFamily: 'inherit', cursor: 'pointer', marginBottom: 8,
                         }}
                       >
-                        {showMoreDiscussed
-                          ? 'Show less'
-                          : `Show ${paperResults.posts.length - 5} more discussions`}
+                        {showMoreDiscussed ? 'Show less' : `Show ${paperResults.posts.length - 5} more`}
                       </button>
                     )}
                   </>
