@@ -1,4 +1,169 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+// ─── Export helpers ───────────────────────────────────────────────────────────
+
+function splitAuthors(str) {
+  if (!str?.trim()) return [];
+  // PubMed/EPMC format: "Smith J, Jones A, Brown B"
+  // Split on ", " — handles "Last FI, Last FI" correctly
+  return str.split(/\s*;\s*|\s*,\s*(?=[A-Z\u00C0-\u024F])/)
+    .map(a => a.trim()).filter(Boolean);
+}
+
+function formatAuthorsVancouver(authorsStr) {
+  const parts = splitAuthors(authorsStr);
+  if (!parts.length) return '';
+  if (parts.length <= 6) return parts.join(', ');
+  return parts.slice(0, 6).join(', ') + ', et al.';
+}
+
+function formatVancouver(pub) {
+  const segs = [];
+  const authors = formatAuthorsVancouver(pub.authors);
+  if (authors) segs.push(authors + '.');
+  if (pub.title) segs.push(pub.title.replace(/[.\s]+$/, '') + '.');
+  const venue = pub.journal || pub.venue;
+  if (venue) segs.push(venue + '.');
+  if (pub.year)  segs.push(pub.year + '.');
+  const extras = [];
+  if (pub.doi) {
+    const doi = pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`;
+    extras.push(`doi: ${doi}`);
+  }
+  if (pub.pmid) extras.push(`PubMed PMID: ${pub.pmid}`);
+  if (extras.length) segs.push(extras.join('; ') + '.');
+  return segs.join(' ');
+}
+
+function bibKey(pub) {
+  const first = splitAuthors(pub.authors)[0] || '';
+  const lastName = first.split(/\s+/).slice(-1)[0].replace(/[^a-zA-Z]/g, '') || 'Unknown';
+  const year = pub.year || '0000';
+  const titleWord = (pub.title || '').split(/\s+/)[0].replace(/[^a-zA-Z]/g, '') || 'untitled';
+  return `${lastName}${year}${titleWord}`;
+}
+
+function pubToBib(pub) {
+  const type = ['journal','review','preprint'].includes(pub.pub_type) ? 'article'
+    : ['conference','poster'].includes(pub.pub_type) ? 'inproceedings'
+    : pub.pub_type === 'book' ? 'incollection'
+    : 'misc';
+  const venue = pub.journal || pub.venue || '';
+  const doi = pub.doi
+    ? pub.doi.startsWith('http') ? pub.doi.replace(/https?:\/\/doi\.org\//i,'') : pub.doi
+    : '';
+  const authorsBib = splitAuthors(pub.authors).join(' and ');
+  const fields = [
+    authorsBib && `  author    = {${authorsBib}}`,
+    pub.title  && `  title     = {${pub.title.replace(/[{}]/g,'')}}`,
+    type === 'article'        && venue && `  journal   = {${venue}}`,
+    type === 'inproceedings'  && venue && `  booktitle = {${venue}}`,
+    type === 'incollection'   && venue && `  booktitle = {${venue}}`,
+    type === 'misc'           && venue && `  howpublished = {${venue}}`,
+    pub.year   && `  year      = {${pub.year}}`,
+    doi        && `  doi       = {${doi}}`,
+    pub.pmid   && `  note      = {PubMed PMID: ${pub.pmid}}`,
+  ].filter(Boolean);
+  return `@${type}{${bibKey(pub)},\n${fields.join(',\n')}\n}`;
+}
+
+function doExportBib(pubs, authorName) {
+  const header = `% Publications — ${authorName || 'Author'}\n% Exported ${new Date().toLocaleDateString()}\n\n`;
+  const content = header + pubs.map(pubToBib).join('\n\n');
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'publications.bib'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function doExportPdf(pubs, authorName) {
+  const groups = [
+    ['Journal Articles &amp; Reviews',   pubs.filter(p => !p.pub_type || ['journal','review','preprint'].includes(p.pub_type))],
+    ['Presentations &amp; Posters',       pubs.filter(p => ['conference','poster','lecture'].includes(p.pub_type))],
+    ['Book Chapters',                     pubs.filter(p => p.pub_type === 'book')],
+    ['Other',                             pubs.filter(p => p.pub_type === 'other')],
+  ].filter(([, items]) => items.length > 0);
+
+  let counter = 1;
+  const sectionsHtml = groups.map(([title, items]) => {
+    const rows = items.map(pub => {
+      const n = counter++;
+      const cite = formatVancouver(pub)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const doiUrl = pub.doi
+        ? (pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`)
+        : null;
+      const withLink = doiUrl
+        ? cite.replace(
+            /(doi: )(https?:\/\/[^\s.]+\.?)/,
+            `$1<a href="${doiUrl}" style="color:#6c63ff">${doiUrl}</a>`
+          )
+        : cite;
+      return `<tr><td class="num">${n}.</td><td>${withLink}</td></tr>`;
+    }).join('\n');
+    return `<h2>${title}</h2><table>${rows}</table>`;
+  }).join('\n');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Publications — ${authorName || 'Author'}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.65;
+    color: #1b1d36;
+    margin: 0;
+    padding: 44px 56px;
+    max-width: 820px;
+  }
+  header { border-bottom: 2.5px solid #6c63ff; padding-bottom: 10px; margin-bottom: 8px; }
+  h1 {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 24pt; font-weight: 400; margin: 0 0 2px;
+  }
+  .meta { font-size: 9.5pt; color: #7a7fa8; margin: 0; }
+  h2 {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 13pt; font-weight: 400;
+    color: #6c63ff;
+    text-transform: uppercase; letter-spacing: .07em;
+    margin: 28px 0 6px;
+    border-bottom: 1px solid #e3e5f5; padding-bottom: 4px;
+  }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  td { vertical-align: top; padding: 4px 0; }
+  td.num { width: 28px; color: #7a7fa8; font-size: 9pt; padding-top: 5px; white-space: nowrap; }
+  a { color: #6c63ff; }
+  @media print {
+    body { padding: 20px 30px; }
+    h2 { page-break-after: avoid; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>${authorName || 'Publications'}</h1>
+  <p class="meta">Publication list · ${new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'})} · ${pubs.length} item${pubs.length !== 1 ? 's' : ''}</p>
+</header>
+${sectionsHtml}
+</body>
+</html>`;
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) { alert('Pop-up blocked. Please allow pop-ups for this site.'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  // Give fonts a moment to load before print dialog
+  setTimeout(() => w.print(), 600);
+}
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
 import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
@@ -25,6 +190,8 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
   const [newPub,    setNewPub]    = useState({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
   const [saving,    setSaving]    = useState(false);
   const [nameVariants, setNameVariants] = useState('');
+  const [showExport,   setShowExport]   = useState(false);
+  const exportRef = useRef(null);
 
   useEffect(()=>{
     if(!user) return;
@@ -294,6 +461,14 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
     setCvPreview(null);
   };
 
+  // Close export dropdown on outside click
+  useEffect(() => {
+    if (!showExport) return;
+    const handler = (e) => { if (!exportRef.current?.contains(e.target)) setShowExport(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showExport]);
+
   const handleDocUpload = async (file) => {
     if(!file) return;
     setImporting(true);
@@ -445,6 +620,29 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
 
       <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:20,flexWrap:'wrap'}}>
         <div style={{fontWeight:700,fontSize:13,flex:1}}>{pubs.length} publication{pubs.length!==1?'s':''}</div>
+        {pubs.length > 0 && (
+          <div ref={exportRef} style={{position:'relative'}}>
+            <button
+              onClick={()=>setShowExport(v=>!v)}
+              style={{display:'inline-flex',alignItems:'center',gap:5,padding:'6px 14px',borderRadius:22,cursor:'pointer',fontSize:12,fontWeight:600,border:`1.5px solid ${T.bdr}`,background:showExport?T.s2:'transparent',color:T.mu,fontFamily:'inherit'}}>
+              ↓ Export
+            </button>
+            {showExport && (
+              <div style={{position:'absolute',right:0,top:'calc(100% + 6px)',background:T.w,border:`1px solid ${T.bdr}`,borderRadius:10,boxShadow:'0 4px 20px rgba(0,0,0,.12)',minWidth:180,zIndex:100,overflow:'hidden'}}>
+                <button
+                  onClick={()=>{ doExportBib(pubs, profile?.name); setShowExport(false); }}
+                  style={{display:'block',width:'100%',textAlign:'left',padding:'10px 16px',fontSize:12.5,fontWeight:600,fontFamily:'inherit',border:'none',background:'transparent',cursor:'pointer',borderBottom:`1px solid ${T.bdr}`,color:T.text}}>
+                  <span style={{marginRight:8}}>📑</span>BibTeX (.bib)
+                </button>
+                <button
+                  onClick={()=>{ doExportPdf(pubs, profile?.name); setShowExport(false); }}
+                  style={{display:'block',width:'100%',textAlign:'left',padding:'10px 16px',fontSize:12.5,fontWeight:600,fontFamily:'inherit',border:'none',background:'transparent',cursor:'pointer',color:T.text}}>
+                  <span style={{marginRight:8}}>🖨️</span>PDF (Vancouver / NLM)
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <Btn onClick={()=>{setShowSearch(!showSearch);if(!showSearch&&!proposals.length)searchEPMC();}} style={{fontSize:12}}>🔍 Search Europe PMC</Btn>
         <label style={{cursor:'pointer'}}>
           <input type="file" accept=".pdf,.docx,.txt,.md" onChange={e=>{ if(e.target.files?.[0]){setShowImport(true);handleDocUpload(e.target.files[0]);} }} style={{display:'none'}}/>
