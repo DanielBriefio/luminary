@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T, AUTO_TAG_ENABLED } from '../lib/constants';
 import { getFileCategory } from '../lib/fileUtils';
-import Av from '../components/Av';
 import Btn from '../components/Btn';
 import Inp from '../components/Inp';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
+import { useWindowSize } from '../lib/useWindowSize';
 
 async function fetchDoiMetadata(doi) {
   const clean = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
@@ -57,6 +57,7 @@ function EpResultCard({ title, authors, journal, year, cited, oa, onSelect }) {
 }
 
 export default function NewPostScreen({ user, profile, onPostCreated }) {
+  const { isMobile } = useWindowSize();
   const [postType,setPostType]           = useState('text');
   const [content,setContent]             = useState('');
 
@@ -354,8 +355,8 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
   });
 
   return (
-    <div style={{flex:1,overflowY:"auto",padding:32,background:T.bg,display:"flex",alignItems:"flex-start",justifyContent:"center"}}>
-      <div style={{maxWidth:640,width:"100%",background:T.w,border:`1px solid ${T.bdr}`,borderRadius:16,padding:28,boxShadow:"0 4px 24px rgba(108,99,255,.1)"}}>
+    <div style={{flex:1,overflowY:"auto",padding:isMobile?0:32,background:T.bg,display:"flex",alignItems:"flex-start",justifyContent:"center"}}>
+      <div style={{maxWidth:isMobile?"100%":640,width:"100%",background:T.w,border:isMobile?"none":`1px solid ${T.bdr}`,borderRadius:isMobile?0:16,padding:isMobile?"16px 16px 0":28,boxShadow:isMobile?"none":"0 4px 24px rgba(108,99,255,.1)",display:"flex",flexDirection:"column"}}>
         <div style={{fontFamily:"'DM Serif Display',serif",fontSize:19,fontWeight:700,marginBottom:5}}>Share something with the scientific community</div>
         <div style={{fontSize:13,color:T.mu,marginBottom:20}}>Select what you're sharing and publish to the feed.</div>
 
@@ -496,12 +497,11 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
         )}
 
         {/* Text editor */}
-        <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:0}}>
-          <Av color={profile?.avatar_color||"me"} size={38} name={profile?.name} url={profile?.avatar_url||""}/>
+        <div style={{marginBottom:0}}>
           <RichTextEditor
             value={content}
             onChange={setContent}
-            minHeight={uploadFile ? 70 : 110}
+            minHeight={isMobile ? (uploadFile ? 120 : 200) : (uploadFile ? 70 : 110)}
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
               "Share a finding, insight, lab update, or question..."
@@ -510,14 +510,14 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
 
         {/* Live link preview for text posts */}
         {postType === 'text' && previewUrl && (
-          <div style={{ marginLeft: 48, marginTop: 4 }}>
+          <div style={{ marginTop: 4 }}>
             <LinkPreview url={previewUrl} compact/>
           </div>
         )}
 
         {/* Attachment area (text / tip only) */}
         {postType !== 'paper' && (
-          <div style={{marginLeft:48, marginTop:10, marginBottom:14}}>
+          <div style={{marginTop:10, marginBottom:14}}>
 
             {/* Attach buttons */}
             {!uploadFile && (
@@ -623,7 +623,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
         </div>
 
         {/* Footer */}
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12,padding:isMobile?"12px 0 calc(12px + env(safe-area-inset-bottom))":"12px 0 0",borderTop:`1px solid ${T.bdr}`,background:T.w,position:isMobile?"sticky":undefined,bottom:isMobile?0:undefined,flexWrap:"wrap"}}>
           <span style={{fontSize:12,color:T.mu,fontWeight:600}}>Visible to:</span>
           <div style={{display:"flex",background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:3}}>
             {[["everyone","Everyone"],["followers","Followers only"]].map(([v,l])=>(
