@@ -13,14 +13,7 @@ import LinkedInImporter from './LinkedInImporter';
 import OrcidImporter from './OrcidImporter';
 import PublicationsTab from './PublicationsTab';
 import ShareProfilePanel from './ShareProfilePanel';
-
-const TOPICS = [
-  'GLP1','CRISPR','CryoEM','OpenScience','DigitalHealth',
-  'MedicalAffairs','RWE','Oncology','Neuroscience','Cardiology',
-  'Immunology','GenomicsAI','ClinicalTrials','DrugDiscovery',
-  'WomensHealth','Microbiome','Proteomics','SingleCell',
-  'MedTech','Biostatistics',
-];
+import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
 function EF({label,val,onChange,placeholder=""}) {
   return (
@@ -962,24 +955,19 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                 </div>
               ) : (
                 <div style={{marginBottom:16}}>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
-                    {TOPICS.map(t=>{
-                      const on = topicDraft.includes(t);
-                      return (
-                        <button key={t}
-                          onClick={()=>setTopicDraft(prev=>on?prev.filter(x=>x!==t):[...prev,t])}
-                          style={{fontSize:10,padding:'6px 14px',borderRadius:20,border:`1.5px solid ${on?T.v:T.bdr}`,background:on?T.v:T.s2,color:on?'#fff':T.mu,cursor:'pointer',fontFamily:'inherit',fontWeight:600,transition:'all .15s'}}>
-                          #{t}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div style={{fontSize:12,color:topicDraft.length>=1?T.v:T.mu,fontWeight:600,marginBottom:14}}>
-                    {topicDraft.length} selected
-                  </div>
-                  <div style={{display:'flex',gap:8}}>
-                    <Btn variant="s" onClick={()=>saveTopics(topicDraft)} disabled={savingTopics}>{savingTopics?'Saving…':'Save'}</Btn>
+                  <TopicInterestsPicker
+                    selected={topicDraft}
+                    onChange={setTopicDraft}
+                    minRequired={0}
+                  />
+                  <div style={{display:'flex',gap:8,marginTop:14}}>
                     <Btn onClick={()=>setEditingTopics(false)}>Cancel</Btn>
+                    <Btn variant="s" onClick={()=>saveTopics(topicDraft)} disabled={savingTopics}>{savingTopics?'Saving…':'Save interests'}</Btn>
+                  </div>
+                  <div style={{fontSize:12,color:T.mu,marginTop:8}}>
+                    {topicDraft.length===0
+                      ?'Saving with no topics selected will disable personalised feed sorting.'
+                      :`${topicDraft.length} topic${topicDraft.length!==1?'s':''} selected`}
                   </div>
                 </div>
               )}

@@ -5,14 +5,7 @@ import Av from '../components/Av';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
-
-const TOPICS = [
-  'GLP1','CRISPR','CryoEM','OpenScience','DigitalHealth',
-  'MedicalAffairs','RWE','Oncology','Neuroscience','Cardiology',
-  'Immunology','GenomicsAI','ClinicalTrials','DrugDiscovery',
-  'WomensHealth','Microbiome','Proteomics','SingleCell',
-  'MedTech','Biostatistics',
-];
+import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
 async function fetchCrossRefDoi(doi) {
   const clean = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
@@ -243,36 +236,16 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                 <div style={{ fontSize: 13, color: T.mu, marginBottom: 22 }}>
                   Pick at least 3. Your feed will be tailored to these.
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                  {TOPICS.map(t => {
-                    const on = selectedTopics.includes(t);
-                    return (
-                      <button
-                        key={t}
-                        onClick={() => setSelectedTopics(prev =>
-                          on ? prev.filter(x => x !== t) : [...prev, t]
-                        )}
-                        style={{
-                          fontSize: 10, padding: '6px 14px', borderRadius: 20,
-                          border: `1.5px solid ${on ? T.v : T.bdr}`,
-                          background: on ? T.v : T.s2,
-                          color: on ? '#fff' : T.mu,
-                          cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
-                          transition: 'all .15s',
-                        }}>
-                        #{t}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: 12, color: selectedTopics.length >= 3 ? T.v : T.mu, fontWeight: 600, marginBottom: 20 }}>
-                  {selectedTopics.length} selected{selectedTopics.length < 3 ? ` — pick ${3 - selectedTopics.length} more` : ' ✓'}
-                </div>
+                <TopicInterestsPicker
+                  selected={selectedTopics}
+                  onChange={setSelectedTopics}
+                  minRequired={3}
+                />
                 <Btn
                   variant="s"
                   onClick={saveTopics}
                   disabled={selectedTopics.length < 3 || savingTopics}
-                  style={{ width: '100%', padding: '11px', fontSize: 13, opacity: selectedTopics.length < 3 ? .5 : 1 }}>
+                  style={{ width: '100%', padding: '11px', fontSize: 13, marginTop: 20, opacity: selectedTopics.length < 3 ? .5 : 1 }}>
                   {savingTopics ? 'Saving…' : 'Next →'}
                 </Btn>
               </>
