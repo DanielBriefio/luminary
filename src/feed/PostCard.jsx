@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
+import { useWindowSize } from '../lib/useWindowSize';
 import Av from '../components/Av';
 import Bdg from '../components/Bdg';
 import FollowBtn from '../components/FollowBtn';
@@ -13,6 +14,7 @@ import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 
 export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick }) {
+  const { isMobile } = useWindowSize();
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
   const [reposted,setReposted]       = useState(post.user_reposted||false);
@@ -258,22 +260,22 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           );
         })()}
 
-        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.bdr}`}}>
-          <button onClick={toggleLike} style={{fontSize:12,color:liked?T.ro:T.mu,cursor:"pointer",padding:"3px 9px",borderRadius:20,fontWeight:600,background:liked?T.ro2:"transparent",border:"none",fontFamily:"inherit"}}>
+        <div style={{display:"flex",alignItems:"center",gap:isMobile?4:8,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.bdr}`}}>
+          <button onClick={toggleLike} style={{fontSize:12,color:liked?T.ro:T.mu,cursor:"pointer",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,background:liked?T.ro2:"transparent",border:"none",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>
             {liked?"❤️":"🤍"} {likeCount}
           </button>
           <button onClick={toggleComments}
-            style={{fontSize:12,color:showComments?T.v:T.mu,cursor:"pointer",padding:"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:showComments?T.v2:"transparent",fontFamily:"inherit"}}>
+            style={{fontSize:12,color:showComments?T.v:T.mu,cursor:"pointer",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:showComments?T.v2:"transparent",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>
             💬 {commCount}
           </button>
           <button onClick={toggleRepost} title={reposted?"Undo repost":"Repost to your followers"}
-            style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:reposted?T.gr:T.mu,cursor:currentUserId?"pointer":"default",padding:"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:reposted?T.gr2:"transparent",fontFamily:"inherit"}}>
+            style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:reposted?T.gr:T.mu,cursor:currentUserId?"pointer":"default",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:reposted?T.gr2:"transparent",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
             </svg>
             {repostCount}
           </button>
-          <button onClick={()=>setShowShare(true)} style={{fontSize:12,color:T.mu,cursor:"pointer",padding:"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:"transparent",fontFamily:"inherit"}}>↗ Share</button>
+          <button onClick={()=>setShowShare(true)} style={{fontSize:12,color:T.mu,cursor:"pointer",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:"transparent",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>↗ Share</button>
         </div>
       </div>
 

@@ -4,8 +4,10 @@ import { T } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
+import { useWindowSize } from '../lib/useWindowSize';
 
 export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick }) {
+  const { isMobile } = useWindowSize();
   const [posts,setPosts]=useState([]);
   const [loading,setLoading]=useState(true);
   const [tab,setTab]=useState('all');
@@ -173,14 +175,14 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
 
   return (
     <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-      <div style={{background:"rgba(255,255,255,.96)",borderBottom:`1px solid ${T.bdr}`,padding:"9px 18px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-        <input style={{flex:1,background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:"7px 14px",fontSize:12,outline:"none",maxWidth:320,fontFamily:"inherit"}} placeholder="Search researchers, papers, topics..."/>
-        <div style={{display:"flex",background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:3}}>
+      <div style={{background:"rgba(255,255,255,.96)",borderBottom:`1px solid ${T.bdr}`,padding:"9px 18px",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
+        {!isMobile && <input style={{flex:1,background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:"7px 14px",fontSize:12,outline:"none",maxWidth:320,fontFamily:"inherit"}} placeholder="Search researchers, papers, topics..."/>}
+        <div style={{display:"flex",background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:3,flex:isMobile?1:undefined}}>
           {[["sug","✨ For You"],["fol","👥 Following"]].map(([m,l])=>(
-            <div key={m} onClick={()=>setFp(m)} style={{padding:"5px 14px",borderRadius:18,fontSize:12,color:fp===m?T.v:T.mu,cursor:"pointer",fontWeight:600,background:fp===m?T.w:"transparent"}}>{l}</div>
+            <div key={m} onClick={()=>setFp(m)} style={{flex:isMobile?1:undefined,textAlign:"center",padding:"5px 14px",borderRadius:18,fontSize:12,color:fp===m?T.v:T.mu,cursor:"pointer",fontWeight:600,background:fp===m?T.w:"transparent"}}>{l}</div>
           ))}
         </div>
-        <button onClick={fetchPosts} style={{fontSize:11,color:T.mu,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>↻ Refresh</button>
+        <button onClick={fetchPosts} style={{fontSize:11,color:T.mu,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>↻</button>
       </div>
       <div style={{display:"flex",alignItems:"center",background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:"0 18px",flexShrink:0}}>
         {[["all","All"],["papers","📄 Papers"]].map(([k,l])=>(
@@ -199,7 +201,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       </div>
       <div style={{flex:1,overflowY:"auto"}}>
         <div style={{padding:"16px 18px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 264px",gap:16,alignItems:"start"}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 264px",gap:16,alignItems:"start"}}>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
               {fp==='sug'&&feedMode==='personalised'&&!profile?.topic_interests?.length&&(
                 <div style={{fontSize:12.5,color:T.mu,padding:'10px 16px',background:T.s2,borderRadius:9,display:'flex',alignItems:'center',gap:8}}>
@@ -219,27 +221,29 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                 </div>
               ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick}/>)}
             </div>
-            <div>
-              {profile&&(
-                <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:15,boxShadow:"0 2px 12px rgba(108,99,255,.07)",marginBottom:12}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                    <Av color={profile.avatar_color||"me"} size={42} name={profile.name}/>
-                    <div><div style={{fontSize:13,fontWeight:700}}>{profile.name||"Complete your profile"}</div><div style={{fontSize:11,color:T.mu}}>{profile.institution||"Add your institution"}</div></div>
+            {!isMobile && (
+              <div>
+                {profile&&(
+                  <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:15,boxShadow:"0 2px 12px rgba(108,99,255,.07)",marginBottom:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                      <Av color={profile.avatar_color||"me"} size={42} name={profile.name}/>
+                      <div><div style={{fontSize:13,fontWeight:700}}>{profile.name||"Complete your profile"}</div><div style={{fontSize:11,color:T.mu}}>{profile.institution||"Add your institution"}</div></div>
+                    </div>
+                    {!profile.name&&<div style={{fontSize:12,color:T.v,fontWeight:600,marginTop:4,cursor:"pointer"}}>→ Edit your profile to get started</div>}
                   </div>
-                  {!profile.name&&<div style={{fontSize:12,color:T.v,fontWeight:600,marginTop:4,cursor:"pointer"}}>→ Edit your profile to get started</div>}
+                )}
+                <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:15,boxShadow:"0 2px 12px rgba(108,99,255,.07)",marginBottom:12}}>
+                  <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",color:T.mu,marginBottom:11,fontWeight:700}}>🎉 Founding Fellows</div>
+                  <div style={{fontSize:12,color:T.mu,lineHeight:1.7}}>You're one of the first people on Luminary. Every post you share helps build the scientific community we've been missing.</div>
                 </div>
-              )}
-              <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:15,boxShadow:"0 2px 12px rgba(108,99,255,.07)",marginBottom:12}}>
-                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",color:T.mu,marginBottom:11,fontWeight:700}}>🎉 Founding Fellows</div>
-                <div style={{fontSize:12,color:T.mu,lineHeight:1.7}}>You're one of the first people on Luminary. Every post you share helps build the scientific community we've been missing.</div>
+                <div style={{background:`linear-gradient(135deg,${T.v2},${T.bl2})`,border:"1px solid rgba(108,99,255,.15)",borderRadius:14,padding:15}}>
+                  <div style={{fontSize:12,fontWeight:700,color:T.v,marginBottom:6}}>Paper of the Week</div>
+                  <div style={{fontSize:11.5,fontWeight:700,lineHeight:1.4,marginBottom:5}}>GLP-1 agonists and cardiovascular outcomes in T2D</div>
+                  <div style={{fontSize:10,color:T.mu,marginBottom:7}}>NEJM · IF 91 · Altmetric 312</div>
+                  <div style={{fontSize:11,color:T.v,fontWeight:700}}>342 researchers discussing →</div>
+                </div>
               </div>
-              <div style={{background:`linear-gradient(135deg,${T.v2},${T.bl2})`,border:"1px solid rgba(108,99,255,.15)",borderRadius:14,padding:15}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.v,marginBottom:6}}>Paper of the Week</div>
-                <div style={{fontSize:11.5,fontWeight:700,lineHeight:1.4,marginBottom:5}}>GLP-1 agonists and cardiovascular outcomes in T2D</div>
-                <div style={{fontSize:10,color:T.mu,marginBottom:7}}>NEJM · IF 91 · Altmetric 312</div>
-                <div style={{fontSize:11,color:T.v,fontWeight:700}}>342 researchers discussing →</div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

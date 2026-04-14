@@ -1,0 +1,44 @@
+{
+  "name": "Luminary",
+  "short_name": "Luminary",
+  "description": "The scientific community network for researchers and medical affairs professionals.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#6c63ff",
+  "background_color": "#f2f3fb",
+  "lang": "en",
+  "categories": ["social", "science", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "New Post",
+      "short_name": "Post",
+      "description": "Share a paper, finding, or tip",
+      "url": "/?shortcut=post",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Explore",
+      "short_name": "Explore",
+      "description": "Search papers and researchers",
+      "url": "/?shortcut=explore",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    }
+  ]
+}

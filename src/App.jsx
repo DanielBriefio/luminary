@@ -3,6 +3,8 @@ import { supabase } from './supabase';
 import { T, NAV } from './lib/constants';
 import Av from './components/Av';
 import Spinner from './components/Spinner';
+import BottomNav from './components/BottomNav';
+import { useWindowSize } from './lib/useWindowSize';
 import AuthScreen from './screens/AuthScreen';
 import FeedScreen from './feed/FeedScreen';
 import ExploreScreen from './screens/ExploreScreen';
@@ -40,6 +42,7 @@ export default function App() {
   const [publicSlug]     = useState(getPublicSlug);
   const [publicPostId]   = useState(getPublicPostId);
   const [publicPaperDoi] = useState(getPublicPaperDoi);
+  const { isMobile } = useWindowSize();
   const [session,setSession]=useState(null);
   const [profile,setProfile]=useState(null);
   const [screen,setScreen]=useState('feed');
@@ -106,6 +109,16 @@ export default function App() {
     return ()=>clearInterval(interval);
   },[session]);
 
+  // Handle PWA shortcut deep links (?shortcut=post / ?shortcut=explore)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shortcut = params.get('shortcut');
+    if (shortcut && session) {
+      setScreen(shortcut);
+      window.history.replaceState({}, '', '/');
+    }
+  }, [session]);
+
   const signOut=async()=>{ await supabase.auth.signOut(); setScreen('feed'); };
 
   const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>;
@@ -146,44 +159,72 @@ export default function App() {
             onGoToProfile={() => { setShowOnboarding(false); setScreen('profile'); }}
           />
         )}
-        {/* Sidebar */}
-        <div style={{width:200,flexShrink:0,background:T.w,borderRight:`1px solid ${T.bdr}`,display:"flex",flexDirection:"column"}}>
-          <div style={{padding:"16px 14px 14px",borderBottom:`1px solid ${T.bdr}`}}>
-            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:21}}>Lumi<span style={{color:T.v}}>nary</span></div>
-          </div>
-          <div style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
-            {NAV.map(n=>(
-              <div key={n.id} onClick={()=>setScreen(n.id)}
-                style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",margin:"1px 8px",borderRadius:9,cursor:"pointer",fontSize:12.5,fontWeight:screen===n.id?700:500,color:screen===n.id?T.v:T.mu,background:screen===n.id?T.v2:"transparent"}}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{flexShrink:0}}><path d={n.p}/></svg>
-                {n.l}
-                {n.id==='messages' && unreadMessages>0 && (
-                  <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,background:T.ro,color:"#fff",padding:"1px 6px",borderRadius:20,minWidth:16,textAlign:"center"}}>
-                    {unreadMessages>9?'9+':unreadMessages}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-          <div style={{padding:"12px 14px",borderTop:`1px solid ${T.bdr}`}}>
-            <div style={{background:`linear-gradient(135deg,${T.v2},${T.bl2})`,border:`1px solid ${T.bdr}`,borderRadius:9,padding:"8px 11px",marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:10,fontWeight:700,color:T.v}}>Lv.1 — Researcher</span><span style={{fontSize:9.5,color:T.mu}}>0 XP</span></div>
-              <div style={{height:4,background:T.s3,borderRadius:2,marginTop:5,overflow:"hidden"}}><div style={{height:"100%",width:"5%",background:`linear-gradient(90deg,${T.v},${T.bl})`,borderRadius:2}}/></div>
+        {/* Sidebar — desktop only */}
+        {!isMobile && (
+          <div style={{width:200,flexShrink:0,background:T.w,borderRight:`1px solid ${T.bdr}`,display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"16px 14px 14px",borderBottom:`1px solid ${T.bdr}`}}>
+              <div style={{fontFamily:"'DM Serif Display',serif",fontSize:21}}>Lumi<span style={{color:T.v}}>nary</span></div>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:9}}>
-              <Av color={profile?.avatar_color||"me"} size={32} name={profile?.name} url={profile?.avatar_url||""}/>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.name||user.email?.split('@')[0]}</div>
-                <div style={{fontSize:10,color:T.mu,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.institution||user.email}</div>
+            <div style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
+              {NAV.map(n=>(
+                <div key={n.id} onClick={()=>setScreen(n.id)}
+                  style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",margin:"1px 8px",borderRadius:9,cursor:"pointer",fontSize:12.5,fontWeight:screen===n.id?700:500,color:screen===n.id?T.v:T.mu,background:screen===n.id?T.v2:"transparent"}}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{flexShrink:0}}><path d={n.p}/></svg>
+                  {n.l}
+                  {n.id==='messages' && unreadMessages>0 && (
+                    <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,background:T.ro,color:"#fff",padding:"1px 6px",borderRadius:20,minWidth:16,textAlign:"center"}}>
+                      {unreadMessages>9?'9+':unreadMessages}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{padding:"12px 14px",borderTop:`1px solid ${T.bdr}`}}>
+              <div style={{background:`linear-gradient(135deg,${T.v2},${T.bl2})`,border:`1px solid ${T.bdr}`,borderRadius:9,padding:"8px 11px",marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:10,fontWeight:700,color:T.v}}>Lv.1 — Researcher</span><span style={{fontSize:9.5,color:T.mu}}>0 XP</span></div>
+                <div style={{height:4,background:T.s3,borderRadius:2,marginTop:5,overflow:"hidden"}}><div style={{height:"100%",width:"5%",background:`linear-gradient(90deg,${T.v},${T.bl})`,borderRadius:2}}/></div>
               </div>
-              <button onClick={signOut} title="Sign out" style={{fontSize:14,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0}}>↩</button>
+              <div style={{display:"flex",alignItems:"center",gap:9}}>
+                <Av color={profile?.avatar_color||"me"} size={32} name={profile?.name} url={profile?.avatar_url||""}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.name||user.email?.split('@')[0]}</div>
+                  <div style={{fontSize:10,color:T.mu,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.institution||user.email}</div>
+                </div>
+                <button onClick={signOut} title="Sign out" style={{fontSize:14,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0}}>↩</button>
+              </div>
             </div>
           </div>
-        </div>
-        {/* Main */}
-        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
+        )}
+
+        {/* Main content */}
+        <div style={{
+          flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:T.bg,
+          // On mobile, reserve space for the fixed bottom nav
+          paddingBottom: isMobile ? 60 : 0,
+        }}>
+          {/* Mobile header — logo + sign out */}
+          {isMobile && (
+            <div style={{
+              display:"flex", alignItems:"center", justifyContent:"space-between",
+              padding:"10px 16px", background:T.w, borderBottom:`1px solid ${T.bdr}`,
+              flexShrink:0,
+            }}>
+              <div style={{fontFamily:"'DM Serif Display',serif",fontSize:19}}>
+                Lumi<span style={{color:T.v}}>nary</span>
+              </div>
+              <button onClick={signOut} title="Sign out"
+                style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu}}>
+                ↩
+              </button>
+            </div>
+          )}
           {screens[screen]||screens.feed}
         </div>
+
+        {/* Bottom nav — mobile only */}
+        {isMobile && (
+          <BottomNav screen={screen} setScreen={setScreen} unreadMessages={unreadMessages}/>
+        )}
       </div>
     </>
   );

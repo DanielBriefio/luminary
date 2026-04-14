@@ -4,6 +4,7 @@ import { T } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import { timeAgo } from '../lib/utils';
+import { useWindowSize } from '../lib/useWindowSize';
 
 // ─── Exported helper — call from anywhere to open or create a DM thread ──────
 
@@ -71,7 +72,7 @@ function ConversationRow({ conv, isActive, onClick }) {
 
 function MessageThread({
   messages, currentUserId, otherUser, newMessage,
-  setNewMessage, onSend, sending, messagesEndRef, onViewProfile,
+  setNewMessage, onSend, sending, messagesEndRef, onViewProfile, onBack,
 }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -82,6 +83,19 @@ function MessageThread({
         display: 'flex', alignItems: 'center', gap: 10,
         background: T.w, flexShrink: 0,
       }}>
+        {onBack && (
+          <button
+            onClick={onBack}
+            style={{
+              width: 32, height: 32, borderRadius: '50%', border: 'none',
+              background: T.s3, cursor: 'pointer', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, color: T.mu,
+            }}
+          >
+            ←
+          </button>
+        )}
         <Av size={36} color={otherUser?.avatar_color} name={otherUser?.name} url={otherUser?.avatar_url || ''} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>{otherUser?.name}</div>
@@ -348,6 +362,8 @@ export default function MessagesScreen({ user, onViewUser }) {
   const [sending,         setSending]         = useState(false);
   const [unreadCount,     setUnreadCount]     = useState(0);
   const [showNewMessage,  setShowNewMessage]  = useState(false);
+  const [mobileView,      setMobileView]      = useState('list'); // 'list' | 'thread'
+  const { isMobile } = useWindowSize();
   const messagesEndRef = useRef(null);
 
   // Auto-scroll when messages update
@@ -516,6 +532,7 @@ export default function MessagesScreen({ user, onViewUser }) {
     setActiveConvId(conv.id);
     setActiveOtherUser(conv.otherUser);
     fetchMessages(conv.id);
+    setMobileView('thread');
   };
 
   const handleNewMessageSelect = useCallback(async (profile) => {
@@ -526,16 +543,21 @@ export default function MessagesScreen({ user, onViewUser }) {
     setActiveOtherUser(profile);
     fetchMessages(convId);
     fetchConversations();
+    setMobileView('thread');
   }, [user.id]); // eslint-disable-line
+
+  // On mobile, show only one panel at a time
+  const showList   = !isMobile || mobileView === 'list';
+  const showThread = !isMobile || mobileView === 'thread';
 
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
       {/* ── Left panel — conversation list ── */}
       <div style={{
-        width: 280, flexShrink: 0,
-        borderRight: `1px solid ${T.bdr}`,
-        display: 'flex', flexDirection: 'column',
+        width: isMobile ? '100%' : 280, flexShrink: 0,
+        borderRight: isMobile ? 'none' : `1px solid ${T.bdr}`,
+        display: showList ? 'flex' : 'none', flexDirection: 'column',
         background: T.w, overflow: 'hidden',
       }}>
         {showNewMessage ? (
@@ -618,36 +640,39 @@ export default function MessagesScreen({ user, onViewUser }) {
       </div>
 
       {/* ── Right panel — message thread ── */}
-      {activeConvId ? (
-        <MessageThread
-          messages={messages}
-          currentUserId={user.id}
-          otherUser={activeOtherUser}
-          newMessage={newMessage}
-          setNewMessage={setNewMessage}
-          onSend={sendMessage}
-          sending={sending}
-          messagesEndRef={messagesEndRef}
-          onViewProfile={
-            activeOtherUser && onViewUser
-              ? () => onViewUser(activeOtherUser.id)
-              : null
-          }
-        />
-      ) : (
-        <div style={{
-          flex: 1, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', color: T.mu,
-          flexDirection: 'column', gap: 12,
-        }}>
-          <div style={{ fontSize: 32 }}>💬</div>
-          <div style={{ fontSize: 14, fontFamily: "'DM Serif Display',serif", color: T.text }}>
-            Your messages
+      {showThread && (
+        activeConvId ? (
+          <MessageThread
+            messages={messages}
+            currentUserId={user.id}
+            otherUser={activeOtherUser}
+            newMessage={newMessage}
+            setNewMessage={setNewMessage}
+            onSend={sendMessage}
+            sending={sending}
+            messagesEndRef={messagesEndRef}
+            onBack={isMobile ? () => setMobileView('list') : null}
+            onViewProfile={
+              activeOtherUser && onViewUser
+                ? () => onViewUser(activeOtherUser.id)
+                : null
+            }
+          />
+        ) : (
+          <div style={{
+            flex: 1, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', color: T.mu,
+            flexDirection: 'column', gap: 12,
+          }}>
+            <div style={{ fontSize: 32 }}>💬</div>
+            <div style={{ fontSize: 14, fontFamily: "'DM Serif Display',serif", color: T.text }}>
+              Your messages
+            </div>
+            <div style={{ fontSize: 13, textAlign: 'center', maxWidth: 240, lineHeight: 1.6 }}>
+              Select a conversation or message someone from their profile.
+            </div>
           </div>
-          <div style={{ fontSize: 13, textAlign: 'center', maxWidth: 240, lineHeight: 1.6 }}>
-            Select a conversation or message someone from their profile.
-          </div>
-        </div>
+        )
       )}
     </div>
   );

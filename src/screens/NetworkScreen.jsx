@@ -3,8 +3,10 @@ import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
+import { useWindowSize } from '../lib/useWindowSize';
 
 export default function NetworkScreen({ user, profile, onViewUser, onViewPaper, onMessage }) {
+  const { isMobile } = useWindowSize();
   const [loading,        setLoading]        = useState(true);
   const [friends,        setFriends]        = useState([]);
   const [followingOnly,  setFollowingOnly]  = useState([]);
@@ -192,7 +194,7 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper, 
           ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}><Spinner /></div>
           : (
             <div style={{ padding: '16px 18px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 264px', gap: 16, alignItems: 'start' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 264px', gap: 16, alignItems: 'start' }}>
 
                 {/* ── Left column ── */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -226,7 +228,7 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper, 
                     {friends.length === 0
                       ? <Empty icon="🤝" message="No friends yet — follow someone back and you'll appear here." />
                       : (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
                           {friends.map(p => (
                             <FriendCard
                               key={p.id}
@@ -379,11 +381,11 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper, 
         return (
           <div
             onClick={() => setListModal(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(27,29,54,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(27,29,54,.45)', display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1000 }}
           >
             <div
               onClick={e => e.stopPropagation()}
-              style={{ background: T.w, borderRadius: 16, width: 420, maxHeight: '75vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(108,99,255,.18)', overflow: 'hidden' }}
+              style={{ background: T.w, borderRadius: isMobile ? '16px 16px 0 0' : 16, width: isMobile ? '100%' : 420, maxHeight: '75vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(108,99,255,.18)', overflow: 'hidden', alignSelf: isMobile ? 'flex-end' : undefined }}
             >
               {/* Modal header */}
               <div style={{ padding: '16px 20px 14px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

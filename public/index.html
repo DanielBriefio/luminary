@@ -2,9 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+    <!-- Responsive viewport — viewport-fit=cover extends into iPhone notch/home-bar area -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+
+    <!-- PWA / browser chrome -->
+    <meta name="theme-color" content="#6c63ff"/>
+    <link rel="manifest" href="/manifest.json"/>
+
+    <!-- iOS-specific PWA meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+    <meta name="apple-mobile-web-app-title" content="Luminary"/>
+    <link rel="apple-touch-icon" href="/icon.svg"/>
+
+    <!-- SEO -->
     <title>Luminary — The Scientific Community Network</title>
-    <style>* { box-sizing: border-box; } body { margin: 0; }</style>
+    <meta name="description" content="Luminary is the professional network for scientists and medical affairs teams. Share research, follow papers, and connect with your field."/>
+
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      /* Prevent iOS rubber-band scroll on the root — individual panels handle their own scroll */
+      html, body { height: 100%; overflow: hidden; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

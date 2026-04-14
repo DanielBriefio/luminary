@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6c63ff"/>
+      <stop offset="100%" stop-color="#5a52e8"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background (maskable-safe: icon content is within the inner 80%) -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- "L" lettermark centred in safe zone -->
+  <text
+    x="256" y="350"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="310"
+    font-weight="bold"
+    fill="white"
+    text-anchor="middle"
+    dominant-baseline="auto"
+    letter-spacing="-8"
+  >L</text>
+  <!-- Subtle "uminary" micro-text below -->
+  <text
+    x="256" y="420"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="48"
+    fill="rgba(255,255,255,0.55)"
+    text-anchor="middle"
+    letter-spacing="14"
+  >UMINARY</text>
+</svg>

@@ -71,13 +71,16 @@ src/
     ExpandableBio.jsx            — Truncated bio with expand toggle
     Linkify.jsx                  — Auto-link URLs in text
   screens/
-    AuthScreen.jsx               — Login / sign-up
+    AuthScreen.jsx               — Login / sign-up (card, maxWidth 420px)
+    OnboardingScreen.jsx         — First-run wizard: follow suggestions + add publications
     NewPostScreen.jsx            — Compose: text, paper, link, upload, tip
-    ExploreScreen.jsx            — Search posts + topic tag browse
+    ExploreScreen.jsx            — Search posts + topic tag browse (2-col grid with right sidebar)
     GroupsScreen.jsx             — Private research groups
     NotifsScreen.jsx             — Notifications (mark-as-read)
+    NetworkScreen.jsx            — Followers/following, suggested connections (2-col grid)
+    MessagesScreen.jsx           — DM conversations + real-time threads + compose panel
   feed/
-    FeedScreen.jsx               — Main feed (For You / Following, All / Papers tabs)
+    FeedScreen.jsx               — Main feed (For You / Following, All / Papers tabs; 2-col grid with right sidebar)
     PostCard.jsx                 — Post display: like, comment, edit, delete, follow
   profile/
     ProfileScreen.jsx            — Editable profile (About / Publications / Posts tabs)
@@ -85,9 +88,14 @@ src/
     LinkedInImporter.jsx         — LinkedIn ZIP export parser
     OrcidImporter.jsx            — ORCID API importer
     PublicProfilePage.jsx        — Public profile at /p/:slug (no auth required)
+    UserProfileScreen.jsx        — View another user's profile (auth required; maxWidth 740px)
     ShareProfilePanel.jsx        — Share panel: slug editor, visibility, SVG badge, QR code
     PubRow.jsx                   — Single publication row
     SectionGroup.jsx             — Collapsible profile section group
+  post/
+    PublicPostPage.jsx           — Public post at /s/:postId (no auth required; maxWidth 640px)
+  paper/
+    PaperDetailPage.jsx          — Paper detail at /paper/:doi (public + auth; maxWidth 740px)
 ```
 
 ## Screens & Features
@@ -121,6 +129,15 @@ All posts support:
 ### Explore (`ExploreScreen`)
 - Full-text search against `posts_with_meta.content` (ilike, debounced 400ms)
 - Topic tag chips: #GLP1, #CryoEM, #CRISPR, #OpenScience, #DigitalHealth, #MedicalAffairs, #RWE, #WomensHealth
+- 2-column grid: main results + 264px right sidebar (topic chips + featured papers)
+
+### Network (`NetworkScreen`)
+- Tabs: **Followers** / **Following** / **Suggested**
+- Stats row: follower count, following count, mutual connections
+- Suggested users from profiles not yet followed
+- Friend cards in a 2-column grid
+- Right sidebar: 264px (quick follow suggestions)
+- Message button on each user card → opens DM thread
 
 ### Groups (`GroupsScreen`)
 - Create private research groups (name + institution)
@@ -160,6 +177,34 @@ Profile sections (stored as JSONB arrays in `profiles`):
 - SVG badge export (320px wide, gradient, name/title/institution)
 - QR code via `qrcode` npm package
 
+### Direct Messages (`MessagesScreen`)
+- Left panel: conversation list (280px fixed width) with unread badge
+- Compose button (pencil icon) in header → opens `NewMessagePanel`
+- `NewMessagePanel`: search bar + suggested people (follows + followers, deduped) → live name search when typing
+- Right panel: real-time message thread (Supabase channel subscription)
+- Optimistic message send; marks messages read on open
+- `startConversation(userId, otherUserId, supabase)` exported helper — canonical ID sorting prevents duplicate conversations
+- Entry point from profile `Message` button: sets `sessionStorage.open_conversation` then navigates to messages screen
+
+### User Profile (`UserProfileScreen`)
+- Auth-required view of another user's profile (tabs: About, Publications, Posts)
+- Follow/unfollow, Message buttons
+- Back navigation returns to previous screen
+
+### Paper Detail (`PaperDetailPage`)
+- Works both public (`/paper/:doi`) and auth-required (in-app)
+- Shows paper metadata, abstract, linked posts, follow paper button
+- Auth-only: compose a post about the paper
+
+### Public Post (`/s/:postId`)
+- No auth required
+- Shows a single post with comments
+
+### Onboarding (`OnboardingScreen`)
+- Shown to new users (0 follows + 0 publications) after first login
+- Steps: follow suggested users, add first publication
+- Sets `onboarding_completed` on profile when dismissed
+
 ### Public Profile (`/p/:slug`)
 - No auth required
 - Reads `profiles` by `profile_slug`, respects `profile_visibility` JSONB
@@ -181,6 +226,8 @@ Profile sections (stored as JSONB arrays in `profiles`):
 | `group_posts` | id, group_id, user_id, content, post_type, created_at |
 | `notifications` | id, user_id, actor_id, notif_type, meta (JSONB), read, created_at |
 | `publications` | id, user_id, title, authors, journal, year, doi, pub_type, venue, created_at |
+| `conversations` | id, user_id_a, user_id_b (sorted for canonical dedup), last_message, last_message_at |
+| `messages` | id, conversation_id, sender_id, content, created_at, read_at |
 
 ## Edge Functions (Supabase)
 
@@ -201,6 +248,28 @@ Both use the anon JWT from `EDGE_HEADERS` in constants.js.
 
 Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level system is currently static/decorative — not yet wired to real activity.
 
+## Layout Architecture
+
+**Desktop layout** (always-on):
+- Outer: `display:flex, height:100vh, overflow:hidden`
+- Left: 200px sidebar (logo, nav, XP badge, profile mini-card + sign out)
+- Right: `flex:1` main content area, each screen manages its own scroll
+
+**Screens with 2-column grid** (main + 264px right sidebar):
+- `FeedScreen`, `ExploreScreen`, `NetworkScreen`
+- Pattern: `gridTemplateColumns: '1fr 264px'`
+
+**Screens with internal split panel** (fixed left panel + flexible right):
+- `MessagesScreen`: 280px conversation list + flex-1 thread
+
+**Screens with centred content** (no sidebar):
+- `NewPostScreen` (maxWidth 640px), `ProfileScreen`, `UserProfileScreen` (740px), `PaperDetailPage` (740px), `PublicPostPage` (640px), `PublicProfilePage` (780px)
+
+**Public routes** (no auth, no sidebar):
+- `/p/:slug` → PublicProfilePage
+- `/s/:postId` → PublicPostPage
+- `/paper/:doi` → PaperDetailPage
+
 ## Conventions
 
 - **Always use `T.*` tokens** — never hardcode colours
@@ -209,3 +278,4 @@ Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level s
 - **Supabase queries** use `.from()` chained calls; no ORM
 - **Fuzzy dedup** for imports: `deduplicateSectionFuzzy` + `scoreWorkMatch` / `scoreEduMatch` in `src/lib/utils.js`
 - Public profile pages skip auth entirely (`if(publicSlug) return` early in useEffect)
+- **Responsive**: No media queries exist yet. All styles are inline JS. Responsive work uses a `useWindowSize` hook (to be added) returning `isMobile` (< 768px).

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Btn from '../components/Btn';
+import { useWindowSize } from '../lib/useWindowSize';
 
 const DEFAULT_VIS = {
   work_history: true, education: true, volunteering: true,
@@ -160,13 +161,15 @@ export default function ShareProfilePanel({ user, profile, onClose, onProfileUpd
 
   const slugChanged = slugInput !== savedSlug;
 
+  const { isMobile } = useWindowSize();
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex' }}>
-      {/* Backdrop */}
-      <div onClick={onClose} style={{ flex: 1, background: 'rgba(0,0,0,.35)' }} />
+      {/* Backdrop — hidden on mobile (panel is full-screen) */}
+      {!isMobile && <div onClick={onClose} style={{ flex: 1, background: 'rgba(0,0,0,.35)' }} />}
 
-      {/* Panel */}
-      <div style={{ width: 440, height: '100%', background: T.w, boxShadow: '-4px 0 28px rgba(0,0,0,.18)', overflowY: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      {/* Panel — 440px drawer on desktop, full-screen on mobile */}
+      <div style={{ width: isMobile ? '100%' : 440, height: '100%', background: T.w, boxShadow: isMobile ? 'none' : '-4px 0 28px rgba(0,0,0,.18)', overflowY: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
 
         {/* Header */}
         <div style={{ padding: '18px 22px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
