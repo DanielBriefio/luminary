@@ -15,38 +15,34 @@ export default function PaperPreview({ post, currentUserId, onViewPaper }) {
   return (
     <div style={{background:T.v2,border:`1px solid rgba(108,99,255,.2)`,borderRadius:12,overflow:"hidden",marginBottom:10}}>
       <div style={{padding:"13px 15px"}}>
-        <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-          <div style={{flex:1,minWidth:0}}>
-            {doiUrl
-              ? <a href={doiUrl} target="_blank" rel="noopener noreferrer" style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,color:T.text,textDecoration:"none",display:"block",marginBottom:5,overflowWrap:"break-word"}}>
-                  {post.paper_title}
-                </a>
-              : <div style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,marginBottom:5,overflowWrap:"break-word"}}>{post.paper_title}</div>
-            }
-            {post.paper_authors&&<div style={{fontSize:11,color:T.mu,marginBottom:4}}>{post.paper_authors}</div>}
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              {post.paper_journal&&<span style={{fontSize:11.5,fontWeight:600,color:T.v}}>{post.paper_journal}</span>}
-              {post.paper_year&&<span style={{fontSize:11,color:T.mu}}>· {post.paper_year}</span>}
-            </div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
-            {doiUrl&&(
-              <a href={doiUrl} target="_blank" rel="noopener noreferrer"
-                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:T.v,color:"#fff",fontSize:11,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap"}}>
-                📄 Open paper ↗
-              </a>
-            )}
-            {post.paper_doi&&onViewPaper&&(
-              <button
-                onClick={()=>onViewPaper(post.paper_doi)}
-                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:T.w,color:T.v,border:`1.5px solid ${T.v}`,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-                💬 Discussions
-              </button>
-            )}
-            {post.paper_doi&&(
-              <FollowBtn targetType="paper" targetId={post.paper_doi} currentUserId={currentUserId} label="Follow Paper"/>
-            )}
-          </div>
+        {doiUrl
+          ? <a href={doiUrl} target="_blank" rel="noopener noreferrer" style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,color:T.text,textDecoration:"none",display:"block",marginBottom:5,overflowWrap:"break-word"}}>
+              {post.paper_title}
+            </a>
+          : <div style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,marginBottom:5,overflowWrap:"break-word"}}>{post.paper_title}</div>
+        }
+        {post.paper_authors&&<div style={{fontSize:11,color:T.mu,marginBottom:4}}>{post.paper_authors}</div>}
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
+          {post.paper_journal&&<span style={{fontSize:11.5,fontWeight:600,color:T.v}}>{post.paper_journal}</span>}
+          {post.paper_year&&<span style={{fontSize:11,color:T.mu}}>· {post.paper_year}</span>}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+          {doiUrl&&(
+            <a href={doiUrl} target="_blank" rel="noopener noreferrer"
+              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:T.v,color:"#fff",fontSize:11,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap"}}>
+              📄 Open paper ↗
+            </a>
+          )}
+          {post.paper_doi&&onViewPaper&&(
+            <button
+              onClick={()=>onViewPaper(post.paper_doi)}
+              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:T.w,color:T.v,border:`1.5px solid ${T.v}`,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+              💬 Discussions
+            </button>
+          )}
+          {post.paper_doi&&(
+            <FollowBtn targetType="paper" targetId={post.paper_doi} currentUserId={currentUserId} label="Follow Paper"/>
+          )}
         </div>
       </div>
 
