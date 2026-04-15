@@ -21,7 +21,6 @@ import PaperDetailPage from './paper/PaperDetailPage';
 import OnboardingScreen from './screens/OnboardingScreen';
 import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
-import ResetPasswordScreen from './screens/ResetPasswordScreen';
 
 // Detect public profile route: /p/:slug
 const getPublicSlug = () => {
@@ -65,7 +64,6 @@ export default function App() {
   const [unreadNotifs,setUnreadNotifs]=useState(0);
   const [showCardQR,setShowCardQR]=useState(false);
   const [isPasswordRecovery,setIsPasswordRecovery]=useState(false);
-  const [showChangePassword,setShowChangePassword]=useState(false);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -184,7 +182,6 @@ export default function App() {
     <>
       {fonts}
       {showCardQR && profile && <CardQROverlay profile={profile} onClose={()=>setShowCardQR(false)}/>}
-      {showChangePassword && <ResetPasswordScreen modal onClose={()=>setShowChangePassword(false)}/>}
       <div style={{display:"flex",height:"100vh",fontFamily:"'DM Sans',sans-serif",fontSize:13,color:T.text,background:T.bg,overflow:"hidden"}}>
         {/* Onboarding overlay */}
         {showOnboarding && (
@@ -235,12 +232,6 @@ export default function App() {
                   <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.name||user.email?.split('@')[0]}</div>
                   <div style={{fontSize:10,color:T.mu,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.institution||user.email}</div>
                 </div>
-                <button onClick={()=>setShowChangePassword(true)} title="Change password"
-                  style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0,width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:6}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                  </svg>
-                </button>
                 <button onClick={signOut} title="Sign out" style={{fontSize:14,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0}}>↩</button>
               </div>
             </div>
@@ -288,12 +279,6 @@ export default function App() {
                     </svg>
                   </button>
                 )}
-                <button onClick={()=>setShowChangePassword(true)} title="Change password"
-                  style={{width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:9,color:T.mu}}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                  </svg>
-                </button>
                 <button onClick={signOut} title="Sign out"
                   style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:9}}>
                   ↩

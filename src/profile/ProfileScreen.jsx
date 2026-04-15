@@ -16,6 +16,7 @@ import ShareProfilePanel from './ShareProfilePanel';
 import CvExportPanel from './CvExportPanel';
 import { useWindowSize } from '../lib/useWindowSize';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 
 function EF({label,val,onChange,placeholder=""}) {
   return (
@@ -64,6 +65,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showSharePanel,  setShowSharePanel]  = useState(false);
   const [showAllSkills,  setShowAllSkills]  = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [showCvExport,   setShowCvExport]   = useState(false);
   const [editingTopics,  setEditingTopics]  = useState(false);
   const [topicDraft,     setTopicDraft]     = useState([]);
@@ -577,6 +579,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
 
   return (
     <div style={{flex:1,overflowY:'auto',overflowX:'hidden'}}>
+      {showChangePassword&&<ResetPasswordScreen modal onClose={()=>setShowChangePassword(false)}/>}
       {showLinkedIn&&<LinkedInImporter user={user} profile={profile} setProfile={setProfile} onClose={()=>setShowLinkedIn(false)}/>}
       {showOrcid&&<OrcidImporter user={user} profile={profile} setProfile={setProfile} onClose={()=>setShowOrcid(false)}/>}
       {showSharePanel&&<ShareProfilePanel user={user} profile={profile} onClose={()=>setShowSharePanel(false)} onProfileUpdate={setProfile}/>}
@@ -910,7 +913,16 @@ export default function ProfileScreen({ user, profile, setProfile }) {
             </>
           )}
 
-          <div style={{display:'flex',borderBottom:`1px solid ${T.bdr}`,margin:'16px 0 0',gap:0}}>
+          {!editing && (
+            <div style={{display:'flex',justifyContent:'flex-end',paddingBottom:8}}>
+              <button onClick={()=>setShowChangePassword(true)}
+                style={{fontSize:11.5,color:T.mu,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',padding:'2px 0'}}>
+                Change password
+              </button>
+            </div>
+          )}
+
+          <div style={{display:'flex',borderBottom:`1px solid ${T.bdr}`,margin:'0',gap:0}}>
             {[['about','About'],['posts','Posts'],['publications','Publications']].map(([k,l])=>(
               <div key={k} onClick={()=>setTab(k)} style={{padding:'8px 16px',fontSize:12.5,color:tab===k?T.v:T.mu,cursor:'pointer',borderBottom:`2.5px solid ${tab===k?T.v:'transparent'}`,fontWeight:600,whiteSpace:'nowrap'}}>{l}</div>
             ))}
