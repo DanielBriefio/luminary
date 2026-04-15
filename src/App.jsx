@@ -22,6 +22,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
+import SettingsScreen from './screens/SettingsScreen';
 
 // Detect public profile route: /p/:slug
 const getPublicSlug = () => {
@@ -69,6 +70,7 @@ export default function App() {
   const [inviteCodes,setInviteCodes]=useState([]);
   const [invitesRemaining,setInvitesRemaining]=useState(0);
   const [copiedCode,setCopiedCode]=useState(null);
+  const [showSettings,setShowSettings]=useState(false);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -209,6 +211,14 @@ export default function App() {
     <>
       {fonts}
       {showCardQR && profile && <CardQROverlay profile={profile} onClose={()=>setShowCardQR(false)}/>}
+      {/* Settings modal */}
+      {showSettings && (
+        <SettingsScreen
+          user={user}
+          onClose={()=>setShowSettings(false)}
+          onDeleted={()=>{ setShowSettings(false); setScreen('feed'); }}
+        />
+      )}
       {/* Invite codes modal */}
       {showInvites && (
         <div onClick={()=>setShowInvites(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,fontFamily:"'DM Sans',sans-serif"}}>
@@ -317,6 +327,12 @@ export default function App() {
                     <div style={{fontSize:10,color:T.mu,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.institution||user.email}</div>
                   </div>
                 </div>
+                <button onClick={()=>setShowSettings(true)} title="Settings"
+                  style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",width:22,height:22}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  </svg>
+                </button>
                 <button onClick={signOut} title="Sign out" style={{fontSize:14,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0}}>↩</button>
               </div>
               {/* Invite colleagues button */}
