@@ -9,8 +9,7 @@ import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 function ProgressBar({ step }) {
-  // 3 setup steps (1-3), step 4 is the showcase (no bar dot needed)
-  const total = 3;
+  const total = 4; // steps 1–4
   const filled = Math.min(step, total);
   return (
     <div style={{ display: 'flex', gap: 5, marginBottom: 28 }}>
@@ -78,6 +77,9 @@ function FeatureCard({ icon, title, desc, badge }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function OnboardingScreen({ user, profile, setProfile, onComplete, onGoToProfile }) {
   const [step, setStep] = useState(0);
+  // Pending import choice from step 3 — held in state, only written to
+  // sessionStorage at the moment we navigate to the profile screen.
+  const [pendingImportFlag, setPendingImportFlag] = useState(null);
 
   // Step 1 state — topics
   const [selectedTopics, setSelectedTopics] = useState([]);
@@ -136,7 +138,9 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
 
   // ── Step 3: import option handlers ───────────────────────────────────────
   const handleImportChoice = (flag) => {
-    if (flag !== 'skip') sessionStorage.setItem('onboarding_import', flag);
+    // Hold the choice in component state — only written to sessionStorage
+    // right before navigating to profile, so stale flags never linger.
+    setPendingImportFlag(flag || null);
     setStep(4);
   };
 
@@ -172,7 +176,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               Get started →
             </Btn>
             <button
-              onClick={handleComplete}
+              onClick={() => { sessionStorage.removeItem('onboarding_import'); handleComplete(); }}
               style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit' }}>
               Skip for now
             </button>
@@ -318,6 +322,12 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
         {/* ── Step 4: Feature showcase ── */}
         {step === 4 && (
           <div>
+            <ProgressBar step={4} />
+            <button
+              onClick={() => setStep(3)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit', padding: 0, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
+              ← Back
+            </button>
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
               <div style={{ fontSize: 40, marginBottom: 14 }}>🎉</div>
               <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, marginBottom: 8 }}>
@@ -370,7 +380,11 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               <Btn variant="s" onClick={() => { sessionStorage.removeItem('onboarding_import'); handleComplete(); }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
                 Go to my feed →
               </Btn>
-              <Btn variant="v" onClick={() => { handleComplete().then(() => onGoToProfile?.()); }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
+              <Btn variant="v" onClick={() => {
+                // Write flag to sessionStorage only now, right before navigating to profile
+                if (pendingImportFlag) sessionStorage.setItem('onboarding_import', pendingImportFlag);
+                handleComplete().then(() => onGoToProfile?.());
+              }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
                 Complete my profile
               </Btn>
             </div>
