@@ -15,11 +15,14 @@ create index if not exists idx_invite_codes_code
 create index if not exists idx_invite_codes_created_by
   on invite_codes(created_by);
 
--- RLS: users can only read their own codes
+-- RLS
 alter table invite_codes enable row level security;
 
+-- Unclaimed codes are readable by anyone (unauthenticated sign-up validation).
+-- Claimed codes are readable only by the creator or the claimer.
 create policy "invite_select_own" on invite_codes for select
   using (
+    claimed_by is null or
     auth.uid() = created_by or
     auth.uid() = claimed_by
   );
