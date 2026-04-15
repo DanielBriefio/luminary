@@ -7,10 +7,10 @@ import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
-// ── Progress bar ──────────────────────────────────────────────────────────────
+// ── Progress bar (setup steps 2–4 = dots 1–3) ────────────────────────────────
 function ProgressBar({ step }) {
-  const total = 4; // steps 1–4
-  const filled = Math.min(step, total);
+  const total  = 3;
+  const filled = Math.max(0, step - 1); // step2→1, step3→2, step4→3
   return (
     <div style={{ display: 'flex', gap: 5, marginBottom: 28 }}>
       {Array.from({ length: total }).map((_, i) => (
@@ -50,7 +50,7 @@ function ImportCard({ icon, title, desc, onClick }) {
   );
 }
 
-// ── Feature showcase card ─────────────────────────────────────────────────────
+// ── Feature card ──────────────────────────────────────────────────────────────
 function FeatureCard({ icon, title, desc, badge }) {
   return (
     <div style={{
@@ -77,22 +77,19 @@ function FeatureCard({ icon, title, desc, badge }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function OnboardingScreen({ user, profile, setProfile, onComplete, onGoToProfile }) {
   const [step, setStep] = useState(0);
-  // Pending import choice from step 3 — held in state, only written to
-  // sessionStorage at the moment we navigate to the profile screen.
-  const [pendingImportFlag, setPendingImportFlag] = useState(null);
 
-  // Step 1 state — topics
+  // Step 2 state — topics
   const [selectedTopics, setSelectedTopics] = useState([]);
   const [savingTopics,   setSavingTopics]   = useState(false);
 
-  // Step 2 state — follow researchers
+  // Step 3 state — follow researchers
   const [suggested,      setSuggested]      = useState([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [followCount,    setFollowCount]    = useState(0);
 
-  // Load suggested researchers when arriving at step 2
+  // Load suggested researchers when arriving at step 3
   useEffect(() => {
-    if (step !== 2) return;
+    if (step !== 3) return;
     setSuggestLoading(true);
     (async () => {
       const { data } = await supabase
@@ -125,7 +122,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
     onComplete();
   };
 
-  // ── Step 1: save topics ───────────────────────────────────────────────────
+  // Step 2: save topics and advance
   const saveTopics = async () => {
     setSavingTopics(true);
     await supabase.from('profiles')
@@ -133,15 +130,18 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
       .eq('id', user.id);
     setProfile(p => ({ ...p, topic_interests: selectedTopics }));
     setSavingTopics(false);
-    setStep(2);
+    setStep(3);
   };
 
-  // ── Step 3: import option handlers ───────────────────────────────────────
+  // Step 4: import choice — completes onboarding immediately
   const handleImportChoice = (flag) => {
-    // Hold the choice in component state — only written to sessionStorage
-    // right before navigating to profile, so stale flags never linger.
-    setPendingImportFlag(flag || null);
-    setStep(4);
+    sessionStorage.removeItem('onboarding_import');
+    if (flag) {
+      sessionStorage.setItem('onboarding_import', flag);
+      handleComplete().then(() => onGoToProfile?.());
+    } else {
+      handleComplete();
+    }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -170,7 +170,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
             </div>
             <div style={{ fontSize: 14, color: T.mu, lineHeight: 1.7, marginBottom: 32, maxWidth: 380, margin: '0 auto 32px' }}>
               The home for researchers who want more than a PDF repository.
-              Let's set up your profile in 2 minutes.
+              Let's set up your profile in a couple of minutes.
             </div>
             <Btn variant="s" onClick={() => setStep(1)} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
               Get started →
@@ -183,8 +183,59 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
           </div>
         )}
 
-        {/* ── Steps 1–3 ── */}
-        {step >= 1 && step <= 3 && (
+        {/* ── Step 1: Feature overview ── */}
+        {step === 1 && (
+          <div>
+            <button
+              onClick={() => setStep(0)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit', padding: 0, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
+              ← Back
+            </button>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
+              Your research identity, all in one place
+            </div>
+            <div style={{ fontSize: 13, color: T.mu, marginBottom: 20, lineHeight: 1.6 }}>
+              Here's what you can do with Luminary:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+              <FeatureCard
+                icon="🌐"
+                title="Public profile page"
+                desc="A beautiful page at luminary.app/p/your-name — perfect for conference posters and email signatures"
+                badge="My Profile → Share"
+              />
+              <FeatureCard
+                icon="🔗"
+                title="QR code & virtual business card"
+                desc="Generate a QR code for slides or posters, or install Luminary on your phone as a tap-to-share card"
+                badge="My Profile → Share"
+              />
+              <FeatureCard
+                icon="📚"
+                title="Publication list"
+                desc="Import from ORCID, LinkedIn, CV, or PubMed. Sorted, formatted, and shareable automatically"
+                badge="My Profile → Publications"
+              />
+              <FeatureCard
+                icon="📡"
+                title="Research feed & discovery"
+                desc="Follow researchers and papers by DOI. Your feed surfaces the work you care about — no algorithm noise"
+              />
+              <FeatureCard
+                icon="📤"
+                title="CV export"
+                desc="Export your profile as a formatted publication list — useful for grant applications and department reports"
+                badge="My Profile → Export"
+              />
+            </div>
+            <Btn variant="s" onClick={() => setStep(2)} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
+              Set up my profile →
+            </Btn>
+          </div>
+        )}
+
+        {/* ── Steps 2–4 (setup) ── */}
+        {step >= 2 && step <= 4 && (
           <>
             <ProgressBar step={step} />
 
@@ -195,8 +246,8 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               ← Back
             </button>
 
-            {/* ── Step 1: Topics ── */}
-            {step === 1 && (
+            {/* ── Step 2: Topics ── */}
+            {step === 2 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
                   What topics are you interested in?
@@ -219,8 +270,8 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               </>
             )}
 
-            {/* ── Step 2: Follow researchers ── */}
-            {step === 2 && (
+            {/* ── Step 3: Follow researchers ── */}
+            {step === 3 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
                   Follow researchers in your field
@@ -260,14 +311,14 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                   </div>
                 )}
 
-                <Btn variant="s" onClick={() => setStep(3)} style={{ width: '100%', padding: '11px', fontSize: 13 }}>
+                <Btn variant="s" onClick={() => setStep(4)} style={{ width: '100%', padding: '11px', fontSize: 13 }}>
                   {followCount > 0 ? `Following ${followCount} researcher${followCount !== 1 ? 's' : ''} →` : 'Next →'}
                 </Btn>
               </>
             )}
 
-            {/* ── Step 3: Import publications ── */}
-            {step === 3 && (
+            {/* ── Step 4: Import publications ── */}
+            {step === 4 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
                   Build your publication list
@@ -310,85 +361,13 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                 </div>
 
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => handleImportChoice(null)}
                   style={{ display: 'block', margin: '0 auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit' }}>
                   Skip for now — I'll do this from My Profile later
                 </button>
               </>
             )}
           </>
-        )}
-
-        {/* ── Step 4: Feature showcase ── */}
-        {step === 4 && (
-          <div>
-            <ProgressBar step={4} />
-            <button
-              onClick={() => setStep(3)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit', padding: 0, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
-              ← Back
-            </button>
-            <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <div style={{ fontSize: 40, marginBottom: 14 }}>🎉</div>
-              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, marginBottom: 8 }}>
-                You're all set!
-              </div>
-              <div style={{ fontSize: 13, color: T.mu, lineHeight: 1.6, maxWidth: 400, margin: '0 auto' }}>
-                Here's a quick look at what Luminary can do for you — all built around your research identity.
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-              <FeatureCard
-                icon="🌐"
-                title="Public profile page"
-                desc="Share a beautiful public profile page at luminary.app/p/your-name — perfect for conference posters and email signatures"
-                badge="My Profile → Share"
-              />
-              <FeatureCard
-                icon="📱"
-                title="Virtual business card"
-                desc="Install Luminary on your phone's home screen and share your contact details with a tap — no paper needed"
-                badge="Mobile PWA"
-              />
-              <FeatureCard
-                icon="🔗"
-                title="QR code for your profile"
-                desc="Generate a QR code that links directly to your public profile — add it to slides, posters, or print it on your badge"
-                badge="My Profile → Share"
-              />
-              <FeatureCard
-                icon="📚"
-                title="Publication list"
-                desc="Import from ORCID, LinkedIn, or CV upload. Share a clean list of your work, sorted and formatted automatically"
-                badge="My Profile → Publications"
-              />
-              <FeatureCard
-                icon="📤"
-                title="CV & publication export"
-                desc="Export your profile as a formatted CV — useful for grant applications, job searches, and department reports"
-                badge="My Profile → Export"
-              />
-              <FeatureCard
-                icon="📡"
-                title="Research feed & discovery"
-                desc="Follow researchers and papers by DOI. Your feed surfaces the work you care about — no algorithm noise"
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <Btn variant="s" onClick={() => { sessionStorage.removeItem('onboarding_import'); handleComplete(); }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
-                Go to my feed →
-              </Btn>
-              <Btn variant="v" onClick={() => {
-                // Write flag to sessionStorage only now, right before navigating to profile
-                if (pendingImportFlag) sessionStorage.setItem('onboarding_import', pendingImportFlag);
-                handleComplete().then(() => onGoToProfile?.());
-              }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
-                Complete my profile
-              </Btn>
-            </div>
-          </div>
         )}
 
       </div>
