@@ -21,6 +21,7 @@ import PaperDetailPage from './paper/PaperDetailPage';
 import OnboardingScreen from './screens/OnboardingScreen';
 import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
 
 // Detect public profile route: /p/:slug
 const getPublicSlug = () => {
@@ -64,6 +65,10 @@ export default function App() {
   const [unreadNotifs,setUnreadNotifs]=useState(0);
   const [showCardQR,setShowCardQR]=useState(false);
   const [isPasswordRecovery,setIsPasswordRecovery]=useState(false);
+  const [showInvites,setShowInvites]=useState(false);
+  const [inviteCodes,setInviteCodes]=useState([]);
+  const [invitesRemaining,setInvitesRemaining]=useState(0);
+  const [copiedCode,setCopiedCode]=useState(null);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -140,6 +145,28 @@ export default function App() {
     return ()=>clearInterval(interval);
   },[session]);
 
+  // Invite codes
+  useEffect(()=>{
+    if(!session?.user) return;
+    supabase
+      .from('invite_codes')
+      .select('id, code, claimed_by, claimed_at, batch_label')
+      .eq('created_by', session.user.id)
+      .order('created_at')
+      .then(async ({data})=>{
+        if(!data) return;
+        const claimedIds = data.filter(c=>c.claimed_by).map(c=>c.claimed_by);
+        let nameMap = {};
+        if(claimedIds.length){
+          const {data:profiles} = await supabase.from('profiles').select('id,name').in('id',claimedIds);
+          (profiles||[]).forEach(p=>{nameMap[p.id]=p.name;});
+        }
+        const enriched = data.map(c=>({...c, claimed_name: nameMap[c.claimed_by]||null}));
+        setInviteCodes(enriched);
+        setInvitesRemaining(enriched.filter(c=>!c.claimed_by).length);
+      });
+  },[session]);
+
   // Handle PWA shortcut deep links (?shortcut=post / ?shortcut=explore)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -182,6 +209,58 @@ export default function App() {
     <>
       {fonts}
       {showCardQR && profile && <CardQROverlay profile={profile} onClose={()=>setShowCardQR(false)}/>}
+      {/* Invite codes modal */}
+      {showInvites && (
+        <div onClick={()=>setShowInvites(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,fontFamily:"'DM Sans',sans-serif"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.w,borderRadius:18,padding:28,maxWidth:480,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,marginBottom:4}}>Your invite codes</div>
+            <div style={{fontSize:13,color:T.mu,marginBottom:20,lineHeight:1.6}}>
+              Share these with colleagues you'd like to invite to Luminary.
+              Each code can only be used once.
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {inviteCodes.length===0&&<div style={{fontSize:13,color:T.mu,textAlign:'center',padding:'20px 0'}}>No invite codes yet.</div>}
+              {inviteCodes.map(code=>(
+                <div key={code.id} style={{
+                  display:'flex',alignItems:'center',gap:10,
+                  padding:'10px 14px',borderRadius:10,
+                  background:code.claimed_by?T.s2:T.v2,
+                  border:`1px solid ${code.claimed_by?T.bdr:'rgba(108,99,255,.2)'}`,
+                }}>
+                  <span style={{fontFamily:'monospace',fontSize:13,fontWeight:700,flex:1,letterSpacing:'.05em',color:code.claimed_by?T.mu:T.v}}>
+                    {code.code}
+                  </span>
+                  {code.claimed_by?(
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:11,fontWeight:700,color:T.gr}}>✓ Claimed</div>
+                      {code.claimed_name&&<div style={{fontSize:10.5,color:T.mu}}>by {code.claimed_name}</div>}
+                    </div>
+                  ):(
+                    <button onClick={()=>{
+                      navigator.clipboard.writeText(code.code);
+                      setCopiedCode(code.id);
+                      setTimeout(()=>setCopiedCode(null),1500);
+                    }} style={{
+                      fontSize:11.5,fontWeight:600,color:copiedCode===code.id?T.gr:T.v,
+                      border:`1px solid ${copiedCode===code.id?T.gr:T.v}`,background:'white',
+                      borderRadius:8,padding:'4px 10px',cursor:'pointer',fontFamily:'inherit',
+                      transition:'all .15s',
+                    }}>
+                      {copiedCode===code.id?'Copied!':'Copy'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:16,padding:'10px 14px',background:T.s2,borderRadius:10,fontSize:12,color:T.mu,lineHeight:1.6}}>
+              💡 Codes work like conference badges — whoever you give them to joins your Luminary network automatically as a connection.
+            </div>
+            <button onClick={()=>setShowInvites(false)} style={{width:'100%',marginTop:16,padding:'10px',borderRadius:10,border:`1.5px solid ${T.bdr}`,background:T.w,cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:600,color:T.text}}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       <div style={{display:"flex",height:"100vh",fontFamily:"'DM Sans',sans-serif",fontSize:13,color:T.text,background:T.bg,overflow:"hidden"}}>
         {/* Onboarding overlay */}
         {showOnboarding && (
@@ -234,6 +313,22 @@ export default function App() {
                 </div>
                 <button onClick={signOut} title="Sign out" style={{fontSize:14,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0}}>↩</button>
               </div>
+              {/* Invite colleagues button */}
+              <button onClick={()=>setShowInvites(true)} style={{
+                display:'flex',alignItems:'center',gap:8,
+                width:'100%',padding:'7px 10px',marginTop:8,
+                border:`1px dashed ${T.bdr}`,borderRadius:9,
+                background:'transparent',cursor:'pointer',
+                fontFamily:'inherit',color:T.mu,
+              }}>
+                <span style={{fontSize:13}}>🎟️</span>
+                <span style={{fontSize:11.5,fontWeight:600}}>Invite colleagues</span>
+                {invitesRemaining>0&&(
+                  <span style={{marginLeft:'auto',fontSize:10,fontWeight:700,background:T.v,color:'white',padding:'1px 6px',borderRadius:20}}>
+                    {invitesRemaining}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         )}
