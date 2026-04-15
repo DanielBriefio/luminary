@@ -65,29 +65,34 @@ export default function PubRow({ pub, setPubs }) {
   );
 
   return (
-    <div style={{display:'flex',alignItems:'flex-start',gap:14,padding:'14px 0',borderBottom:`1px solid ${T.bdr}`}}>
-      <div style={{fontSize:18,width:24,flexShrink:0,paddingTop:1,textAlign:'center'}}>{typeIcon(pub.pub_type)}</div>
-      <div style={{width:36,flexShrink:0}}>
-        <div style={{fontSize:11,color:T.mu,fontWeight:600,textAlign:'right',paddingTop:2}}>{pub.year||'—'}</div>
+    <div style={{padding:'14px 0',borderBottom:`1px solid ${T.bdr}`}}>
+      {/* Icon + year + type — header row */}
+      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
+        <span style={{fontSize:16}}>{typeIcon(pub.pub_type)}</span>
+        {pub.year&&<span style={{fontSize:11,color:T.mu,fontWeight:600}}>{pub.year}</span>}
+        {pub.pub_type&&<span style={{fontSize:10.5,color:T.mu,background:T.s2,borderRadius:10,padding:'1px 7px'}}>{typeLabel(pub.pub_type)}</span>}
+        {pub.is_open_access&&<span style={{fontSize:10.5,color:'#059669',background:'#d1fae5',borderRadius:10,padding:'1px 7px',fontWeight:600}}>Open Access</span>}
       </div>
-      <div style={{flex:1,minWidth:0}}>
+
+      {/* Title + authors — full width */}
+      <div style={{minWidth:0}}>
         <div style={{fontSize:13,fontWeight:700,lineHeight:1.4,marginBottom:3}}>
           {pub.doi
             ?<a href={pub.doi.startsWith('http')?pub.doi:`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer" style={{color:T.text,textDecoration:'none'}}>{pub.title}</a>
             :pub.title}
         </div>
-        {pub.authors&&<div style={{fontSize:11.5,color:T.mu,marginBottom:2}}>{pub.authors}</div>}
+        {pub.authors&&<div style={{fontSize:11.5,color:T.mu,marginBottom:4}}>{pub.authors}</div>}
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
           {(pub.journal||pub.venue)&&<span style={{fontSize:11.5,fontWeight:600,color:T.v}}>{pub.journal||pub.venue}</span>}
-          {pub.pub_type&&<span style={{fontSize:10.5,color:T.mu,background:T.s2,borderRadius:10,padding:'1px 7px'}}>{typeLabel(pub.pub_type)}</span>}
-          {pub.is_open_access&&<span style={{fontSize:10.5,color:'#059669',background:'#d1fae5',borderRadius:10,padding:'1px 7px',fontWeight:600}}>Open Access</span>}
           {pub.citations>0&&<span style={{fontSize:10.5,color:T.mu,background:T.s2,borderRadius:10,padding:'1px 7px'}}>{pub.citations} cited</span>}
           {pub.full_text_url&&<a href={pub.full_text_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'#059669',textDecoration:'none',background:'#d1fae5',padding:'2px 8px',borderRadius:10}}>Full Text ↗</a>}
           {pub.doi&&<a href={pub.doi.startsWith('http')?pub.doi:`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:T.v,textDecoration:'none',background:T.v2,padding:'2px 8px',borderRadius:10}}>DOI ↗</a>}
           {pub.pmid&&<a href={`https://pubmed.ncbi.nlm.nih.gov/${pub.pmid}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:T.bl,textDecoration:'none',background:T.bl2,padding:'2px 8px',borderRadius:10}}>PubMed ↗</a>}
         </div>
       </div>
-      <div style={{display:'flex',gap:4,flexShrink:0}}>
+
+      {/* Edit + delete — below content */}
+      <div style={{display:'flex',gap:4,justifyContent:'flex-end',marginTop:8}}>
         <button onClick={()=>setEditing(true)} title="Edit" style={{width:26,height:26,borderRadius:'50%',border:`1px solid ${T.bdr}`,background:T.w,cursor:'pointer',fontSize:12,color:T.mu}}>✏️</button>
         <button onClick={deletePub} title="Remove" style={{width:26,height:26,borderRadius:'50%',border:`1px solid ${T.bdr}`,background:T.w,cursor:'pointer',fontSize:12,color:T.ro}}>✕</button>
       </div>

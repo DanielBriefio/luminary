@@ -63,6 +63,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const [pendingCvPubs, setPendingCvPubs] = useState([]);
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showSharePanel,  setShowSharePanel]  = useState(false);
+  const [showAllSkills,  setShowAllSkills]  = useState(false);
   const [showCvExport,   setShowCvExport]   = useState(false);
   const [editingTopics,  setEditingTopics]  = useState(false);
   const [topicDraft,     setTopicDraft]     = useState([]);
@@ -1037,7 +1038,17 @@ export default function ProfileScreen({ user, profile, setProfile }) {
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:T.text}}>Skills</div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                  {skl.map((s,i)=><EditablePill key={i} item={s} index={i} field="skills" array={skl} color="mu"/>)}
+                  {(showAllSkills ? skl : skl.slice(0,5)).map((s,i)=><EditablePill key={i} item={s} index={i} field="skills" array={skl} color="mu"/>)}
+                  {!showAllSkills && skl.length > 5 && (
+                    <button onClick={()=>setShowAllSkills(true)} style={{fontSize:11.5,color:T.v,border:`1px solid rgba(108,99,255,.25)`,background:T.v2,borderRadius:20,padding:'3px 10px',cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>
+                      +{skl.length-5} more
+                    </button>
+                  )}
+                  {showAllSkills && skl.length > 5 && (
+                    <button onClick={()=>setShowAllSkills(false)} style={{fontSize:11.5,color:T.mu,border:`1px solid ${T.bdr}`,background:'transparent',borderRadius:20,padding:'3px 10px',cursor:'pointer',fontFamily:'inherit'}}>
+                      Show less
+                    </button>
+                  )}
                   <AddPill field="skills" array={skl} placeholder="e.g. Real-World Evidence"/>
                 </div>
               </div>
@@ -1129,7 +1140,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
                 <div style={{fontSize:12.5,color:T.mu,lineHeight:1.6}}>
                   {profile?.profile_slug
-                    ? <>Your card is live at <a href={`/p/${profile.profile_slug}`} target="_blank" rel="noopener noreferrer" style={{color:T.v,fontWeight:600,textDecoration:'none'}}>{window.location.hostname}/p/{profile.profile_slug} ↗</a></>
+                    ? <>Your card is live at <a href={`/c/${profile.profile_slug}`} target="_blank" rel="noopener noreferrer" style={{color:T.v,fontWeight:600,textDecoration:'none'}}>{window.location.hostname}/c/{profile.profile_slug} ↗</a></>
                     : 'Set a profile slug in Share settings to activate your card URL.'}
                 </div>
                 <Btn variant="v" onClick={()=>setEditing(true)} style={{flexShrink:0,fontSize:12}}>✏️ Edit card details</Btn>
