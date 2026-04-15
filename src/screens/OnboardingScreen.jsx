@@ -175,11 +175,6 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
             <Btn variant="s" onClick={() => setStep(1)} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
               Get started →
             </Btn>
-            <button
-              onClick={() => { sessionStorage.removeItem('onboarding_import'); handleComplete(); }}
-              style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit' }}>
-              Skip for now
-            </button>
           </div>
         )}
 
