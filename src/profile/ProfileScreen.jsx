@@ -935,13 +935,28 @@ export default function ProfileScreen({ user, profile, setProfile }) {
           {tab==='about'&&(
             <div>
               {!hasExperience&&!hasSkills&&(
-                <div style={{background:`linear-gradient(135deg,${T.bl2},#dbeafe)`,border:'1px solid rgba(66,133,244,.2)',borderRadius:12,padding:'16px 18px',marginBottom:18,display:'flex',alignItems:'center',gap:14}}>
-                  <div style={{fontSize:28}}>💼</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:700,marginBottom:3}}>Import your work history from LinkedIn</div>
-                    <div style={{fontSize:12,color:T.mu,lineHeight:1.6}}>Get your full career history, education, skills, and more imported in 2 minutes.</div>
+                <div style={{background:`linear-gradient(135deg,${T.bl2},#dbeafe)`,border:'1px solid rgba(66,133,244,.2)',borderRadius:12,padding:'16px 18px',marginBottom:18}}>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>
+                    <div style={{fontSize:28}}>📋</div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,marginBottom:3}}>Your profile looks empty — let's fill it in</div>
+                      <div style={{fontSize:12,color:T.mu,lineHeight:1.6}}>Import your work history, education, skills, and publications from one of these sources:</div>
+                    </div>
                   </div>
-                  <Btn onClick={()=>setShowLinkedIn(true)} style={{borderColor:T.bl,color:T.bl,background:'white',whiteSpace:'nowrap',flexShrink:0}}><span style={{fontWeight:700}}>in</span> Import now</Btn>
+                  <div style={{display:'flex',gap:9,flexWrap:'wrap'}}>
+                    <Btn onClick={()=>setShowLinkedIn(true)} style={{borderColor:T.bl,color:T.bl,background:'white',whiteSpace:'nowrap'}}>
+                      <span style={{fontWeight:800,fontSize:13}}>in</span> LinkedIn
+                    </Btn>
+                    <Btn onClick={()=>setShowOrcid(true)} style={{borderColor:'#a6ce39',color:'#4e7a1e',background:'white',whiteSpace:'nowrap'}}>
+                      🔬 ORCID
+                    </Btn>
+                    <label style={{cursor:'pointer'}}>
+                      <input type="file" accept=".pdf,.docx,.txt" onChange={e=>{if(e.target.files?.[0]){setShowImportMenu(false);handleProfileCvUpload(e.target.files[0]);}}} style={{display:'none'}}/>
+                      <span style={{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:22,border:`1.5px solid ${T.bdr}`,background:'white',cursor:'pointer',fontSize:12,fontWeight:600,color:T.text,whiteSpace:'nowrap'}}>
+                        📄 Upload CV
+                      </span>
+                    </label>
+                  </div>
                 </div>
               )}
 
