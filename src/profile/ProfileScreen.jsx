@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
@@ -416,6 +416,14 @@ export default function ProfileScreen({ user, profile, setProfile }) {
     const [editing, setEditing] = useState(false);
     const [form, setForm]       = useState({...item});
     const [saving, setSaving]   = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
+    const menuRef = useRef(null);
+    useEffect(() => {
+      if (!showMenu) return;
+      const handler = (e) => { if (!menuRef.current?.contains(e.target)) setShowMenu(false); };
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }, [showMenu]);
     const saveRow = async () => {
       setSaving(true);
       const updated = [...array]; updated[index] = form;
@@ -436,9 +444,23 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       <div style={{display:"flex",gap:13,padding:"13px 0",borderBottom:"1px solid "+T.bdr,alignItems:"flex-start"}}>
         <div style={{width:40,height:40,borderRadius:9,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,border:"1px solid "+T.bdr,background:T.s2}}>{logo}</div>
         <div style={{flex:1}}>{renderView(item)}</div>
-        <div style={{display:"flex",gap:4,flexShrink:0}}>
-          <button onClick={()=>setEditing(true)} title="Edit" style={{width:26,height:26,borderRadius:"50%",border:"1px solid "+T.bdr,background:T.w,cursor:"pointer",fontSize:12,color:T.mu}}>✏️</button>
-          <button onClick={deleteRow} title="Delete" style={{width:26,height:26,borderRadius:"50%",border:"1px solid "+T.bdr,background:T.w,cursor:"pointer",fontSize:12,color:T.ro}}>✕</button>
+        <div ref={menuRef} style={{position:"relative",flexShrink:0}}>
+          <button onClick={()=>setShowMenu(v=>!v)}
+            style={{width:28,height:28,borderRadius:"50%",border:"1px solid "+T.bdr,background:T.w,cursor:"pointer",color:T.mu,fontSize:15,fontWeight:700,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",letterSpacing:1}}>
+            ···
+          </button>
+          {showMenu&&(
+            <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:T.w,border:"1px solid "+T.bdr,borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,.1)",zIndex:50,minWidth:120,overflow:"hidden"}}>
+              <button onClick={()=>{setShowMenu(false);setEditing(true);}}
+                style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",borderBottom:"1px solid "+T.bdr,background:"transparent",cursor:"pointer",color:T.text}}>
+                Edit
+              </button>
+              <button onClick={()=>{setShowMenu(false);deleteRow();}}
+                style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",background:"transparent",cursor:"pointer",color:T.ro}}>
+                Delete
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

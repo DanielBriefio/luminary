@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { T, PUB_TYPES } from '../lib/constants';
 import { typeIcon, typeLabel } from '../lib/pubUtils';
@@ -9,6 +9,14 @@ export default function PubRow({ pub, setPubs }) {
   const [form, setForm]       = useState({title:pub.title||'',authors:pub.authors||'',journal:pub.journal||'',year:pub.year||'',doi:pub.doi||'',pub_type:pub.pub_type||'journal',venue:pub.venue||''});
   const [rowSaving, setRowSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef(null);
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e) => { if (!menuRef.current?.contains(e.target)) setShowMenu(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
 
   const saveEdit = async () => {
     setRowSaving(true);
@@ -66,12 +74,30 @@ export default function PubRow({ pub, setPubs }) {
 
   return (
     <div style={{padding:'14px 0',borderBottom:`1px solid ${T.bdr}`}}>
-      {/* Icon + year + type — header row */}
+      {/* Icon + year + type + three-dots menu */}
       <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
         <span style={{fontSize:16}}>{typeIcon(pub.pub_type)}</span>
         {pub.year&&<span style={{fontSize:11,color:T.mu,fontWeight:600}}>{pub.year}</span>}
         {pub.pub_type&&<span style={{fontSize:10.5,color:T.mu,background:T.s2,borderRadius:10,padding:'1px 7px'}}>{typeLabel(pub.pub_type)}</span>}
         {pub.is_open_access&&<span style={{fontSize:10.5,color:'#059669',background:'#d1fae5',borderRadius:10,padding:'1px 7px',fontWeight:600}}>Open Access</span>}
+        <div ref={menuRef} style={{marginLeft:'auto',position:'relative'}}>
+          <button onClick={()=>setShowMenu(v=>!v)}
+            style={{width:28,height:28,borderRadius:'50%',border:`1px solid ${T.bdr}`,background:T.w,cursor:'pointer',color:T.mu,fontSize:15,fontWeight:700,fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',letterSpacing:1}}>
+            ···
+          </button>
+          {showMenu&&(
+            <div style={{position:'absolute',right:0,top:'calc(100% + 4px)',background:T.w,border:`1px solid ${T.bdr}`,borderRadius:10,boxShadow:'0 4px 16px rgba(0,0,0,.1)',zIndex:50,minWidth:120,overflow:'hidden'}}>
+              <button onClick={()=>{setShowMenu(false);setEditing(true);}}
+                style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',fontSize:13,fontFamily:'inherit',border:'none',borderBottom:`1px solid ${T.bdr}`,background:'transparent',cursor:'pointer',color:T.text}}>
+                Edit
+              </button>
+              <button onClick={()=>{setShowMenu(false);deletePub();}}
+                style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',fontSize:13,fontFamily:'inherit',border:'none',background:'transparent',cursor:'pointer',color:T.ro}}>
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Title + authors — full width */}
@@ -89,12 +115,6 @@ export default function PubRow({ pub, setPubs }) {
           {pub.doi&&<a href={pub.doi.startsWith('http')?pub.doi:`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:T.v,textDecoration:'none',background:T.v2,padding:'2px 8px',borderRadius:10}}>DOI ↗</a>}
           {pub.pmid&&<a href={`https://pubmed.ncbi.nlm.nih.gov/${pub.pmid}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:T.bl,textDecoration:'none',background:T.bl2,padding:'2px 8px',borderRadius:10}}>PubMed ↗</a>}
         </div>
-      </div>
-
-      {/* Edit + delete — below content */}
-      <div style={{display:'flex',gap:4,justifyContent:'flex-end',marginTop:8}}>
-        <button onClick={()=>setEditing(true)} title="Edit" style={{width:26,height:26,borderRadius:'50%',border:`1px solid ${T.bdr}`,background:T.w,cursor:'pointer',fontSize:12,color:T.mu}}>✏️</button>
-        <button onClick={deletePub} title="Remove" style={{width:26,height:26,borderRadius:'50%',border:`1px solid ${T.bdr}`,background:T.w,cursor:'pointer',fontSize:12,color:T.ro}}>✕</button>
       </div>
     </div>
   );
