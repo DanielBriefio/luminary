@@ -441,27 +441,31 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       </div>
     );
     return (
-      <div style={{display:"flex",gap:13,padding:"13px 0",borderBottom:"1px solid "+T.bdr,alignItems:"flex-start"}}>
-        <div style={{width:40,height:40,borderRadius:9,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,border:"1px solid "+T.bdr,background:T.s2}}>{logo}</div>
-        <div style={{flex:1}}>{renderView(item)}</div>
-        <div ref={menuRef} style={{position:"relative",flexShrink:0}}>
-          <button onClick={()=>setShowMenu(v=>!v)}
-            style={{width:28,height:28,borderRadius:"50%",border:"1px solid "+T.bdr,background:T.w,cursor:"pointer",color:T.mu,fontSize:15,fontWeight:700,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",letterSpacing:1}}>
-            ···
-          </button>
-          {showMenu&&(
-            <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:T.w,border:"1px solid "+T.bdr,borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,.1)",zIndex:50,minWidth:120,overflow:"hidden"}}>
-              <button onClick={()=>{setShowMenu(false);setEditing(true);}}
-                style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",borderBottom:"1px solid "+T.bdr,background:"transparent",cursor:"pointer",color:T.text}}>
-                Edit
-              </button>
-              <button onClick={()=>{setShowMenu(false);deleteRow();}}
-                style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",background:"transparent",cursor:"pointer",color:T.ro}}>
-                Delete
-              </button>
-            </div>
-          )}
+      <div style={{padding:"13px 0",borderBottom:"1px solid "+T.bdr}}>
+        {/* Logo + three-dots header row */}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+          <div style={{width:36,height:36,borderRadius:9,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,border:"1px solid "+T.bdr,background:T.s2}}>{logo}</div>
+          <div ref={menuRef} style={{marginLeft:"auto",position:"relative"}}>
+            <button onClick={()=>setShowMenu(v=>!v)}
+              style={{width:28,height:28,borderRadius:"50%",border:"1px solid "+T.bdr,background:T.w,cursor:"pointer",color:T.mu,fontSize:15,fontWeight:700,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",letterSpacing:1}}>
+              ···
+            </button>
+            {showMenu&&(
+              <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:T.w,border:"1px solid "+T.bdr,borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,.1)",zIndex:50,minWidth:120,overflow:"hidden"}}>
+                <button onClick={()=>{setShowMenu(false);setEditing(true);}}
+                  style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",borderBottom:"1px solid "+T.bdr,background:"transparent",cursor:"pointer",color:T.text}}>
+                  Edit
+                </button>
+                <button onClick={()=>{setShowMenu(false);deleteRow();}}
+                  style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",background:"transparent",cursor:"pointer",color:T.ro}}>
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+        {/* Content — full width */}
+        <div>{renderView(item)}</div>
       </div>
     );
   }
