@@ -6,18 +6,32 @@ import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 
 const NOTIF_CONFIG = {
-  new_post:           { icon: '📝', label: (n) => `posted something new` },
-  new_comment:        { icon: '💬', label: (n) => `commented on your post` },
+  new_post:           { icon: '📝', label: () => `posted something new` },
+  new_comment:        { icon: '💬', label: () => `commented on your post` },
   paper_comment:      { icon: '📄', label: (n) => `commented on a paper you follow${n.meta?.paper_title ? ` — ${n.meta.paper_title}` : ''}` },
-  new_follower:       { icon: '👤', label: (n) => `started following you` },
-  group_announcement: { icon: '📢', label: (n) => `posted a group announcement` },
-  group_member_added: { icon: '🤝', label: (n) => `was added to a group` },
+  new_follower:       { icon: '👤', label: () => `started following you` },
+  group_announcement: { icon: '📢', label: () => `posted a group announcement` },
+  group_member_added: { icon: '🤝', label: () => `was added to a group` },
 };
 
+// Types that have a linked post we can show a snippet for
+const POST_NOTIF_TYPES = new Set(['new_post', 'new_comment', 'paper_comment']);
+
+function postSnippet(post) {
+  if (!post) return '';
+  // Prefer paper title for paper posts, then strip HTML from content
+  const raw = post.paper_title
+    ? `${post.paper_title}${post.content ? ' — ' + post.content.replace(/<[^>]+>/g, '') : ''}`
+    : post.content?.replace(/<[^>]+>/g, '') || '';
+  const trimmed = raw.replace(/\s+/g, ' ').trim();
+  return trimmed.length > 160 ? trimmed.slice(0, 160).replace(/\s\S*$/, '') + '…' : trimmed;
+}
+
 export default function NotifsScreen({ user }) {
-  const [notifs,  setNotifs]  = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [notifs,   setNotifs]   = useState([]);
+  const [loading,  setLoading]  = useState(true);
   const [actorMap, setActorMap] = useState({});
+  const [postMap,  setPostMap]  = useState({});
 
   const fetchNotifs = useCallback(async () => {
     if (!user) return;
@@ -42,6 +56,21 @@ export default function NotifsScreen({ user }) {
       const map = {};
       (profiles || []).forEach(p => { map[p.id] = p; });
       setActorMap(map);
+    }
+
+    // Fetch linked posts for post-related notifications
+    const postIds = [...new Set(
+      ns.filter(n => POST_NOTIF_TYPES.has(n.notif_type) && n.meta?.post_id)
+        .map(n => n.meta.post_id)
+    )];
+    if (postIds.length) {
+      const { data: posts } = await supabase
+        .from('posts')
+        .select('id, content, post_type, paper_title')
+        .in('id', postIds);
+      const map = {};
+      (posts || []).forEach(p => { map[p.id] = p; });
+      setPostMap(map);
     }
 
     setLoading(false);
@@ -86,19 +115,30 @@ export default function NotifsScreen({ user }) {
         ) : (
           <div>
             {notifs.map(n => {
-              const actor   = actorMap[n.actor_id];
-              const cfg     = NOTIF_CONFIG[n.notif_type] || { icon: '🔔', label: () => n.notif_type };
+              const actor    = actorMap[n.actor_id];
+              const cfg      = NOTIF_CONFIG[n.notif_type] || { icon: '🔔', label: () => n.notif_type };
               const isUnread = !n.read;
+              const postId   = POST_NOTIF_TYPES.has(n.notif_type) ? n.meta?.post_id : null;
+              const post     = postId ? postMap[postId] : null;
+              const snippet  = postSnippet(post);
               const goToActor = () => { if (actor?.profile_slug) window.location.href = `/p/${actor.profile_slug}`; };
+              const goToPost  = () => { if (postId) window.location.href = `/s/${postId}`; };
               return (
-                <div key={n.id} style={{
-                  display:"flex",alignItems:"flex-start",gap:12,
-                  padding:"14px 18px",
-                  borderBottom:`1px solid ${T.bdr}`,
-                  background: isUnread ? T.v2 : T.w,
-                  transition:"background .2s",
-                }}>
-                  <div onClick={goToActor} style={{position:"relative",flexShrink:0,cursor:actor?.profile_slug?"pointer":"default"}}>
+                <div key={n.id}
+                  onClick={postId ? goToPost : undefined}
+                  style={{
+                    display:"flex",alignItems:"flex-start",gap:12,
+                    padding:"14px 18px",
+                    borderBottom:`1px solid ${T.bdr}`,
+                    background: isUnread ? T.v2 : T.w,
+                    cursor: postId ? "pointer" : "default",
+                    transition:"background .15s",
+                  }}
+                  onMouseEnter={e=>{ if(postId) e.currentTarget.style.background = isUnread ? '#e4e2ff' : T.s2; }}
+                  onMouseLeave={e=>{ e.currentTarget.style.background = isUnread ? T.v2 : T.w; }}
+                >
+                  <div onClick={e=>{ e.stopPropagation(); goToActor(); }}
+                    style={{position:"relative",flexShrink:0,cursor:actor?.profile_slug?"pointer":"default"}}>
                     <Av
                       color={actor?.avatar_color || "me"}
                       size={38}
@@ -115,13 +155,26 @@ export default function NotifsScreen({ user }) {
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,lineHeight:1.5,color:T.text}}>
-                      <strong onClick={goToActor} style={{cursor:actor?.profile_slug?"pointer":"default",color:actor?.profile_slug?T.v:T.text}}>{actor?.name || "Someone"}</strong>{" "}
+                      <strong onClick={e=>{ e.stopPropagation(); goToActor(); }}
+                        style={{cursor:actor?.profile_slug?"pointer":"default",color:actor?.profile_slug?T.v:T.text}}>
+                        {actor?.name || "Someone"}
+                      </strong>{" "}
                       {cfg.label(n)}
                     </div>
-                    {actor?.institution && (
-                      <div style={{fontSize:11,color:T.mu,marginTop:2}}>{actor.institution}</div>
+                    {snippet && (
+                      <div style={{
+                        fontSize:12,color:T.mu,marginTop:5,lineHeight:1.55,
+                        background: isUnread ? 'rgba(108,99,255,.07)' : T.s2,
+                        borderRadius:8,padding:'6px 10px',
+                        display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden',
+                      }}>
+                        {snippet}
+                      </div>
                     )}
-                    <div style={{fontSize:10.5,color:T.mu,marginTop:4}}>{timeAgo(n.created_at)}</div>
+                    <div style={{fontSize:10.5,color:T.mu,marginTop:5,display:'flex',alignItems:'center',gap:8}}>
+                      {timeAgo(n.created_at)}
+                      {postId && <span style={{color:T.v,fontWeight:600}}>View post →</span>}
+                    </div>
                   </div>
                   {isUnread && (
                     <div style={{width:8,height:8,borderRadius:"50%",background:T.v,flexShrink:0,marginTop:5}}/>
