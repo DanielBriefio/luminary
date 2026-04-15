@@ -51,6 +51,16 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
     });
   };
 
+  const linkifyPlain = (text) => {
+    const urlRe = /(https?:\/\/[^\s<>"']+)/g;
+    if (!urlRe.test(text)) return null; // no URLs — use plain insertText
+    return text
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/(https?:\/\/[^\s<>"']+)/g,
+        url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`)
+      .replace(/\n/g,'<br>');
+  };
+
   const handlePaste = e => {
     e.preventDefault();
     const html  = e.clipboardData.getData('text/html');
@@ -60,8 +70,33 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
       tmp.innerHTML = sanitiseHtml(html);
       document.execCommand('insertHTML', false, tmp.innerHTML);
     } else {
-      document.execCommand('insertText', false, plain);
+      const linked = linkifyPlain(plain);
+      if (linked) document.execCommand('insertHTML', false, linked);
+      else         document.execCommand('insertText', false, plain);
     }
+    syncContent();
+  };
+
+  const handleKeyDown = e => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.startContainer.nodeType !== Node.TEXT_NODE) return;
+    const textBefore = range.startContainer.textContent.slice(0, range.startOffset);
+    const match = textBefore.match(/(https?:\/\/\S+)$/);
+    if (!match) return;
+    const url = match[1];
+    e.preventDefault();
+    const urlRange = range.cloneRange();
+    urlRange.setStart(range.startContainer, range.startOffset - url.length);
+    urlRange.setEnd(range.startContainer, range.startOffset);
+    sel.removeAllRanges();
+    sel.addRange(urlRange);
+    const suffix = e.key === 'Enter' ? '' : ' ';
+    document.execCommand('insertHTML', false,
+      `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${suffix}`);
+    if (e.key === 'Enter') document.execCommand('insertParagraph', false);
     syncContent();
   };
 
@@ -114,6 +149,7 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
         onKeyUp={updateActiveFormats}
         onMouseUp={updateActiveFormats}
         onPaste={handlePaste}
+        onKeyDown={handleKeyDown}
         data-placeholder={placeholder}
         style={{
           minHeight, padding:"12px 15px",

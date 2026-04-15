@@ -521,12 +521,9 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
 
             {/* Attach buttons */}
             {!uploadFile && (
-              <div style={{display:"flex",gap:8,marginBottom: attachType === 'link' ? 10 : 0}}>
+              <div style={{display:"flex",gap:8}}>
                 <button style={attachBtnStyle(attachType==='file')} onClick={()=>switchAttachType('file')}>
                   <span>📎</span> File
-                </button>
-                <button style={attachBtnStyle(attachType==='link')} onClick={()=>switchAttachType('link')}>
-                  <span>🔗</span> Link
                 </button>
               </div>
             )}
@@ -601,17 +598,6 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
               </div>
             )}
 
-            {/* Link input */}
-            {attachType === 'link' && !uploadFile && (
-              <div style={{background:T.am2,borderRadius:12,padding:"12px 14px",border:`1px solid rgba(245,158,11,.2)`}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                  <span style={{fontSize:12,fontWeight:700,color:"#b45309"}}>🔗 Link</span>
-                  <button onClick={clearAttachment} style={{fontSize:11,color:T.mu,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>✕ Remove</button>
-                </div>
-                <Inp label="Title" value={linkTitle} onChange={setLinkTitle} placeholder="Article or resource title"/>
-                <Inp label="URL" value={linkUrl} onChange={setLinkUrl} placeholder="https://"/>
-              </div>
-            )}
           </div>
         )}
 
