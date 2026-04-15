@@ -90,9 +90,9 @@ export default function PublicProfilePage({ slug }) {
   const showPubs = vis.publications !== false;
 
   const tabs = [
-    ['card', '🪪 Card'],
     ['about', 'About'],
     ...(showPubs && pubs.length > 0 ? [['publications', `Publications (${pubs.length})`]] : []),
+    ['card', 'Contact Details'],
   ];
 
   const hasAbout = wh.length || edu.length || vol.length || org.length || lng.length || skl.length || hon.length || pat.length || grt.length;

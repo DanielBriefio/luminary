@@ -523,20 +523,27 @@ export default function ProfileScreen({ user, profile, setProfile }) {
     setNetworkLoading(true);
     setNetworkList([]);
     try {
+      let ids = [];
       if (tab === 'followers') {
         const { data } = await supabase
-          .from('follows')
-          .select('follower_id, profiles!follows_follower_id_fkey(id,name,title,institution,avatar_color,avatar_url)')
+          .from('follows').select('follower_id')
           .eq('target_type','user').eq('target_id', user.id)
           .order('created_at',{ascending:false}).limit(50);
-        setNetworkList((data||[]).map(r=>r.profiles).filter(Boolean));
+        ids = (data||[]).map(r=>r.follower_id).filter(Boolean);
       } else {
         const { data } = await supabase
-          .from('follows')
-          .select('target_id, profiles!follows_target_id_fkey(id,name,title,institution,avatar_color,avatar_url)')
+          .from('follows').select('target_id')
           .eq('follower_id', user.id).eq('target_type','user')
           .order('created_at',{ascending:false}).limit(50);
-        setNetworkList((data||[]).map(r=>r.profiles).filter(Boolean));
+        ids = (data||[]).map(r=>r.target_id).filter(Boolean);
+      }
+      if (ids.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles').select('id,name,title,institution,avatar_color,avatar_url')
+          .in('id', ids);
+        setNetworkList(profiles||[]);
+      } else {
+        setNetworkList([]);
       }
     } catch(e) { setNetworkList([]); }
     setNetworkLoading(false);
@@ -808,7 +815,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                   [pubStats.hIndex>0?`h${pubStats.hIndex}`:'—','h-index',null],
                 ].map(([v,l,networkKey])=>{
                   const isActive = networkOpen && networkTab===networkKey;
-                  const clickable = !isMobile && networkKey;
+                  const clickable = !!networkKey;
                   return (
                     <div key={l}
                       onClick={clickable ? ()=>openNetwork(networkKey) : undefined}
@@ -819,8 +826,35 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                   );
                 })}
               </div>
-              {/* My Network inline panel — desktop only */}
-              {!isMobile && networkOpen && (
+              {/* My Network panel — inline on desktop, modal on mobile */}
+              {networkOpen && isMobile && (
+                <div onClick={()=>setNetworkOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:500,display:'flex',alignItems:'flex-end'}}>
+                  <div onClick={e=>e.stopPropagation()} style={{width:'100%',background:T.w,borderRadius:'18px 18px 0 0',padding:'20px 18px 32px',maxHeight:'70vh',overflowY:'auto'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+                      <span style={{fontSize:14,fontWeight:700,color:T.v}}>{networkTab==='followers'?'Followers':'Following'}</span>
+                      <button onClick={()=>setNetworkOpen(false)} style={{border:'none',background:'transparent',cursor:'pointer',color:T.mu,fontSize:16,lineHeight:1,padding:'4px 6px'}}>✕</button>
+                    </div>
+                    {networkLoading ? (
+                      <div style={{textAlign:'center',padding:'20px 0',color:T.mu,fontSize:13}}>Loading…</div>
+                    ) : networkList.length === 0 ? (
+                      <div style={{textAlign:'center',padding:'20px 0',color:T.mu,fontSize:13}}>No {networkTab} yet.</div>
+                    ) : (
+                      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                        {networkList.map(p=>(
+                          <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.bdr}`}}>
+                            <Av color={p.avatar_color||'me'} size={36} name={p.name} url={p.avatar_url||''}/>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name||'Unknown'}</div>
+                              {(p.title||p.institution)&&<div style={{fontSize:11.5,color:T.mu,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.title||p.institution}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {networkOpen && !isMobile && (
                 <div style={{background:T.s2,borderRadius:12,padding:'14px 16px',marginBottom:10,border:`1px solid ${T.bdr}`}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
                     <span style={{fontSize:11.5,fontWeight:700,color:T.v,textTransform:'uppercase',letterSpacing:'.06em'}}>
