@@ -56,6 +56,18 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const [tab,setTab]             = useState('about');
   const [showLinkedIn,setShowLinkedIn] = useState(false);
   const [showOrcid,setShowOrcid]       = useState(false);
+
+  // Auto-open an importer if onboarding set a pending flag
+  useEffect(() => {
+    const flag = sessionStorage.getItem('onboarding_import');
+    if (!flag) return;
+    sessionStorage.removeItem('onboarding_import');
+    if (flag === 'linkedin') setShowLinkedIn(true);
+    if (flag === 'orcid')    setShowOrcid(true);
+    // 'cv' and 'publications' are handled by the import menu — switch to publications tab
+    if (flag === 'publications') setTab('publications');
+    if (flag === 'cv') setShowImportMenu(true); // slight delay via setState
+  }, []); // eslint-disable-line
   const [cvImportingProfile,setCvImportingProfile] = useState(false);
   const [profileCvConflicts,setProfileCvConflicts] = useState([]);
   const [showProfileCvConflicts,setShowProfileCvConflicts] = useState(false);

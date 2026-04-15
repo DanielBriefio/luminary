@@ -7,30 +7,11 @@ import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
-async function fetchCrossRefDoi(doi) {
-  const clean = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
-  if (!clean) return null;
-  try {
-    const r = await fetch(`https://api.crossref.org/works/${encodeURIComponent(clean)}`);
-    if (!r.ok) return null;
-    const { message: w } = await r.json();
-    return {
-      title:   w.title?.[0] || '',
-      journal: w['container-title']?.[0] || '',
-      year:    w.published?.['date-parts']?.[0]?.[0]?.toString() || '',
-      authors: (w.author||[]).slice(0,5).map(a=>`${a.given||''} ${a.family||''}`.trim()).join(', ')
-               + ((w.author||[]).length > 5 ? ' et al.' : ''),
-      doi:     clean,
-      pub_type:'journal',
-    };
-  } catch { return null; }
-}
-
 // ── Progress bar ──────────────────────────────────────────────────────────────
 function ProgressBar({ step }) {
-  // step 0 = welcome, 1-3 = wizard steps, 4 = complete
-  const total = 4;
-  const filled = step; // 0 = none filled, 4 = all filled
+  // 3 setup steps (1-3), step 4 is the showcase (no bar dot needed)
+  const total = 3;
+  const filled = Math.min(step, total);
   return (
     <div style={{ display: 'flex', gap: 5, marginBottom: 28 }}>
       {Array.from({ length: total }).map((_, i) => (
@@ -44,6 +25,56 @@ function ProgressBar({ step }) {
   );
 }
 
+// ── Import option card ────────────────────────────────────────────────────────
+function ImportCard({ icon, title, desc, onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 14,
+        padding: '15px 16px', border: `1.5px solid ${hover ? T.v : T.bdr}`,
+        borderRadius: 12, background: hover ? T.v2 : T.w, cursor: 'pointer',
+        textAlign: 'left', fontFamily: 'inherit', width: '100%',
+        transition: 'border-color .15s, background .15s',
+      }}
+    >
+      <span style={{ fontSize: 24, flexShrink: 0, marginTop: 1 }}>{icon}</span>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 3 }}>{title}</div>
+        <div style={{ fontSize: 12, color: T.mu, lineHeight: 1.5 }}>{desc}</div>
+      </div>
+      <span style={{ marginLeft: 'auto', color: T.mu, fontSize: 14, flexShrink: 0, alignSelf: 'center' }}>→</span>
+    </button>
+  );
+}
+
+// ── Feature showcase card ─────────────────────────────────────────────────────
+function FeatureCard({ icon, title, desc, badge }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+      padding: '14px 16px', border: `1.5px solid ${T.bdr}`,
+      borderRadius: 12, background: T.s2,
+    }}>
+      <span style={{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{title}</span>
+          {badge && (
+            <span style={{ fontSize: 10, fontWeight: 700, color: T.v, background: T.v2, padding: '1px 7px', borderRadius: 20 }}>
+              {badge}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 12, color: T.mu, lineHeight: 1.5 }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function OnboardingScreen({ user, profile, setProfile, onComplete, onGoToProfile }) {
   const [step, setStep] = useState(0);
@@ -53,24 +84,9 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
   const [savingTopics,   setSavingTopics]   = useState(false);
 
   // Step 2 state — follow researchers
-  const [suggested,    setSuggested]    = useState([]);
+  const [suggested,      setSuggested]      = useState([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
-  const [followCount,  setFollowCount]  = useState(0);
-
-  // Step 3 state — publication
-  const [pubMode,      setPubMode]      = useState(null); // 'search' | 'doi' | 'skip'
-  const [epQuery,      setEpQuery]      = useState('');
-  const [epResults,    setEpResults]    = useState([]);
-  const [epSearching,  setEpSearching]  = useState(false);
-  const [epError,      setEpError]      = useState('');
-  const [addedPmids,   setAddedPmids]   = useState(new Set());
-  const [addingPmid,   setAddingPmid]   = useState(null);
-  const [doiInput,     setDoiInput]     = useState('');
-  const [doiPaper,     setDoiPaper]     = useState(null);
-  const [doiFetching,  setDoiFetching]  = useState(false);
-  const [doiError,     setDoiError]     = useState('');
-  const [doiAdded,     setDoiAdded]     = useState(false);
-  const [doiAdding,    setDoiAdding]    = useState(false);
+  const [followCount,    setFollowCount]    = useState(0);
 
   // Load suggested researchers when arriving at step 2
   useEffect(() => {
@@ -83,7 +99,6 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
         .eq('target_type', 'user')
         .neq('target_id', user.id);
 
-      // Count follows per user client-side, sort desc, take top 6
       const counts = {};
       (data || []).forEach(f => { counts[f.target_id] = (counts[f.target_id] || 0) + 1; });
       const topIds = Object.entries(counts)
@@ -119,61 +134,12 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
     setStep(2);
   };
 
-  // ── Step 3: Europe PMC search ─────────────────────────────────────────────
-  const searchEpmc = async () => {
-    if (!epQuery.trim()) return;
-    setEpSearching(true); setEpError(''); setEpResults([]);
-    try {
-      const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search`
-        + `?query=${encodeURIComponent(epQuery)}&resultType=core&pageSize=5&format=json`;
-      const res  = await fetch(url);
-      const data = await res.json();
-      setEpResults(data.resultList?.result || []);
-      if (!data.resultList?.result?.length) setEpError('No results found. Try a different search.');
-    } catch { setEpError('Search failed. Check your connection.'); }
-    setEpSearching(false);
-  };
-
-  const addEpmcPub = async (pub) => {
-    const key = pub.pmid || pub.doi || pub.title;
-    setAddingPmid(key);
-    await supabase.from('publications').insert({
-      user_id:  user.id,
-      title:    pub.title,
-      journal:  pub.journalTitle || pub.journal || '',
-      year:     pub.pubYear?.toString() || '',
-      doi:      pub.doi || '',
-      authors:  pub.authorString || '',
-      pub_type: 'journal',
+  // ── Step 3: import option handlers ───────────────────────────────────────
+  const handleImportChoice = (flag) => {
+    sessionStorage.setItem('onboarding_import', flag);
+    handleComplete().then(() => {
+      if (flag !== 'skip') onGoToProfile?.();
     });
-    setAddedPmids(s => new Set([...s, key]));
-    setAddingPmid(null);
-  };
-
-  // ── Step 3: DOI lookup ────────────────────────────────────────────────────
-  const lookupDoi = async () => {
-    if (!doiInput.trim()) return;
-    setDoiFetching(true); setDoiError(''); setDoiPaper(null); setDoiAdded(false);
-    const result = await fetchCrossRefDoi(doiInput.trim());
-    if (!result || !result.title) setDoiError('Could not find a paper for that DOI.');
-    else setDoiPaper(result);
-    setDoiFetching(false);
-  };
-
-  const addDoiPub = async () => {
-    if (!doiPaper) return;
-    setDoiAdding(true);
-    await supabase.from('publications').insert({
-      user_id:  user.id,
-      title:    doiPaper.title,
-      journal:  doiPaper.journal || '',
-      year:     doiPaper.year || '',
-      doi:      doiPaper.doi || '',
-      authors:  doiPaper.authors || '',
-      pub_type: doiPaper.pub_type || 'journal',
-    });
-    setDoiAdded(true);
-    setDoiAdding(false);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -298,167 +264,104 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               </>
             )}
 
-            {/* ── Step 3: Add publication ── */}
+            {/* ── Step 3: Import publications ── */}
             {step === 3 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
-                  Add a publication to your profile
+                  Build your publication list
                 </div>
-                <div style={{ fontSize: 13, color: T.mu, marginBottom: 22 }}>
-                  Your publication list is one of the most viewed parts of your profile. Add one now to get started.
+                <div style={{ fontSize: 13, color: T.mu, marginBottom: 22, lineHeight: 1.6 }}>
+                  Your publications are one of the most-viewed parts of your profile. Import them now or add them later from <strong>My Profile</strong>.
                 </div>
 
-                {/* Mode selection */}
-                {!pubMode && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-                    {[
-                      { mode: 'search', icon: '📄', title: 'Search Europe PMC', desc: 'Find your papers by name — we\'ll auto-fill everything' },
-                      { mode: 'doi',    icon: '🔗', title: 'Enter a DOI',        desc: 'Paste a DOI and we\'ll fetch the details' },
-                      { mode: 'skip',   icon: '⏭️', title: 'Skip for now',       desc: 'You can add publications anytime from your profile' },
-                    ].map(({ mode, icon, title, desc }) => (
-                      <button
-                        key={mode}
-                        onClick={() => { if (mode === 'skip') setStep(4); else setPubMode(mode); }}
-                        style={{
-                          display: 'flex', alignItems: 'flex-start', gap: 14,
-                          padding: '15px 16px', border: `1.5px solid ${T.bdr}`,
-                          borderRadius: 12, background: T.w, cursor: 'pointer',
-                          textAlign: 'left', fontFamily: 'inherit',
-                          transition: 'border-color .15s, background .15s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = T.v; e.currentTarget.style.background = T.v2; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = T.bdr; e.currentTarget.style.background = T.w; }}
-                      >
-                        <span style={{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>{icon}</span>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 3 }}>{title}</div>
-                          <div style={{ fontSize: 12, color: T.mu, lineHeight: 1.5 }}>{desc}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                  <ImportCard
+                    icon="📄"
+                    title="Upload your CV"
+                    desc="Upload a PDF or DOCX — we'll extract publications, work history, and more automatically"
+                    onClick={() => handleImportChoice('cv')}
+                  />
+                  <ImportCard
+                    icon="💼"
+                    title="Import from LinkedIn"
+                    desc="Export your LinkedIn data and import your profile, experience, and publications at once"
+                    onClick={() => handleImportChoice('linkedin')}
+                  />
+                  <ImportCard
+                    icon="🔬"
+                    title="Import from ORCID"
+                    desc="Connect your ORCID iD to import your publications and work history directly"
+                    onClick={() => handleImportChoice('orcid')}
+                  />
+                  <ImportCard
+                    icon="✏️"
+                    title="Add publications manually"
+                    desc="Search by name, enter a DOI, or fill in the details yourself"
+                    onClick={() => handleImportChoice('publications')}
+                  />
+                </div>
 
-                {/* Europe PMC search */}
-                {pubMode === 'search' && (
-                  <div style={{ marginBottom: 20 }}>
-                    <button onClick={() => { setPubMode(null); setEpResults([]); setEpQuery(''); setEpError(''); }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: T.mu, fontFamily: 'inherit', padding: 0, marginBottom: 14 }}>
-                      ← Choose differently
-                    </button>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                      <input
-                        value={epQuery}
-                        onChange={e => setEpQuery(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && searchEpmc()}
-                        placeholder="Search by title, author, or keyword…"
-                        style={{ flex: 1, background: T.s2, border: `1.5px solid ${T.bdr}`, borderRadius: 9, padding: '9px 13px', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: T.text }}
-                      />
-                      <button
-                        onClick={searchEpmc}
-                        disabled={epSearching || !epQuery.trim()}
-                        style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: T.v, color: '#fff', cursor: epQuery.trim() ? 'pointer' : 'default', fontSize: 13, fontFamily: 'inherit', fontWeight: 700, opacity: epQuery.trim() ? 1 : .5 }}>
-                        {epSearching ? '…' : 'Search'}
-                      </button>
-                    </div>
-                    {epError && <div style={{ fontSize: 12, color: T.ro, marginBottom: 10 }}>{epError}</div>}
-                    {epResults.map(pub => {
-                      const key = pub.pmid || pub.doi || pub.title;
-                      const added = addedPmids.has(key);
-                      const adding = addingPmid === key;
-                      return (
-                        <div key={key} style={{ border: `1px solid ${T.bdr}`, borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
-                          <div style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.4, marginBottom: 4, color: T.text }}>{pub.title}</div>
-                          <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 8 }}>
-                            {[pub.journalTitle, pub.pubYear].filter(Boolean).join(' · ')}
-                          </div>
-                          {added ? (
-                            <span style={{ fontSize: 11.5, color: T.gr, fontWeight: 700 }}>Added ✓</span>
-                          ) : (
-                            <button
-                              onClick={() => addEpmcPub(pub)}
-                              disabled={adding}
-                              style={{ padding: '5px 14px', borderRadius: 20, border: `1.5px solid ${T.v}`, background: T.v, color: '#fff', cursor: 'pointer', fontSize: 11.5, fontFamily: 'inherit', fontWeight: 700 }}>
-                              {adding ? '…' : 'Add this paper'}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {(epResults.length > 0 || addedPmids.size > 0) && (
-                      <Btn variant="s" onClick={() => setStep(4)} style={{ width: '100%', padding: '11px', fontSize: 13, marginTop: 8 }}>
-                        Done →
-                      </Btn>
-                    )}
-                  </div>
-                )}
-
-                {/* DOI input */}
-                {pubMode === 'doi' && (
-                  <div style={{ marginBottom: 20 }}>
-                    <button onClick={() => { setPubMode(null); setDoiInput(''); setDoiPaper(null); setDoiError(''); setDoiAdded(false); }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: T.mu, fontFamily: 'inherit', padding: 0, marginBottom: 14 }}>
-                      ← Choose differently
-                    </button>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                      <input
-                        value={doiInput}
-                        onChange={e => { setDoiInput(e.target.value); setDoiPaper(null); setDoiError(''); setDoiAdded(false); }}
-                        onKeyDown={e => e.key === 'Enter' && lookupDoi()}
-                        placeholder="e.g. 10.1038/nature12345"
-                        style={{ flex: 1, background: T.s2, border: `1.5px solid ${T.bdr}`, borderRadius: 9, padding: '9px 13px', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: T.text }}
-                      />
-                      <button
-                        onClick={lookupDoi}
-                        disabled={doiFetching || !doiInput.trim()}
-                        style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: T.v, color: '#fff', cursor: doiInput.trim() ? 'pointer' : 'default', fontSize: 13, fontFamily: 'inherit', fontWeight: 700, opacity: doiInput.trim() ? 1 : .5 }}>
-                        {doiFetching ? '…' : 'Look up'}
-                      </button>
-                    </div>
-                    {doiError && <div style={{ fontSize: 12, color: T.ro, marginBottom: 10 }}>{doiError}</div>}
-                    {doiPaper && (
-                      <div style={{ border: `1px solid ${T.bdr}`, borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4, marginBottom: 5, color: T.text }}>{doiPaper.title}</div>
-                        {doiPaper.authors && <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 4 }}>{doiPaper.authors}</div>}
-                        <div style={{ fontSize: 11.5, color: T.mu }}>
-                          {[doiPaper.journal, doiPaper.year].filter(Boolean).join(' · ')}
-                        </div>
-                      </div>
-                    )}
-                    {doiPaper && !doiAdded && (
-                      <button
-                        onClick={addDoiPub}
-                        disabled={doiAdding}
-                        style={{ padding: '8px 20px', borderRadius: 20, border: 'none', background: T.v, color: '#fff', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: 700, marginBottom: 12 }}>
-                        {doiAdding ? '…' : 'Add to my profile'}
-                      </button>
-                    )}
-                    {doiAdded && (
-                      <>
-                        <div style={{ fontSize: 13, color: T.gr, fontWeight: 700, marginBottom: 14 }}>Added to your profile ✓</div>
-                        <Btn variant="s" onClick={() => setStep(4)} style={{ width: '100%', padding: '11px', fontSize: 13 }}>
-                          Done →
-                        </Btn>
-                      </>
-                    )}
-                  </div>
-                )}
+                <button
+                  onClick={() => setStep(4)}
+                  style={{ display: 'block', margin: '0 auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit' }}>
+                  Skip for now — I'll do this from My Profile later
+                </button>
               </>
             )}
           </>
         )}
 
-        {/* ── Step 4: Complete ── */}
+        {/* ── Step 4: Feature showcase ── */}
         {step === 4 && (
-          <div style={{ textAlign: 'center' }}>
-            <ProgressBar step={4} />
-            <div style={{ fontSize: 48, marginBottom: 20 }}>🎉</div>
-            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, marginBottom: 12 }}>
-              You're all set!
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ fontSize: 40, marginBottom: 14 }}>🎉</div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, marginBottom: 8 }}>
+                You're all set!
+              </div>
+              <div style={{ fontSize: 13, color: T.mu, lineHeight: 1.6, maxWidth: 400, margin: '0 auto' }}>
+                Here's a quick look at what Luminary can do for you — all built around your research identity.
+              </div>
             </div>
-            <div style={{ fontSize: 14, color: T.mu, lineHeight: 1.7, marginBottom: 32, maxWidth: 360, margin: '0 auto 32px' }}>
-              Your feed is ready. Start exploring research, share a paper, or complete your profile.
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+              <FeatureCard
+                icon="🌐"
+                title="Public profile page"
+                desc="Share a beautiful public profile page at luminary.app/p/your-name — perfect for conference posters and email signatures"
+                badge="My Profile → Share"
+              />
+              <FeatureCard
+                icon="📱"
+                title="Virtual business card"
+                desc="Install Luminary on your phone's home screen and share your contact details with a tap — no paper needed"
+                badge="Mobile PWA"
+              />
+              <FeatureCard
+                icon="🔗"
+                title="QR code for your profile"
+                desc="Generate a QR code that links directly to your public profile — add it to slides, posters, or print it on your badge"
+                badge="My Profile → Share"
+              />
+              <FeatureCard
+                icon="📚"
+                title="Publication list"
+                desc="Import from ORCID, LinkedIn, or CV upload. Share a clean list of your work, sorted and formatted automatically"
+                badge="My Profile → Publications"
+              />
+              <FeatureCard
+                icon="📤"
+                title="CV & publication export"
+                desc="Export your profile as a formatted CV — useful for grant applications, job searches, and department reports"
+                badge="My Profile → Export"
+              />
+              <FeatureCard
+                icon="📡"
+                title="Research feed & discovery"
+                desc="Follow researchers and papers by DOI. Your feed surfaces the work you care about — no algorithm noise"
+              />
             </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Btn variant="s" onClick={handleComplete} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
                 Go to my feed →

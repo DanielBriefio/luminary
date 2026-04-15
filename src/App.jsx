@@ -23,6 +23,7 @@ import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import OrcidImporter from './profile/OrcidImporter';
 
 // Detect public profile route: /p/:slug
 const getPublicSlug = () => {
@@ -71,6 +72,7 @@ export default function App() {
   const [invitesRemaining,setInvitesRemaining]=useState(0);
   const [copiedCode,setCopiedCode]=useState(null);
   const [showSettings,setShowSettings]=useState(false);
+  const [showOrcidImport,setShowOrcidImport]=useState(false);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -169,6 +171,17 @@ export default function App() {
       });
   },[session]);
 
+  // Offer ORCID import on first login if user has a verified ORCID but hasn't imported yet
+  useEffect(()=>{
+    if(!profile) return;
+    if(!profile.orcid || !profile.orcid_verified) return;
+    if(profile.orcid_imported_at) return;
+    if(!profile.onboarding_completed) return; // wait until onboarding finishes
+    const dismissed = localStorage.getItem(`orcid_import_dismissed_${profile.id}`);
+    if(dismissed) return;
+    setShowOrcidImport(true);
+  },[profile]);
+
   // Handle PWA shortcut deep links (?shortcut=post / ?shortcut=explore)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -218,6 +231,18 @@ export default function App() {
           onClose={()=>setShowSettings(false)}
           onDeleted={()=>{ setShowSettings(false); setScreen('feed'); }}
           onSignOut={()=>{ setShowSettings(false); signOut(); }}
+        />
+      )}
+      {/* ORCID import offer modal */}
+      {showOrcidImport && profile && (
+        <OrcidImporter
+          user={user}
+          profile={profile}
+          setProfile={setProfile}
+          onClose={() => {
+            localStorage.setItem(`orcid_import_dismissed_${user.id}`, '1');
+            setShowOrcidImport(false);
+          }}
         />
       )}
       {/* Invite codes modal */}

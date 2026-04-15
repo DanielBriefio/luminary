@@ -9,7 +9,11 @@
       "Bash(npx --no react-scripts build)",
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(node:*)",
+      "Bash(git commit:*)",
+      "Bash(npx --yes react-scripts build --no-cache)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }
