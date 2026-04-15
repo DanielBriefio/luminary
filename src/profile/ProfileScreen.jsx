@@ -269,11 +269,32 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const save=async()=>{
     setSaving(true);
     const composedName = [form.first_name, form.middle_name, form.last_name].filter(Boolean).join(' ');
-    const updates = { ...form, name: composedName || undefined };
-    const{data,error}=await supabase.from('profiles').update(updates).eq('id',user.id).select().single();
-    if(error){ alert('Save failed: ' + error.message); setSaving(false); return; }
-    if(data)setProfile(data);
-    setEditing(false);setSaving(false);
+    // Core fields — always exist in DB
+    const coreUpdates = {
+      name_prefix:form.name_prefix, first_name:form.first_name, middle_name:form.middle_name,
+      last_name:form.last_name, name_suffix:form.name_suffix, name:composedName||undefined,
+      title:form.title, institution:form.institution, location:form.location,
+      bio:form.bio, orcid:form.orcid, twitter:form.twitter, card_linkedin:form.card_linkedin,
+    };
+    // Card fields — only present after migration_businesscard.sql is run
+    const cardUpdates = {
+      card_email:form.card_email, card_phone:form.card_phone, card_address:form.card_address,
+      card_website:form.card_website,
+      card_show_email:form.card_show_email, card_show_phone:form.card_show_phone,
+      card_show_address:form.card_show_address, card_show_linkedin:form.card_show_linkedin,
+      card_show_website:form.card_show_website, card_show_orcid:form.card_show_orcid,
+      card_show_twitter:form.card_show_twitter,
+    };
+    // Try full save first; if card columns don't exist yet, fall back to core only
+    const { data, error } = await supabase.from('profiles').update({...coreUpdates,...cardUpdates}).eq('id',user.id).select().single();
+    if(error){
+      const { data:d2, error:e2 } = await supabase.from('profiles').update(coreUpdates).eq('id',user.id).select().single();
+      if(e2){ alert('Save failed: '+e2.message); setSaving(false); return; }
+      if(d2) setProfile(d2);
+    } else {
+      if(data) setProfile(data);
+    }
+    setEditing(false); setSaving(false);
   };
 
   const uploadAvatar = async (file) => {

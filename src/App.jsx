@@ -186,8 +186,10 @@ export default function App() {
               <div style={{fontFamily:"'DM Serif Display',serif",fontSize:21}}>Lumi<span style={{color:T.v}}>nary</span></div>
               {profile?.profile_slug && (
                 <button onClick={()=>setShowCardQR(true)} title="Share my card"
-                  style={{width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:7,fontSize:16}}>
-                  🪪
+                  style={{width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:7,color:T.mu}}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm9-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm9 0h2v2h-2zm0 4h2v2h-2zm4-4h2v2h-2zm0 4h2v2h-2zm-2 2h2v-2h-2zm-2-6h2v2h-2z"/>
+                  </svg>
                 </button>
               )}
             </div>
@@ -257,8 +259,10 @@ export default function App() {
                 {/* Card QR button — mobile */}
                 {profile?.profile_slug && (
                   <button onClick={()=>setShowCardQR(true)} title="Share my card"
-                    style={{width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:9,fontSize:18}}>
-                    🪪
+                    style={{width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:9,color:T.mu}}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm9-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm9 0h2v2h-2zm0 4h2v2h-2zm4-4h2v2h-2zm0 4h2v2h-2zm-2 2h2v-2h-2zm-2-6h2v2h-2z"/>
+                    </svg>
                   </button>
                 )}
                 <button onClick={signOut} title="Sign out"

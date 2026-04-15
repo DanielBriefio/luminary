@@ -7,13 +7,12 @@ import Spinner from '../components/Spinner';
 import { formatDateRange } from '../lib/linkedInUtils';
 
 export default function PublicProfilePage({ slug }) {
-  const isMobileInit = window.innerWidth < 768;
   const [profile,  setProfile]  = useState(null);
   const [pubs,     setPubs]     = useState([]);
   const [pubStats, setPubStats] = useState({ hIndex: 0, totalCitations: 0, pubCount: 0 });
   const [loading,  setLoading]  = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [tab,      setTab]      = useState(isMobileInit ? 'card' : 'about');
+  const [tab,      setTab]      = useState('about');
   const [currentUserId, setCurrentUserId] = useState(null);
 
   useEffect(() => {
@@ -96,44 +95,6 @@ export default function PublicProfilePage({ slug }) {
   ];
 
   const hasAbout = wh.length || edu.length || vol.length || org.length || lng.length || skl.length || hon.length || pat.length || grt.length;
-
-  // Mobile card view — skip the full profile header, show the card directly
-  if (isMobileInit && tab === 'card') {
-    return (
-      <div style={{ minHeight: '100vh', background: T.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.text }}>
-        {/* Minimal top bar */}
-        <div style={{ background: T.w, borderBottom: `1px solid ${T.bdr}`, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 12, height: 52, position: 'sticky', top: 0, zIndex: 10 }}>
-          <button
-            onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.href = '/'; }}
-            title="Back"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', border: `1px solid ${T.bdr}`, background: T.s2, cursor: 'pointer', color: T.mu, flexShrink: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-          </button>
-          <div style={{ flex: 1 }}/>
-          <a href="/" style={{ fontSize: 12.5, color: T.v, fontWeight: 600, textDecoration: 'none', background: T.v2, border: `1px solid rgba(108,99,255,.2)`, borderRadius: 8, padding: '7px 16px', whiteSpace: 'nowrap' }}>
-            Join Luminary →
-          </a>
-        </div>
-
-        {/* Card — full screen feel */}
-        <BusinessCardView profile={profile} currentUserId={currentUserId}/>
-
-        {/* View full profile link */}
-        <div style={{ textAlign: 'center', padding: '0 20px 36px', display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => setTab('about')} style={{ background: 'none', border: `1px solid ${T.bdr}`, borderRadius: 20, padding: '8px 18px', fontSize: 12.5, color: T.mu, cursor: 'pointer', fontFamily: 'inherit' }}>
-            View full profile →
-          </button>
-          {showPubs && pubs.length > 0 && (
-            <button onClick={() => setTab('publications')} style={{ background: 'none', border: `1px solid ${T.bdr}`, borderRadius: 20, padding: '8px 18px', fontSize: 12.5, color: T.mu, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Publications ({pubs.length})
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.text }}>
