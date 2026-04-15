@@ -64,8 +64,8 @@ export default function ProfileScreen({ user, profile, setProfile }) {
     sessionStorage.removeItem('onboarding_import');
     if (flag === 'linkedin') setShowLinkedIn(true);
     if (flag === 'orcid')    setShowOrcid(true);
-    // 'cv' and 'publications' are handled by the import menu — switch to publications tab
-    if (flag === 'publications') setTab('publications');
+    // 'cv' and publication-related flags: switch to publications tab
+    if (flag === 'publications' || flag === 'pmc_search' || flag === 'doi_lookup') setTab('publications');
     if (flag === 'cv') setShowImportMenu(true); // slight delay via setState
   }, []); // eslint-disable-line
   const [cvImportingProfile,setCvImportingProfile] = useState(false);

@@ -136,10 +136,8 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
 
   // ── Step 3: import option handlers ───────────────────────────────────────
   const handleImportChoice = (flag) => {
-    sessionStorage.setItem('onboarding_import', flag);
-    handleComplete().then(() => {
-      if (flag !== 'skip') onGoToProfile?.();
-    });
+    if (flag !== 'skip') sessionStorage.setItem('onboarding_import', flag);
+    setStep(4);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -294,10 +292,16 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                     onClick={() => handleImportChoice('orcid')}
                   />
                   <ImportCard
-                    icon="✏️"
-                    title="Add publications manually"
-                    desc="Search by name, enter a DOI, or fill in the details yourself"
-                    onClick={() => handleImportChoice('publications')}
+                    icon="🔍"
+                    title="Search Europe PMC"
+                    desc="Find your papers by name or keyword in the PubMed / Europe PMC database"
+                    onClick={() => handleImportChoice('pmc_search')}
+                  />
+                  <ImportCard
+                    icon="🔗"
+                    title="Import by DOI"
+                    desc="Paste a DOI to import a specific paper directly — great for preprints and non-indexed work"
+                    onClick={() => handleImportChoice('doi_lookup')}
                   />
                 </div>
 
@@ -363,10 +367,10 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <Btn variant="s" onClick={handleComplete} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
+              <Btn variant="s" onClick={() => { sessionStorage.removeItem('onboarding_import'); handleComplete(); }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
                 Go to my feed →
               </Btn>
-              <Btn variant="v" onClick={() => { handleComplete(); onGoToProfile?.(); }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
+              <Btn variant="v" onClick={() => { handleComplete().then(() => onGoToProfile?.()); }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
                 Complete my profile
               </Btn>
             </div>
