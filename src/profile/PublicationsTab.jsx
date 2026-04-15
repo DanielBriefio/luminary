@@ -173,7 +173,7 @@ import Spinner from '../components/Spinner';
 import ConflictResolverModal from '../components/ConflictResolverModal';
 import SectionGroup from './SectionGroup';
 
-export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPendingConsumed }) {
+export default function PublicationsTab({ user, profile, setProfile, pendingCvPubs=[], onPendingConsumed, initialMode }) {
   const [pubs,      setPubs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [searching, setSearching] = useState(false);
@@ -190,6 +190,15 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
   const [newPub,    setNewPub]    = useState({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
   const [saving,    setSaving]    = useState(false);
   const [nameVariants, setNameVariants] = useState('');
+  // Add-publication panel state
+  const [addMode,          setAddMode]          = useState('search'); // 'search' | 'doi' | 'manual'
+  const [addSearchTerm,    setAddSearchTerm]    = useState('');
+  const [addSearchResults, setAddSearchResults] = useState([]);
+  const [addSearching,     setAddSearching]     = useState(false);
+  const [addSearchError,   setAddSearchError]   = useState('');
+  const [addDoi,           setAddDoi]           = useState('');
+  const [addDoiFetching,   setAddDoiFetching]   = useState(false);
+  const [addSelected,      setAddSelected]      = useState(false);
   const [showExport,   setShowExport]   = useState(false);
   const exportRef = useRef(null);
 
@@ -236,6 +245,13 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
     };
     insert();
   },[pendingCvPubs]);
+
+  // Auto-open the add panel if coming from onboarding
+  useEffect(() => {
+    if (!initialMode) return;
+    setShowAdd(true);
+    setAddMode(initialMode === 'doi_lookup' ? 'doi' : 'search');
+  }, []); // eslint-disable-line
 
   const searchEPMC = async () => {
     if(!nameVariants.trim()) return;
@@ -516,6 +532,69 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
 
   const rejectImportPub = (idx) => setImportRejected(s=>new Set([...s,idx]));
 
+  const searchEPMCKeyword = async () => {
+    if (!addSearchTerm.trim() || addSearching) return;
+    setAddSearching(true); setAddSearchError(''); setAddSearchResults([]);
+    try {
+      const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(addSearchTerm)}&resultType=core&pageSize=10&format=json`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error();
+      const data = await resp.json();
+      setAddSearchResults(data.resultList?.result || []);
+      if (!data.resultList?.result?.length) setAddSearchError('No results. Try different keywords or a DOI.');
+    } catch { setAddSearchError('Search failed. Check your connection.'); }
+    setAddSearching(false);
+  };
+
+  const lookupAddDoi = async (doi) => {
+    const clean = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
+    if (!clean || addDoiFetching) return;
+    setAddDoiFetching(true); setAddSearchError('');
+    try {
+      const r = await fetch(`https://api.crossref.org/works/${encodeURIComponent(clean)}`);
+      if (!r.ok) throw new Error();
+      const w = (await r.json()).message;
+      const authors = (w.author||[]).slice(0,5).map(a=>`${a.given||''} ${a.family||''}`.trim()).join(', ') + ((w.author||[]).length>5?' et al.':'');
+      setNewPub(p=>({
+        ...p,
+        title:   w.title?.[0] || p.title,
+        journal: w['container-title']?.[0] || p.journal,
+        year:    w.published?.['date-parts']?.[0]?.[0]?.toString() || p.year,
+        authors: authors || p.authors,
+        doi:     clean,
+      }));
+      setAddSelected(true);
+    } catch { setAddSearchError('DOI not found in CrossRef. Try a different DOI or fill in manually.'); }
+    setAddDoiFetching(false);
+  };
+
+  const selectAddResult = (r) => {
+    const pt = (r.pubType||'').toLowerCase();
+    let pub_type = 'journal';
+    if (pt.includes('preprint') || r.source === 'PPR') pub_type = 'preprint';
+    else if (pt.includes('review')) pub_type = 'review';
+    setNewPub({
+      title:   (r.title||'').replace(/<[^>]+>/g,''),
+      authors: r.authorString||'',
+      journal: r.journalTitle||'',
+      year:    r.pubYear||'',
+      doi:     r.doi||'',
+      pub_type,
+      venue:   '',
+    });
+    setAddSelected(true);
+    setAddSearchResults([]);
+    setAddSearchTerm('');
+  };
+
+  const closeAddPanel = () => {
+    setShowAdd(false);
+    setAddSelected(false);
+    setAddSearchTerm(''); setAddSearchResults([]); setAddSearchError('');
+    setAddDoi(''); setAddDoiFetching(false);
+    setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
+  };
+
   const addManual = async () => {
     if(!newPub.title.trim()) return;
     setSaving(true);
@@ -523,8 +602,8 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
       user_id:user.id, ...newPub, pmid:'', source:'manual'
     }).select().single();
     if(data) setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
-    setSaving(false); setShowAdd(false);
-    setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
+    setSaving(false);
+    closeAddPanel();
   };
 
   if(loading) return <Spinner/>;
@@ -650,7 +729,7 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
             📄 Import publication list
           </span>
         </label>
-        <Btn variant="v" onClick={()=>setShowAdd(!showAdd)} style={{fontSize:12}}>+ Add manually</Btn>
+        <Btn variant="v" onClick={()=>{ if(showAdd) closeAddPanel(); else setShowAdd(true); }} style={{fontSize:12}}>+ Add publication</Btn>
       </div>
 
       {showSearch&&(
@@ -757,36 +836,130 @@ export default function PublicationsTab({ user, profile, pendingCvPubs=[], onPen
 
       {showAdd&&(
         <div style={{background:T.s2,borderRadius:12,padding:16,marginBottom:20,border:`1px solid ${T.bdr}`}}>
-          <div style={{fontSize:12,fontWeight:700,marginBottom:12}}>Add publication manually</div>
-          <div style={{marginBottom:12}}>
-            <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:6}}>Type</label>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {PUB_TYPES.map(t=>(
-                <button key={t.id} onClick={()=>setNewPub(p=>({...p,pub_type:t.id}))}
-                  style={{padding:'4px 11px',borderRadius:20,border:`1.5px solid ${newPub.pub_type===t.id?T.v:T.bdr}`,background:newPub.pub_type===t.id?T.v2:T.w,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600,color:newPub.pub_type===t.id?T.v:T.mu}}>
-                  {t.icon} {t.label}
+          <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,flex:1}}>Add a publication</div>
+            <button onClick={closeAddPanel} style={{fontSize:12,color:T.mu,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit'}}>✕ Close</button>
+          </div>
+
+          {/* Mode tabs */}
+          {!addSelected && (
+            <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+              {[['search','🔍 Search PMC'],['doi','🔗 Enter DOI'],['manual','✏️ Fill manually']].map(([mode,label])=>(
+                <button key={mode} onClick={()=>{ setAddMode(mode); setAddSearchResults([]); setAddSearchError(''); }}
+                  style={{padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',
+                    border:`1.5px solid ${addMode===mode?T.v:T.bdr}`,background:addMode===mode?T.v2:T.w,color:addMode===mode?T.v:T.mu}}>
+                  {label}
                 </button>
               ))}
             </div>
-          </div>
-          {[
-            ['title','Title *','Full title of publication or presentation'],
-            ['authors','Authors','Smith J, Jones A et al.'],
-            ['year','Year','2024'],
-            ['journal',['journal','review','preprint'].includes(newPub.pub_type)?'Journal':'Venue / Conference',
-              ['conference','poster'].includes(newPub.pub_type)?'e.g. ASCO Annual Meeting':'e.g. Nature Medicine'],
-            ['doi','DOI / URL','10.1038/... or https://...'],
-          ].map(([f,l,ph])=>(
-            <div key={f} style={{marginBottom:10}}>
-              <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:4}}>{l}</label>
-              <input value={newPub[f]} onChange={e=>setNewPub(p=>({...p,[f]:e.target.value}))} placeholder={ph}
-                style={{width:'100%',background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
+          )}
+
+          {/* Search PMC by keyword */}
+          {addMode==='search' && !addSelected && (
+            <div style={{marginBottom:12}}>
+              <div style={{display:'flex',gap:8,marginBottom:8}}>
+                <input value={addSearchTerm} onChange={e=>setAddSearchTerm(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==='Enter') searchEPMCKeyword(); }}
+                  placeholder="Search by title, keyword, or author..."
+                  style={{flex:1,background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none',color:T.text}}/>
+                <Btn variant="s" onClick={searchEPMCKeyword} disabled={addSearching||!addSearchTerm.trim()} style={{whiteSpace:'nowrap'}}>
+                  {addSearching?'Searching…':'Search →'}
+                </Btn>
+              </div>
+              {addSearchError && <div style={{fontSize:12,color:T.ro,marginBottom:8}}>{addSearchError}</div>}
+              {addSearchResults.length>0&&(
+                <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:320,overflowY:'auto'}}>
+                  {addSearchResults.map((r,i)=>{
+                    const title   = (r.title||'').replace(/<[^>]+>/g,'');
+                    const authors = r.authorString||'';
+                    const journal = r.journalTitle||'';
+                    const year    = r.pubYear||'';
+                    const oa      = r.isOpenAccess==='Y';
+                    const cited   = r.citedByCount||0;
+                    return (
+                      <div key={r.pmid||r.doi||i} style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:10,padding:'12px 14px'}}>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text,lineHeight:1.4,marginBottom:4}}>{title}</div>
+                        <div style={{fontSize:11.5,color:T.mu,marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {authors.length>80?authors.slice(0,80)+'…':authors}
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                          <span style={{fontSize:11,color:T.mu}}>{[journal,year].filter(Boolean).join(' · ')}</span>
+                          {oa&&<span style={{fontSize:10,fontWeight:700,color:T.gr,background:T.gr2,borderRadius:20,padding:'1px 7px'}}>Open Access</span>}
+                          {cited>0&&<span style={{fontSize:10,fontWeight:700,color:T.bl,background:T.bl2,borderRadius:20,padding:'1px 7px'}}>{cited} citations</span>}
+                          <button onClick={()=>selectAddResult(r)}
+                            style={{marginLeft:'auto',padding:'4px 12px',borderRadius:20,border:`1.5px solid ${T.v}`,background:T.v,color:'#fff',fontSize:11.5,fontWeight:700,fontFamily:'inherit',cursor:'pointer',flexShrink:0}}>
+                            Select →
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          ))}
-          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-            <Btn onClick={()=>setShowAdd(false)}>Cancel</Btn>
-            <Btn variant="s" onClick={addManual} disabled={saving||!newPub.title.trim()}>{saving?'Saving...':'Add Publication'}</Btn>
-          </div>
+          )}
+
+          {/* Enter DOI */}
+          {addMode==='doi' && !addSelected && (
+            <div style={{marginBottom:12}}>
+              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:6}}>
+                <input value={addDoi} onChange={e=>{ setAddDoi(e.target.value); setAddSearchError(''); }}
+                  onKeyDown={e=>{ if(e.key==='Enter') lookupAddDoi(addDoi); }}
+                  onBlur={e=>{ if(e.target.value.trim()) lookupAddDoi(e.target.value); }}
+                  placeholder="10.1038/... or https://doi.org/..."
+                  style={{flex:1,background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none',color:T.text}}/>
+                <Btn variant="v" onClick={()=>lookupAddDoi(addDoi)} disabled={addDoiFetching||!addDoi.trim()} style={{whiteSpace:'nowrap',fontSize:11.5}}>
+                  {addDoiFetching?'Fetching…':'Look up →'}
+                </Btn>
+              </div>
+              {addSearchError && <div style={{fontSize:12,color:T.ro,marginBottom:4}}>{addSearchError}</div>}
+              <div style={{fontSize:11,color:T.mu}}>Fetches title, authors, and journal automatically via CrossRef.</div>
+            </div>
+          )}
+
+          {/* Pre-filled confirmation banner */}
+          {addSelected&&(
+            <div style={{display:'flex',alignItems:'center',gap:8,background:T.gr2,border:`1px solid rgba(16,185,129,.25)`,borderRadius:9,padding:'8px 12px',marginBottom:12}}>
+              <span style={{fontSize:12,color:T.gr,fontWeight:700}}>✓ Paper found — review and save</span>
+              <button onClick={()=>{ setAddSelected(false); setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''}); setAddDoi(''); }}
+                style={{marginLeft:'auto',fontSize:11,color:T.mu,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>← Search again</button>
+            </div>
+          )}
+
+          {/* Form fields — shown in manual mode or after a result is selected */}
+          {(addMode==='manual' || addSelected)&&(
+            <>
+              <div style={{marginBottom:12}}>
+                <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:6}}>Type</label>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {PUB_TYPES.map(t=>(
+                    <button key={t.id} onClick={()=>setNewPub(p=>({...p,pub_type:t.id}))}
+                      style={{padding:'4px 11px',borderRadius:20,border:`1.5px solid ${newPub.pub_type===t.id?T.v:T.bdr}`,background:newPub.pub_type===t.id?T.v2:T.w,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600,color:newPub.pub_type===t.id?T.v:T.mu}}>
+                      {t.icon} {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {[
+                ['title','Title *','Full title of publication or presentation'],
+                ['authors','Authors','Smith J, Jones A et al.'],
+                ['year','Year','2024'],
+                ['journal',['journal','review','preprint'].includes(newPub.pub_type)?'Journal':'Venue / Conference',
+                  ['conference','poster'].includes(newPub.pub_type)?'e.g. ASCO Annual Meeting':'e.g. Nature Medicine'],
+                ['doi','DOI / URL','10.1038/... or https://...'],
+              ].map(([f,l,ph])=>(
+                <div key={f} style={{marginBottom:10}}>
+                  <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:4}}>{l}</label>
+                  <input value={newPub[f]} onChange={e=>setNewPub(p=>({...p,[f]:e.target.value}))} placeholder={ph}
+                    style={{width:'100%',background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
+                </div>
+              ))}
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <Btn onClick={closeAddPanel}>Cancel</Btn>
+                <Btn variant="s" onClick={addManual} disabled={saving||!newPub.title.trim()}>{saving?'Saving…':'Add Publication'}</Btn>
+              </div>
+            </>
+          )}
         </div>
       )}
 

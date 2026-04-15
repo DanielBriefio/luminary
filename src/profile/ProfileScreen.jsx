@@ -56,6 +56,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
   const [tab,setTab]             = useState('about');
   const [showLinkedIn,setShowLinkedIn] = useState(false);
   const [showOrcid,setShowOrcid]       = useState(false);
+  const [pubsInitialMode, setPubsInitialMode] = useState(null);
 
   // Auto-open an importer if onboarding set a pending flag
   useEffect(() => {
@@ -64,8 +65,8 @@ export default function ProfileScreen({ user, profile, setProfile }) {
     sessionStorage.removeItem('onboarding_import');
     if (flag === 'linkedin') setShowLinkedIn(true);
     if (flag === 'orcid')    setShowOrcid(true);
-    // 'cv' and publication-related flags: switch to publications tab
-    if (flag === 'publications' || flag === 'pmc_search' || flag === 'doi_lookup') setTab('publications');
+    if (flag === 'publications') setTab('publications');
+    if (flag === 'pmc_search' || flag === 'doi_lookup') { setTab('publications'); setPubsInitialMode(flag); }
     if (flag === 'cv') setShowImportMenu(true); // slight delay via setState
   }, []); // eslint-disable-line
   const [cvImportingProfile,setCvImportingProfile] = useState(false);
@@ -1241,7 +1242,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
               :<div style={{display:'flex',flexDirection:'column',gap:12}}>{userPosts.map(p=><PostCard key={p.id} post={p} currentUserId={user?.id} currentProfile={profile}/>)}</div>
           )}
 
-          {tab==='publications'&&<PublicationsTab user={user} profile={profile} pendingCvPubs={pendingCvPubs} onPendingConsumed={()=>setPendingCvPubs([])}/>}
+          {tab==='publications'&&<PublicationsTab user={user} profile={profile} setProfile={setProfile} pendingCvPubs={pendingCvPubs} onPendingConsumed={()=>setPendingCvPubs([])} initialMode={pubsInitialMode}/>}
         </div>
       </div>
     </div>
