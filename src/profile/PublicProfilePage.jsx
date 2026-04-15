@@ -151,6 +151,20 @@ export default function PublicProfilePage({ slug }) {
             {profile.title && (
               <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{profile.title}</div>
             )}
+            {(profile.identity_tier1 || profile.identity_tier2) && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                {profile.identity_tier1 && (
+                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', border: '1px solid rgba(108,99,255,.2)' }}>
+                    {profile.identity_tier1}
+                  </span>
+                )}
+                {profile.identity_tier2 && (
+                  <span style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.25)` }}>
+                    {profile.identity_tier2}
+                  </span>
+                )}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: T.mu, marginBottom: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {profile.institution && <span>🏛️ {profile.institution}</span>}
               {profile.location    && <span>📍 {profile.location}</span>}

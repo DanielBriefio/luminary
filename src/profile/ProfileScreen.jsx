@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, getTier1ForTier2 } from '../lib/constants';
 import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
 import { formatDateRange } from '../lib/linkedInUtils';
 import Av from '../components/Av';
@@ -289,6 +289,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       last_name:form.last_name, name_suffix:form.name_suffix, name:composedName||undefined,
       title:form.title, institution:form.institution, location:form.location,
       bio:form.bio, orcid:form.orcid, twitter:form.twitter, card_linkedin:form.card_linkedin,
+      identity_tier1:form.identity_tier1, identity_tier2:form.identity_tier2,
     };
     // Card fields — only present after migration_businesscard.sql is run
     const cardUpdates = {
@@ -339,6 +340,8 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',
       title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',
       orcid:profile.orcid||'',twitter:profile.twitter||'',
+      identity_tier1: profile.identity_tier1||'',
+      identity_tier2: profile.identity_tier2||'',
       card_email:   profile.card_email   || user?.email || '',
       card_phone:   profile.card_phone   ||'',
       card_address: profile.card_address ||'',
@@ -776,6 +779,28 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                 <PF label="Institution" field="institution" form={form} setForm={setForm} placeholder="University of Tokyo"/>
                 <PF label="Location" field="location" form={form} setForm={setForm} placeholder="Tokyo, Japan 🇯🇵"/>
               </div>
+              {/* Professional identity */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                <div>
+                  <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:4}}>Primary discipline</label>
+                  <select value={form.identity_tier1||''}
+                    onChange={e=>setForm(f=>({...f,identity_tier1:e.target.value,identity_tier2:''}))}
+                    style={{width:'100%',background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 13px',fontSize:13,fontFamily:'inherit',outline:'none',color:T.text}}>
+                    <option value="">Select your field...</option>
+                    {TIER1_LIST.map(t1=><option key={t1} value={t1}>{t1}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:4}}>Speciality</label>
+                  <select value={form.identity_tier2||''}
+                    onChange={e=>setForm(f=>({...f,identity_tier2:e.target.value}))}
+                    disabled={!form.identity_tier1}
+                    style={{width:'100%',background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 13px',fontSize:13,fontFamily:'inherit',outline:'none',color:T.text,opacity:form.identity_tier1?1:.5}}>
+                    <option value="">{form.identity_tier1?'Select speciality...':'Select field first'}</option>
+                    {getTier2(form.identity_tier1||'').map(t2=><option key={t2} value={t2}>{t2}</option>)}
+                  </select>
+                </div>
+              </div>
               <div style={{marginBottom:12}}>
                 <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:4}}>Bio / Summary</label>
                 <textarea value={form.bio} onChange={e=>setForm(f=>({...f,bio:e.target.value}))} placeholder="Brief summary of your research focus and background..."
@@ -833,6 +858,20 @@ export default function ProfileScreen({ user, profile, setProfile }) {
               </div>
               {profile?.title&&(
                 <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>{profile.title}</div>
+              )}
+              {(profile?.identity_tier1||profile?.identity_tier2)&&(
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                  {profile?.identity_tier1&&(
+                    <span style={{fontSize:11.5,fontWeight:700,padding:'4px 12px',borderRadius:20,background:'#f1f0ff',color:'#5b52cc',border:'1px solid rgba(108,99,255,.2)'}}>
+                      {profile.identity_tier1}
+                    </span>
+                  )}
+                  {profile?.identity_tier2&&(
+                    <span style={{fontSize:11.5,fontWeight:600,padding:'4px 12px',borderRadius:20,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.25)`}}>
+                      {profile.identity_tier2}
+                    </span>
+                  )}
+                </div>
               )}
               <div style={{fontSize:13,color:T.mu,marginBottom:12,display:'flex',gap:12,flexWrap:'wrap'}}>
                 {profile?.institution&&<span>🏛️ {profile.institution}</span>}
@@ -1193,13 +1232,39 @@ export default function ProfileScreen({ user, profile, setProfile }) {
               <SectionHead label="Research Interests"/>
               {!editingTopics ? (
                 <div style={{marginBottom:16}}>
-                  {(profile?.topic_interests?.length > 0) ? (
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-                      {profile.topic_interests.map(t=>(
-                        <span key={t} style={{fontSize:10,padding:'5px 13px',borderRadius:20,border:`1.5px solid rgba(108,99,255,.2)`,background:T.v2,color:T.v,fontWeight:700}}>#{t}</span>
-                      ))}
-                    </div>
-                  ) : (
+                  {(profile?.topic_interests?.length > 0) ? (() => {
+                    const groups = {};
+                    const custom = [];
+                    (profile.topic_interests||[]).forEach(interest => {
+                      const tier1 = getTier1ForTier2(interest);
+                      if (tier1) { if (!groups[tier1]) groups[tier1]=[]; groups[tier1].push(interest); }
+                      else custom.push(interest);
+                    });
+                    return (
+                      <div style={{marginBottom:10}}>
+                        {Object.entries(groups).map(([t1,interests])=>(
+                          <div key={t1} style={{marginBottom:10}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:5}}>{t1}</div>
+                            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                              {interests.map(t=>(
+                                <span key={t} style={{padding:'4px 12px',borderRadius:20,fontSize:12.5,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.2)`,fontWeight:600}}>{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        {custom.length>0&&(
+                          <div style={{marginBottom:10}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:5}}>Other interests</div>
+                            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                              {custom.map(t=>(
+                                <span key={t} style={{padding:'4px 12px',borderRadius:20,fontSize:12.5,background:T.s2,color:T.mu,border:`1px solid ${T.bdr}`,fontWeight:500}}>#{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })() : (
                     <div style={{fontSize:12.5,color:T.mu,marginBottom:10}}>No research interests set — add some to personalise your feed.</div>
                   )}
                   <Btn onClick={()=>{ setTopicDraft(profile?.topic_interests||[]); setEditingTopics(true); }}>Edit interests</Btn>

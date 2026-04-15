@@ -39,3 +39,145 @@ export const EDGE_HEADERS = {
   'Content-Type': 'application/json',
   'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0YmxxeWxob3N3Y2t2d3dzcGNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDUzOTQsImV4cCI6MjA5MTEyMTM5NH0.lHcaMtZ6a781g8RTVkddupNc7qV1Ll1lvBdtdsaIgOs`,
 };
+
+// ── TAXONOMY ──────────────────────────────────────────────────────────────────
+
+export const TAXONOMY = {
+  "Clinical Medicine": [
+    "Cardiology & Cardiovascular Medicine",
+    "Oncology & Hematology",
+    "Neurology & Neuroscience",
+    "Endocrinology & Metabolism",
+    "Infectious Disease & Microbiology",
+    "Gastroenterology & Hepatology",
+    "Rheumatology & Immunology",
+    "Pulmonology & Critical Care",
+    "Nephrology & Urology",
+    "Dermatology",
+    "Ophthalmology",
+    "Psychiatry & Mental Health",
+    "Pediatrics & Neonatology",
+    "Obstetrics & Gynecology",
+    "Geriatrics & Palliative Care",
+    "Emergency & Trauma Medicine",
+    "Anesthesiology & Pain Medicine",
+    "Radiology & Medical Imaging",
+    "Rehabilitation & Sports Medicine",
+    "Cardiac & Thoracic Surgery",
+    "Neurosurgery",
+    "Orthopaedic & Trauma Surgery",
+    "General & Gastrointestinal Surgery",
+    "Vascular Surgery",
+    "Transplant Surgery",
+    "Plastic & Reconstructive Surgery",
+    "Minimally Invasive & Robotic Surgery"
+  ],
+  "Basic Life Sciences": [
+    "Molecular Biology & Genetics",
+    "Cell Biology",
+    "Biochemistry & Structural Biology",
+    "Immunology & Inflammation",
+    "Neurobiology",
+    "Microbiology & Virology",
+    "Cancer Biology",
+    "Developmental Biology & Stem Cells",
+    "Physiology",
+    "Epigenetics & Gene Regulation",
+    "Proteomics & Metabolomics",
+    "Genomics & Sequencing",
+    "Chemical Biology",
+    "Plant & Environmental Biology"
+  ],
+  "Pharmacology & Therapeutics": [
+    "Drug Discovery & Medicinal Chemistry",
+    "Pharmacokinetics & Pharmacodynamics",
+    "Toxicology & Safety",
+    "Clinical Pharmacology",
+    "Biologics & Antibody Engineering",
+    "Gene & Cell Therapy",
+    "Small Molecule Drug Development",
+    "Vaccines & Immunotherapeutics",
+    "Precision Medicine & Biomarkers",
+    "Formulation & Drug Delivery",
+    "Pharmacogenomics",
+    "Rare Disease & Orphan Drugs"
+  ],
+  "Public Health & Epidemiology": [
+    "Epidemiology & Disease Surveillance",
+    "Biostatistics & Research Methods",
+    "Global Health & Tropical Medicine",
+    "Health Policy & Systems",
+    "Environmental & Occupational Health",
+    "Nutritional Science & Dietetics",
+    "Mental Health & Behavioural Science",
+    "Infectious Disease Epidemiology",
+    "Cancer Epidemiology",
+    "Chronic Disease Prevention",
+    "Health Economics & Outcomes",
+    "Social Determinants of Health"
+  ],
+  "Bioengineering & Informatics": [
+    "Bioinformatics & Computational Biology",
+    "Artificial Intelligence & Machine Learning in Health",
+    "Biomedical Engineering",
+    "Imaging & Signal Processing",
+    "Genomics & Sequencing Technology",
+    "Synthetic Biology",
+    "Robotics & Surgical Technology Research",
+    "Health Data Science",
+    "Nanotechnology & Biomaterials",
+    "Digital Therapeutics Research"
+  ],
+  "Pharmaceutical & Biotech Industry": [
+    "Medical Affairs",
+    "Health Economics & Outcomes Research (HEOR)",
+    "Real-World Evidence & Data Science",
+    "Regulatory Affairs & Drug Approval",
+    "Market Access & Pricing",
+    "Pharmacovigilance & Drug Safety",
+    "Medical Communications & Publishing",
+    "Clinical Operations & Trial Management",
+    "Translational Medicine",
+    "Business Development & Licensing",
+    "Medical Information",
+    "Patient Advocacy & Engagement"
+  ],
+  "Medical Devices & Diagnostics Industry": [
+    "Device Design & Engineering",
+    "In Vitro Diagnostics (IVD)",
+    "Medical Imaging Systems",
+    "Surgical & Interventional Devices",
+    "Digital Health Products & Software as Medical Device (SaMD)",
+    "Wearables & Remote Patient Monitoring",
+    "Regulatory Affairs for Devices (MDR / FDA 510k / PMA)",
+    "Clinical Evidence & Post-Market Surveillance",
+    "Artificial Intelligence in Diagnostics",
+    "Point-of-Care & Rapid Testing",
+    "Cardiovascular Devices",
+    "Orthopaedic & Implantable Devices"
+  ],
+  "Medical Education & Research Methods": [
+    "Medical & Science Education",
+    "Systematic Review & Meta-Analysis",
+    "Clinical Research Methodology",
+    "Evidence-Based Medicine",
+    "Scientific Writing & Publishing",
+    "Bioethics & Research Integrity",
+    "Simulation & Training Technology",
+    "Continuing Medical Education",
+    "Peer Review & Journal Editing",
+    "Open Science & Data Sharing"
+  ]
+};
+
+export const TIER1_LIST = Object.keys(TAXONOMY);
+
+// All Tier 2 specialities as a flat array — used as suggestion pool
+export const ALL_TIER2 = Object.values(TAXONOMY).flat();
+
+// Get Tier 2 options for a given Tier 1
+export const getTier2 = (tier1) => TAXONOMY[tier1] || [];
+
+// Find which Tier 1 a Tier 2 belongs to
+export const getTier1ForTier2 = (tier2) =>
+  TIER1_LIST.find(t1 => TAXONOMY[t1].includes(tier2)) || null;

@@ -141,16 +141,29 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     const withSlugData = await withSlugs(enriched);
     withSlugData.sort((a,b) => new Date(b._sortTime) - new Date(a._sortTime));
 
-    // In For You + personalised mode, float posts matching topic interests to top
-    if (fp === 'sug' && feedMode === 'personalised' && profile?.topic_interests?.length) {
-      const interests = new Set(profile.topic_interests.map(t => t.toLowerCase()));
-      withSlugData.sort((a, b) => {
-        const aMatch = (a.tags || []).some(tag => interests.has(tag.toLowerCase()));
-        const bMatch = (b.tags || []).some(tag => interests.has(tag.toLowerCase()));
-        if (aMatch && !bMatch) return -1;
-        if (!aMatch && bMatch) return 1;
-        return 0;
-      });
+    // In For You + personalised mode, score posts by taxonomy match
+    if (fp === 'sug' && feedMode === 'personalised') {
+      const userTier1     = profile?.identity_tier1 || '';
+      const userTier2     = profile?.identity_tier2 || '';
+      const userInterests = new Set(
+        (profile?.topic_interests || []).map(t => t.toLowerCase())
+      );
+
+      if (userTier1 || userTier2 || userInterests.size > 0) {
+        withSlugData.sort((a, b) => {
+          const score = (post) => {
+            let s = 0;
+            if (post.tier1 && post.tier1 === userTier1)        s += 3;
+            if (userTier2 && post.tier2?.includes(userTier2))  s += 5;
+            const topics = [...(post.tags||[]), ...(post.tier2||[])].map(t => t.toLowerCase());
+            if (topics.some(t => userInterests.has(t)))        s += 2;
+            return s;
+          };
+          const diff = score(b) - score(a);
+          if (diff !== 0) return diff;
+          return new Date(b._sortTime) - new Date(a._sortTime);
+        });
+      }
     }
 
     setPosts(withSlugData);

@@ -134,6 +134,20 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                   )}
                 </div>
                 {p.title && <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, marginBottom: 3 }}>{p.title}</div>}
+                {(p.identity_tier1 || p.identity_tier2) && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 7 }}>
+                    {p.identity_tier1 && (
+                      <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', border: '1px solid rgba(108,99,255,.2)' }}>
+                        {p.identity_tier1}
+                      </span>
+                    )}
+                    {p.identity_tier2 && (
+                      <span style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.25)` }}>
+                        {p.identity_tier2}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   {p.institution && <span>🏛️ {p.institution}</span>}
                   {p.location    && <span>📍 {p.location}</span>}

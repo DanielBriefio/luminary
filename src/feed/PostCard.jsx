@@ -148,9 +148,14 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             <Av color={post.author_avatar||"me"} size={38} name={post.author_name} url={post.author_avatar_url||""}/>
           </div>
           <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:12.5,display:"flex",alignItems:"center",gap:5}}>
+            <div style={{fontWeight:700,fontSize:12.5,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
               <span onClick={()=>goToProfile(post.user_id,post.author_slug)} style={{cursor:"pointer",color:T.v}}>{post.author_name||"Researcher"}</span>
               <Bdg color={typeColor[post.post_type]||"v"}>{typeLabel[post.post_type]||"Post"}</Bdg>
+              {post.author_identity_tier2&&(
+                <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.2)`}}>
+                  {post.author_identity_tier2}
+                </span>
+              )}
             </div>
             <div style={{fontSize:10.5,color:T.mu}}>
               {post.author_institution&&`${post.author_institution} · `}{timeAgo(post.created_at)}
@@ -281,6 +286,56 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             </a>
           );
         })()}
+
+        {/* ── Taxonomy tags ── */}
+        {(post.tier1 || post.tier2?.length > 0 || post.tags?.length > 0) && (
+          <div style={{marginTop:10,paddingTop:8,borderTop:`1px solid ${T.bdr}`}}>
+            {post.tier1 && (
+              <span style={{
+                fontSize:10.5, fontWeight:600,
+                padding:'2px 9px', borderRadius:20,
+                background:'#f1f0ff', color:'#5b52cc',
+                border:'1px solid rgba(108,99,255,.15)',
+                display:'inline-block', marginBottom:5,
+              }}>
+                {post.tier1}
+              </span>
+            )}
+            {post.tier2?.length > 0 && (
+              <div style={{display:'flex', gap:5, flexWrap:'wrap', marginBottom:5}}>
+                {post.tier2.map(t => (
+                  <span key={t}
+                    onClick={() => onTagClick && onTagClick(t)}
+                    style={{
+                      fontSize:11.5, fontWeight:600,
+                      padding:'3px 10px', borderRadius:20,
+                      background:T.v2, color:T.v,
+                      border:`1px solid rgba(108,99,255,.2)`,
+                      cursor: onTagClick ? 'pointer' : 'default',
+                    }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+            {post.tags?.length > 0 && (
+              <div style={{display:'flex', gap:5, flexWrap:'wrap'}}>
+                {post.tags.map(tag => (
+                  <span key={tag}
+                    onClick={() => onTagClick && onTagClick(tag)}
+                    style={{
+                      fontSize:11, color:T.mu,
+                      padding:'2px 8px', borderRadius:20,
+                      background:T.s2, border:`1px solid ${T.bdr}`,
+                      cursor: onTagClick ? 'pointer' : 'default',
+                    }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{display:"flex",alignItems:"center",gap:isMobile?4:8,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.bdr}`}}>
           <button onClick={toggleLike} style={{fontSize:12,color:liked?T.ro:T.mu,cursor:"pointer",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,background:liked?T.ro2:"transparent",border:"none",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>

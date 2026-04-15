@@ -275,6 +275,8 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
     const manualTags = tags.split(/[\s,]+/).filter(t=>t.trim()).map(t=>t.startsWith('#')?t:`#${t}`);
 
     let autoTags = [];
+    let autoTier1 = '';
+    let autoTier2 = [];
     if (AUTO_TAG_ENABLED) {
       try {
         const tagRes = await fetch(
@@ -290,7 +292,6 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
               paperTitle:    paperTitle.trim(),
               paperJournal:  paperJournal.trim(),
               paperAbstract: paperAbstract.trim(),
-              linkTitle:     linkTitle.trim(),
             }),
           }
         );
@@ -299,6 +300,8 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
           const aiFormatted = tagData.tags.map(t => `#${t}`);
           autoTags = aiFormatted.filter(t => !manualTags.includes(t));
         }
+        if (tagData?.tier1) autoTier1 = tagData.tier1;
+        if (tagData?.tier2?.length) autoTier2 = tagData.tier2;
       } catch(e) {
         // Auto-tagging is best-effort — never blocks publishing
       }
@@ -322,6 +325,8 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
       file_type:     uploadCategory,
       file_name:     uploadFile?.name || '',
       tags:          allTags,
+      tier1:         autoTier1,
+      tier2:         autoTier2,
       visibility,
     });
     setLoading(false);

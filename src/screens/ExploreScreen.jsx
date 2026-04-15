@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
-import { T } from '../lib/constants';
+import { T, TAXONOMY, TIER1_LIST } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import PostCard from '../feed/PostCard';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
 import FollowBtn from '../components/FollowBtn';
-import { useSuggestedTopics } from '../lib/useSuggestedTopics';
 import { timeAgo } from '../lib/utils';
 
 // ─── Researcher result card ───────────────────────────────────────────────────
@@ -310,36 +309,34 @@ export default function ExploreScreen({
   const [showMoreDiscussed, setShowMoreDiscussed]   = useState(false);
   const [showMoreInProfiles, setShowMoreInProfiles] = useState(false);
 
-  const { suggested: topicChips } = useSuggestedTopics([], 20);
+  const [tier1Filter, setTier1Filter] = useState('');
 
   const currentUserId = user?.id;
 
   // ── Search functions ─────────────────────────────────────────────────────
 
-  const searchPosts = useCallback(async (query) => {
-    if (!query.trim()) { setPostResults([]); return; }
+  const searchPosts = useCallback(async (query, t1Filter = '') => {
+    if (!query.trim() && !t1Filter) { setPostResults([]); return; }
     setPostSearching(true);
     // Strip leading # so "#GLP1" and "GLP1" behave identically
     const cleanQ = query.trim().replace(/^#+/, '');
     // Tags are stored WITH # prefix (e.g. "#family"), so tag search uses "#cleanQ"
     const tagQ = `#${cleanQ}`;
 
+    let textQ = supabase.from('posts_with_meta').select('*').order('created_at', { ascending: false }).limit(40);
+    let tagResQ = supabase.from('posts_with_meta').select('*').order('created_at', { ascending: false }).limit(40);
+
+    if (cleanQ) {
+      textQ  = textQ.or(`content.ilike.%${cleanQ}%,paper_title.ilike.%${cleanQ}%,paper_authors.ilike.%${cleanQ}%`);
+      tagResQ = tagResQ.contains('tags', [tagQ]);
+    }
+    if (t1Filter) {
+      textQ   = textQ.eq('tier1', t1Filter);
+      tagResQ = tagResQ.eq('tier1', t1Filter);
+    }
+
     // Two queries: (1) full-text across text fields, (2) exact tag array match
-    // Separate queries are more reliable than cs inside or() in PostgREST
-    const [textRes, tagRes] = await Promise.all([
-      supabase
-        .from('posts_with_meta')
-        .select('*')
-        .or(`content.ilike.%${cleanQ}%,paper_title.ilike.%${cleanQ}%,paper_authors.ilike.%${cleanQ}%`)
-        .order('created_at', { ascending: false })
-        .limit(40),
-      supabase
-        .from('posts_with_meta')
-        .select('*')
-        .contains('tags', [tagQ])
-        .order('created_at', { ascending: false })
-        .limit(40),
-    ]);
+    const [textRes, tagRes] = await Promise.all([textQ, tagResQ]);
 
     // Merge and deduplicate by post id, preserve recency order
     const seen = new Set();
@@ -444,16 +441,16 @@ export default function ExploreScreen({
     setPaperSearching(false);
   }, []);
 
-  // ── Run search when query or tab changes ─────────────────────────────────
+  // ── Run search when query or tab or tier1Filter changes ──────────────────
 
   useEffect(() => {
     const t = setTimeout(() => {
-      if (exploreTab === 'posts')       searchPosts(q);
+      if (exploreTab === 'posts')       searchPosts(q, tier1Filter);
       if (exploreTab === 'researchers') searchResearchers(q);
       if (exploreTab === 'papers')      searchPapers(q);
     }, 400);
     return () => clearTimeout(t);
-  }, [q, exploreTab, searchPosts, searchResearchers, searchPapers]);
+  }, [q, tier1Filter, exploreTab, searchPosts, searchResearchers, searchPapers]);
 
   // Run search immediately if initialQuery is provided
   useEffect(() => {
@@ -532,42 +529,74 @@ export default function ExploreScreen({
                   fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase',
                   letterSpacing: '.07em', marginBottom: 10,
                 }}>
-                  Browse by Topic
+                  Browse by Discipline
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-                  {topicChips.map(tag => {
-                    const label = tag.replace(/^#+/, ''); // strip # if DB returns it with prefix
-                    return (
-                      <span
-                        key={tag}
-                        onClick={() => handleChipClick(tag)}
+                {/* Tier 1 discipline filter */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {TIER1_LIST.map(t1 => (
+                    <button key={t1}
+                      onClick={() => setTier1Filter(tier1Filter === t1 ? '' : t1)}
+                      style={{
+                        padding: '5px 13px', borderRadius: 20, cursor: 'pointer',
+                        fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+                        border: `1.5px solid ${tier1Filter === t1 ? T.v : T.bdr}`,
+                        background: tier1Filter === t1 ? T.v2 : T.w,
+                        color: tier1Filter === t1 ? T.v : T.mu,
+                        transition: 'all .12s',
+                      }}>
+                      {t1}
+                    </button>
+                  ))}
+                  {tier1Filter && (
+                    <button onClick={() => setTier1Filter('')}
+                      style={{
+                        padding: '5px 10px', borderRadius: 20, fontSize: 11.5,
+                        fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+                        border: `1px solid ${T.bdr}`, background: T.s2, color: T.mu,
+                      }}>
+                      ✕ Clear
+                    </button>
+                  )}
+                </div>
+                {/* Tier 2 chips */}
+                {!tier1Filter ? (
+                  <div style={{ fontSize: 12, color: T.mu, padding: '8px 0', marginBottom: 16 }}>
+                    Select a discipline above to browse specialities, or search below.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                    {TAXONOMY[tier1Filter].map(t2 => (
+                      <button key={t2}
+                        onClick={() => { setQ(t2); }}
                         style={{
-                          cursor: 'pointer', display: 'inline-flex', padding: '5px 14px',
-                          borderRadius: 20, fontSize: 12, fontWeight: 700,
-                          background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.2)`,
-                        }}
-                      >
-                        #{label}
-                      </span>
-                    );
-                  })}
-                </div>
-                <div style={{
-                  background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14,
-                  padding: 24, textAlign: 'center', boxShadow: '0 2px 12px rgba(108,99,255,.07)',
-                }}>
-                  <div style={{ fontSize: 28, marginBottom: 12 }}>🔍</div>
-                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 8 }}>
-                    Discover scientific content
+                          padding: '4px 11px', borderRadius: 20, cursor: 'pointer',
+                          fontSize: 11.5, fontFamily: 'inherit', fontWeight: 500,
+                          border: `1px solid rgba(108,99,255,.2)`,
+                          background: T.v2, color: T.v,
+                        }}>
+                        {t2}
+                      </button>
+                    ))}
                   </div>
-                  <div style={{ fontSize: 13, color: T.mu }}>
-                    Search for papers, topics, or click a tag above to explore the feed.
+                )}
+                {!tier1Filter && (
+                  <div style={{
+                    background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14,
+                    padding: 24, textAlign: 'center', boxShadow: '0 2px 12px rgba(108,99,255,.07)',
+                  }}>
+                    <div style={{ fontSize: 28, marginBottom: 12 }}>🔍</div>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 8 }}>
+                      Discover scientific content
+                    </div>
+                    <div style={{ fontSize: 13, color: T.mu }}>
+                      Select a discipline above to browse by speciality, or search directly.
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
 
-            {q.trim() && (
+            {(q.trim() || tier1Filter) && (
               <>
                 <div style={{
                   fontSize: 12, fontWeight: 700, color: T.mu, textTransform: 'uppercase',
@@ -575,7 +604,9 @@ export default function ExploreScreen({
                 }}>
                   {postSearching
                     ? 'Searching…'
-                    : `${postResults.length} result${postResults.length !== 1 ? 's' : ''} for "${q}"`}
+                    : tier1Filter && !q.trim()
+                      ? `${postResults.length} post${postResults.length !== 1 ? 's' : ''} in ${tier1Filter}`
+                      : `${postResults.length} result${postResults.length !== 1 ? 's' : ''} for "${q}"`}
                 </div>
                 {postSearching
                   ? <Spinner />

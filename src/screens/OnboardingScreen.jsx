@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { T } from '../lib/constants';
+import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
-// ── Progress bar (setup steps 2–4 = dots 1–3) ────────────────────────────────
+// ── Progress bar (setup steps 2–5 = dots 1–4) ────────────────────────────────
 function ProgressBar({ step }) {
-  const total  = 3;
-  const filled = Math.max(0, step - 1); // step2→1, step3→2, step4→3
+  const total  = 4;
+  const filled = Math.max(0, step - 1); // step2→1, step3→2, step4→3, step5→4
   return (
     <div style={{ display: 'flex', gap: 5, marginBottom: 28 }}>
       {Array.from({ length: total }).map((_, i) => (
@@ -78,18 +78,23 @@ function FeatureCard({ icon, title, desc, badge }) {
 export default function OnboardingScreen({ user, profile, setProfile, onComplete, onGoToProfile }) {
   const [step, setStep] = useState(0);
 
-  // Step 2 state — topics
+  // Step 2 state — professional identity
+  const [identityTier1, setIdentityTier1] = useState('');
+  const [identityTier2, setIdentityTier2] = useState('');
+  const [savingIdentity, setSavingIdentity] = useState(false);
+
+  // Step 3 state — topics
   const [selectedTopics, setSelectedTopics] = useState([]);
   const [savingTopics,   setSavingTopics]   = useState(false);
 
-  // Step 3 state — follow researchers
+  // Step 4 state — follow researchers
   const [suggested,      setSuggested]      = useState([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [followCount,    setFollowCount]    = useState(0);
 
-  // Load suggested researchers when arriving at step 3
+  // Load suggested researchers when arriving at step 4
   useEffect(() => {
-    if (step !== 3) return;
+    if (step !== 4) return;
     setSuggestLoading(true);
     (async () => {
       const { data } = await supabase
@@ -122,7 +127,18 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
     onComplete();
   };
 
-  // Step 2: save topics and advance
+  // Step 2: save professional identity and advance
+  const saveIdentity = async () => {
+    setSavingIdentity(true);
+    await supabase.from('profiles')
+      .update({ identity_tier1: identityTier1, identity_tier2: identityTier2 })
+      .eq('id', user.id);
+    setProfile(p => ({ ...p, identity_tier1: identityTier1, identity_tier2: identityTier2 }));
+    setSavingIdentity(false);
+    setStep(3);
+  };
+
+  // Step 3: save topics and advance
   const saveTopics = async () => {
     setSavingTopics(true);
     await supabase.from('profiles')
@@ -130,10 +146,10 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
       .eq('id', user.id);
     setProfile(p => ({ ...p, topic_interests: selectedTopics }));
     setSavingTopics(false);
-    setStep(3);
+    setStep(4);
   };
 
-  // Step 4: import choice — completes onboarding immediately
+  // Step 5: import choice — completes onboarding immediately
   const handleImportChoice = (flag) => {
     sessionStorage.removeItem('onboarding_import');
     if (flag) {
@@ -229,8 +245,8 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
           </div>
         )}
 
-        {/* ── Steps 2–4 (setup) ── */}
-        {step >= 2 && step <= 4 && (
+        {/* ── Steps 2–5 (setup) ── */}
+        {step >= 2 && step <= 5 && (
           <>
             <ProgressBar step={step} />
 
@@ -241,14 +257,73 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               ← Back
             </button>
 
-            {/* ── Step 2: Topics ── */}
+            {/* ── Step 2: Professional identity ── */}
             {step === 2 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
-                  What topics are you interested in?
+                  What is your primary field?
                 </div>
-                <div style={{ fontSize: 13, color: T.mu, marginBottom: 22 }}>
-                  Pick at least 3. Your feed will be tailored to these.
+                <div style={{ fontSize: 13, color: T.mu, marginBottom: 20, lineHeight: 1.6 }}>
+                  This appears as a badge on your profile. Pick your main discipline.
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                  {TIER1_LIST.map(t1 => (
+                    <button key={t1}
+                      onClick={() => { setIdentityTier1(t1); setIdentityTier2(''); }}
+                      style={{
+                        padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                        fontFamily: 'inherit', textAlign: 'left', fontSize: 12,
+                        fontWeight: identityTier1 === t1 ? 700 : 500,
+                        border: `2px solid ${identityTier1 === t1 ? T.v : T.bdr}`,
+                        background: identityTier1 === t1 ? T.v2 : T.w,
+                        color: identityTier1 === t1 ? T.v : T.text,
+                        lineHeight: 1.3,
+                      }}>
+                      {t1}
+                    </button>
+                  ))}
+                </div>
+
+                {identityTier1 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, marginBottom: 6, color: T.text }}>
+                      Speciality within {identityTier1}:
+                    </label>
+                    <select value={identityTier2}
+                      onChange={e => setIdentityTier2(e.target.value)}
+                      style={{
+                        width: '100%', background: T.s2, border: `1.5px solid ${T.bdr}`,
+                        borderRadius: 9, padding: '10px 13px', fontSize: 13,
+                        fontFamily: 'inherit', outline: 'none', color: T.text,
+                      }}>
+                      <option value="">Select your speciality...</option>
+                      {getTier2(identityTier1).map(t2 =>
+                        <option key={t2} value={t2}>{t2}</option>
+                      )}
+                    </select>
+                  </div>
+                )}
+
+                <Btn
+                  variant="s"
+                  onClick={saveIdentity}
+                  disabled={!identityTier1 || !identityTier2 || savingIdentity}
+                  style={{ width: '100%', padding: '11px', fontSize: 13, opacity: (!identityTier1 || !identityTier2) ? .5 : 1 }}>
+                  {savingIdentity ? 'Saving…' : 'Next →'}
+                </Btn>
+              </>
+            )}
+
+            {/* ── Step 3: Topics ── */}
+            {step === 3 && (
+              <>
+                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
+                  What topics do you want to follow?
+                </div>
+                <div style={{ fontSize: 13, color: T.mu, marginBottom: 22, lineHeight: 1.6 }}>
+                  Your identity says who you are. Your interests shape your feed.
+                  Pick at least 3.
                 </div>
                 <TopicInterestsPicker
                   selected={selectedTopics}
@@ -265,8 +340,8 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               </>
             )}
 
-            {/* ── Step 3: Follow researchers ── */}
-            {step === 3 && (
+            {/* ── Step 4: Follow researchers ── */}
+            {step === 4 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
                   Follow researchers in your field
@@ -306,14 +381,14 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                   </div>
                 )}
 
-                <Btn variant="s" onClick={() => setStep(4)} style={{ width: '100%', padding: '11px', fontSize: 13 }}>
+                <Btn variant="s" onClick={() => setStep(5)} style={{ width: '100%', padding: '11px', fontSize: 13 }}>
                   {followCount > 0 ? `Following ${followCount} researcher${followCount !== 1 ? 's' : ''} →` : 'Next →'}
                 </Btn>
               </>
             )}
 
-            {/* ── Step 4: Import publications ── */}
-            {step === 4 && (
+            {/* ── Step 5: Import publications ── */}
+            {step === 5 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
                   Build your publication list
