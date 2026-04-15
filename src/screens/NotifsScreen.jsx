@@ -59,9 +59,10 @@ export default function NotifsScreen({ user }) {
     }
 
     // Fetch linked posts for post-related notifications
+    // Post ID is stored in target_id (top-level column), not in meta
     const postIds = [...new Set(
-      ns.filter(n => POST_NOTIF_TYPES.has(n.notif_type) && n.meta?.post_id)
-        .map(n => n.meta.post_id)
+      ns.filter(n => POST_NOTIF_TYPES.has(n.notif_type) && n.target_id)
+        .map(n => n.target_id)
     )];
     if (postIds.length) {
       const { data: posts } = await supabase
@@ -118,7 +119,7 @@ export default function NotifsScreen({ user }) {
               const actor    = actorMap[n.actor_id];
               const cfg      = NOTIF_CONFIG[n.notif_type] || { icon: '🔔', label: () => n.notif_type };
               const isUnread = !n.read;
-              const postId   = POST_NOTIF_TYPES.has(n.notif_type) ? n.meta?.post_id : null;
+              const postId   = POST_NOTIF_TYPES.has(n.notif_type) ? n.target_id : null;
               const post     = postId ? postMap[postId] : null;
               const snippet  = postSnippet(post);
               const goToActor = () => { if (actor?.profile_slug) window.location.href = `/p/${actor.profile_slug}`; };
