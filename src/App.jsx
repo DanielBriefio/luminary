@@ -20,6 +20,7 @@ import MessagesScreen, { startConversation } from './screens/MessagesScreen';
 import PaperDetailPage from './paper/PaperDetailPage';
 import OnboardingScreen from './screens/OnboardingScreen';
 import CardQROverlay from './components/CardQROverlay';
+import CardPage from './profile/CardPage';
 
 // Detect public profile route: /p/:slug
 const getPublicSlug = () => {
@@ -39,10 +40,17 @@ const getPublicPaperDoi = () => {
   return m ? m[1] : null;
 };
 
+// Detect business card route: /c/:slug
+const getPublicCardSlug = () => {
+  const m = window.location.pathname.match(/^\/c\/([^/]+)\/?$/);
+  return m ? m[1] : null;
+};
+
 export default function App() {
   const [publicSlug]     = useState(getPublicSlug);
   const [publicPostId]   = useState(getPublicPostId);
   const [publicPaperDoi] = useState(getPublicPaperDoi);
+  const [publicCardSlug] = useState(getPublicCardSlug);
   const { isMobile } = useWindowSize();
   const [session,setSession]=useState(null);
   const [profile,setProfile]=useState(null);
@@ -67,7 +75,7 @@ export default function App() {
   };
 
   useEffect(()=>{
-    if(publicSlug || publicPostId || publicPaperDoi) return; // no auth needed for public pages
+    if(publicSlug || publicPostId || publicPaperDoi || publicCardSlug) return; // no auth needed for public pages
     supabase.auth.getSession().then(({data})=>{ setSession(data.session); setAuthChecked(true); });
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_,s)=>setSession(s));
     return ()=>subscription.unsubscribe();
@@ -146,6 +154,7 @@ export default function App() {
   if(publicSlug)     return <>{fonts}<PublicProfilePage slug={publicSlug}/></>;
   if(publicPostId)   return <>{fonts}<PublicPostPage postId={publicPostId}/></>;
   if(publicPaperDoi) return <>{fonts}<PaperDetailPage doi={publicPaperDoi} isPublicPage={true}/></>;
+  if(publicCardSlug) return <>{fonts}<CardPage slug={publicCardSlug}/>;</>;
 
   if(!authChecked) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;
   if(!session) return <AuthScreen onAuth={()=>setScreen('feed')}/>;
