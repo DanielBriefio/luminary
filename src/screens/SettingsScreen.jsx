@@ -3,7 +3,7 @@ import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import ResetPasswordScreen from './ResetPasswordScreen';
 
-export default function SettingsScreen({ user, onClose, onDeleted }) {
+export default function SettingsScreen({ user, onClose, onDeleted, onSignOut }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showDeleteConfirm,  setShowDeleteConfirm]  = useState(false);
   const [deleteInput,        setDeleteInput]        = useState('');
@@ -92,6 +92,24 @@ export default function SettingsScreen({ user, onClose, onDeleted }) {
               <div style={{ fontSize: 11.5, color: T.mu }}>Update your login password</div>
             </div>
             <span style={{ marginLeft: 'auto', color: T.mu, fontSize: 14 }}>→</span>
+          </button>
+
+          {/* Sign out */}
+          <button onClick={onSignOut} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '14px 16px', borderRadius: 12,
+            border: `1.5px solid ${T.bdr}`, background: T.w,
+            cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+            transition: 'background .15s',
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = T.s2}
+            onMouseLeave={e => e.currentTarget.style.background = T.w}
+          >
+            <span style={{ fontSize: 20 }}>↩</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Sign out</div>
+              <div style={{ fontSize: 11.5, color: T.mu }}>Sign out of your account</div>
+            </div>
           </button>
 
           {/* Divider */}

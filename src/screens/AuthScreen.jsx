@@ -214,6 +214,7 @@ export default function AuthScreen({ onAuth }) {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
+        options: { data: { name: signupName } }, // auth trigger writes name immediately
       });
       if (authError) throw authError;
 
@@ -274,6 +275,7 @@ export default function AuthScreen({ onAuth }) {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
+        options: { data: { name: orcidData.name } }, // auth trigger writes name immediately
       });
       if (authError) throw authError;
 
