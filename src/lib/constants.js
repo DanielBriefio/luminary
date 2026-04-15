@@ -18,8 +18,9 @@ export const PUB_TYPES = [
   {id:'lecture',    label:'Lecture / Talk',   icon:'🎙️'},
   {id:'book',       label:'Book Chapter',     icon:'📚'},
   {id:'review',     label:'Review Article',   icon:'🔍'},
-  {id:'preprint',   label:'Preprint',         icon:'📝'},
-  {id:'other',      label:'Other',            icon:'📎'},
+  {id:'preprint',    label:'Preprint',         icon:'📝'},
+  {id:'peer_review', label:'Peer Review',      icon:'⭐'},
+  {id:'other',       label:'Other',            icon:'📎'},
 ];
 
 export const NAV=[

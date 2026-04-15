@@ -328,7 +328,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
       name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',
       title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',
       orcid:profile.orcid||'',twitter:profile.twitter||'',
-      card_email:   profile.card_email   ||'',
+      card_email:   profile.card_email   || user?.email || '',
       card_phone:   profile.card_phone   ||'',
       card_address: profile.card_address ||'',
       card_linkedin:profile.card_linkedin||'',

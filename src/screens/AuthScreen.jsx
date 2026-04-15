@@ -128,30 +128,78 @@ export default function AuthScreen({ onAuth }) {
     setOrcidChecking(false);
   };
 
+  // ── parse full ORCID data into profile fields + publications ────────────
+  const parseOrcidForProfile = (rawData) => {
+    const typeMap = { 'journal-article':'journal', 'conference-paper':'conference',
+      'conference-poster':'poster', 'lecture-speech':'lecture', 'book-chapter':'book',
+      'review-article':'review', 'preprint':'preprint' };
+
+    const works = (rawData['activities-summary']?.works?.group || []).map(g => {
+      const ws = g['work-summary']?.[0];
+      if (!ws) return null;
+      const doi  = (ws['external-ids']?.['external-id'] || []).find(x => x['external-id-type'] === 'doi');
+      const pmid = (ws['external-ids']?.['external-id'] || []).find(x => x['external-id-type'] === 'pmid');
+      return {
+        title:    ws.title?.title?.value || '',
+        journal:  ws['journal-title']?.value || '',
+        year:     ws['publication-date']?.year?.value || '',
+        doi:      doi?.['external-id-value'] || '',
+        pmid:     pmid?.['external-id-value'] || '',
+        pub_type: typeMap[ws.type] || 'other',
+        source:   'orcid',
+      };
+    }).filter(p => p && p.title);
+
+    const prGroups = rawData['activities-summary']?.['peer-reviews']?.group || [];
+    const peerReviews = prGroups.flatMap(g =>
+      (g['peer-review-group'] || []).flatMap(prg =>
+        (prg['peer-review-summary'] || []).map(pr => {
+          const year = pr['completion-date']?.year?.value || '';
+          const org  = pr['convening-organization']?.name || '';
+          if (!org && !year) return null;
+          return { title: `Peer Review${org ? ` — ${org}` : ''}`, journal: org, year, doi:'', pmid:'', pub_type:'peer_review', source:'orcid' };
+        })
+      )
+    ).filter(Boolean);
+
+    const employments = (rawData['activities-summary']?.employments?.['affiliation-group'] || [])
+      .flatMap(g => g['summaries'] || [])
+      .map(s => s['employment-summary'] || s)
+      .map(e => ({
+        title:       e['role-title'] || '',
+        company:     e.organization?.name || '',
+        location:    [e.organization?.address?.city, e.organization?.address?.country].filter(Boolean).join(', '),
+        start:       e['start-date'] ? `${e['start-date'].year?.value||''}-${String(e['start-date'].month?.value||1).padStart(2,'0')}` : '',
+        end:         e['end-date']   ? `${e['end-date'].year?.value||''}-${String(e['end-date'].month?.value||1).padStart(2,'0')}` : '',
+        description: '',
+        _source:     'orcid',
+      }))
+      .filter(e => e.company || e.title);
+
+    const educations = (rawData['activities-summary']?.educations?.['affiliation-group'] || [])
+      .flatMap(g => g['summaries'] || [])
+      .map(s => s['education-summary'] || s)
+      .map(e => ({
+        school:  e.organization?.name || '',
+        degree:  e['role-title'] || '',
+        field:   '',
+        start:   e['start-date'] ? `${e['start-date'].year?.value||''}-${String(e['start-date'].month?.value||1).padStart(2,'0')}` : '',
+        end:     e['end-date']   ? `${e['end-date'].year?.value||''}-${String(e['end-date'].month?.value||1).padStart(2,'0')}` : '',
+        _source: 'orcid',
+      }))
+      .filter(e => e.school);
+
+    return { publications: [...works, ...peerReviews], employments, educations };
+  };
+
   // ── background ORCID publication import ──────────────────────────────────
   const importOrcidPublications = async (userId, rawData) => {
     try {
-      const works = rawData['activities-summary']?.works?.group || [];
-      const pubs = works.map(g => {
-        const ws = g['work-summary']?.[0];
-        if (!ws) return null;
-        const doi  = (ws['external-ids']?.['external-id'] || [])
-          .find(x => x['external-id-type'] === 'doi');
-        const pmid = (ws['external-ids']?.['external-id'] || [])
-          .find(x => x['external-id-type'] === 'pmid');
-        return {
-          user_id: userId,
-          title:   ws.title?.title?.value || '',
-          journal: ws['journal-title']?.value || '',
-          year:    ws['publication-date']?.year?.value || '',
-          doi:     doi?.['external-id-value'] || '',
-          pmid:    pmid?.['external-id-value'] || '',
-          source:  'orcid',
-        };
-      }).filter(p => p && p.title);
-
-      if (pubs.length) {
-        await supabase.from('publications').insert(pubs);
+      const { publications } = parseOrcidForProfile(rawData);
+      if (publications.length) {
+        await supabase.from('publications').insert(
+          publications.map(p => ({ user_id: userId, ...p }))
+        );
       }
     } catch (e) {
       console.warn('Background ORCID import failed:', e);
@@ -172,13 +220,22 @@ export default function AuthScreen({ onAuth }) {
       const userId = authData.user?.id;
       if (!userId) throw new Error('Account creation failed');
 
-      const profileUpdate = { name: signupName, signup_method: 'invite' };
+      // Brief wait for the auth trigger to create the profile row
+      await new Promise(r => setTimeout(r, 800));
+
+      const profileUpdate = { name: signupName, signup_method: 'invite', card_email: signupEmail };
       if (orcidData) {
         profileUpdate.orcid          = orcidData.orcidId;
         profileUpdate.orcid_verified = true;
         profileUpdate.institution    = orcidData.affiliation;
+        if (orcidData.rawData) {
+          const { employments, educations } = parseOrcidForProfile(orcidData.rawData);
+          if (employments.length) profileUpdate.work_history = employments.sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+          if (educations.length)  profileUpdate.education    = educations.sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+        }
       }
-      await supabase.from('profiles').update(profileUpdate).eq('id', userId);
+      // Upsert handles the case where the trigger hasn't fired yet
+      await supabase.from('profiles').upsert({ id: userId, ...profileUpdate });
 
       await supabase.from('invite_codes').update({
         claimed_by: userId,
@@ -223,13 +280,23 @@ export default function AuthScreen({ onAuth }) {
       const userId = authData.user?.id;
       if (!userId) throw new Error('Account creation failed');
 
-      await supabase.from('profiles').update({
+      // Brief wait for the auth trigger to create the profile row
+      await new Promise(r => setTimeout(r, 800));
+
+      const { employments, educations } = orcidData.rawData ? parseOrcidForProfile(orcidData.rawData) : { employments:[], educations:[] };
+      const profileUpdate = {
+        id:             userId,
         name:           orcidData.name,
         institution:    orcidData.affiliation,
         orcid:          orcidData.orcidId,
         orcid_verified: true,
         signup_method:  'orcid',
-      }).eq('id', userId);
+        card_email:     signupEmail,
+      };
+      if (employments.length) profileUpdate.work_history = employments.sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+      if (educations.length)  profileUpdate.education    = educations.sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+
+      await supabase.from('profiles').upsert(profileUpdate);
 
       await supabase.rpc('generate_user_invites', { user_id: userId, count: 5 });
 

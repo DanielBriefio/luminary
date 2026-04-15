@@ -306,10 +306,16 @@ export default function App() {
                 <div style={{height:4,background:T.s3,borderRadius:2,marginTop:5,overflow:"hidden"}}><div style={{height:"100%",width:"5%",background:`linear-gradient(90deg,${T.v},${T.bl})`,borderRadius:2}}/></div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:9}}>
-                <Av color={profile?.avatar_color||"me"} size={32} name={profile?.name} url={profile?.avatar_url||""}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.name||user.email?.split('@')[0]}</div>
-                  <div style={{fontSize:10,color:T.mu,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.institution||user.email}</div>
+                <div onClick={()=>setScreen('profile')}
+                  title="My Profile"
+                  style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,cursor:"pointer",borderRadius:8,padding:"3px 4px",margin:"-3px -4px",transition:"background .15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.s2}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <Av color={profile?.avatar_color||"me"} size={32} name={profile?.name} url={profile?.avatar_url||""}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.name||user.email?.split('@')[0]}</div>
+                    <div style={{fontSize:10,color:T.mu,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.institution||user.email}</div>
+                  </div>
                 </div>
                 <button onClick={signOut} title="Sign out" style={{fontSize:14,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0}}>↩</button>
               </div>

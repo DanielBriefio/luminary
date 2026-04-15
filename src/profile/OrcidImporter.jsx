@@ -71,16 +71,43 @@ export default function OrcidImporter({ user, profile, setProfile, onClose }) {
         const doi = (ws['external-ids']?.['external-id']||[]).find(x=>x['external-id-type']==='doi');
         const pmid= (ws['external-ids']?.['external-id']||[]).find(x=>x['external-id-type']==='pmid');
         const year= ws['publication-date']?.year?.value || '';
+        // Map ORCID work type to our pub_type
+        const typeMap = { 'journal-article':'journal', 'conference-paper':'conference', 'conference-poster':'poster',
+          'lecture-speech':'lecture', 'book-chapter':'book', 'review-article':'review', 'preprint':'preprint' };
+        const pub_type = typeMap[ws.type] || 'other';
         return {
-          title:   ws.title?.title?.value || '',
-          journal: ws['journal-title']?.value || '',
+          title:    ws.title?.title?.value || '',
+          journal:  ws['journal-title']?.value || '',
           year,
-          doi:     doi?.['external-id-value'] || '',
-          pmid:    pmid?.['external-id-value'] || '',
-          authors: '',
-          source:  'orcid',
+          doi:      doi?.['external-id-value'] || '',
+          pmid:     pmid?.['external-id-value'] || '',
+          authors:  '',
+          pub_type,
+          source:   'orcid',
         };
       }).filter(p => p && p.title);
+
+      // Peer reviews
+      const prGroups = data['activities-summary']?.['peer-reviews']?.group || [];
+      const peerReviews = prGroups.flatMap(g =>
+        (g['peer-review-group'] || []).flatMap(prg =>
+          (prg['peer-review-summary'] || []).map(pr => {
+            const year = pr['completion-date']?.year?.value || '';
+            const org  = pr['convening-organization']?.name || '';
+            if (!org && !year) return null;
+            return {
+              title:    `Peer Review${org ? ` — ${org}` : ''}`,
+              journal:  org,
+              year,
+              doi:      '',
+              pmid:     '',
+              authors:  '',
+              pub_type: 'peer_review',
+              source:   'orcid',
+            };
+          })
+        )
+      ).filter(Boolean);
 
       const existingWH  = profile?.work_history || [];
       const existingEdu = profile?.education    || [];
@@ -88,15 +115,18 @@ export default function OrcidImporter({ user, profile, setProfile, onClose }) {
       const whResult  = deduplicateSectionFuzzy(employments, existingWH,  scoreWorkMatch, 'work');
       const eduResult = deduplicateSectionFuzzy(educations,  existingEdu, scoreEduMatch,  'edu');
 
+      const allPubs = [...publications, ...peerReviews];
+
       setPreview({
         orcidId: id,
         given, family, bio, keywords,
-        employments, educations, publications,
+        employments, educations, publications: allPubs,
         stats: {
           newWH:     whResult.newItems.length,
           updatedWH: whResult.conflicts.length + (employments.length - whResult.newItems.length - whResult.conflicts.length),
           newEdu:    eduResult.newItems.length,
           newPubs:   publications.length,
+          newPeerReviews: peerReviews.length,
         }
       });
       setStep('preview');
@@ -165,7 +195,7 @@ export default function OrcidImporter({ user, profile, setProfile, onClose }) {
       const toInsert = publications.filter(p => p.title && !(p.doi && existingDois.has(p.doi.toLowerCase())));
       if (toInsert.length) {
         await supabase.from('publications').insert(
-          toInsert.map(p=>({ user_id:user.id, title:p.title, journal:p.journal, year:p.year, doi:p.doi, pmid:p.pmid, authors:'', source:'orcid' }))
+          toInsert.map(p=>({ user_id:user.id, title:p.title, journal:p.journal, year:p.year, doi:p.doi, pmid:p.pmid||'', authors:'', pub_type:p.pub_type||'journal', source:'orcid' }))
         );
       }
     }
@@ -239,6 +269,7 @@ export default function OrcidImporter({ user, profile, setProfile, onClose }) {
               {stats.updatedWH>0&&<span style={{background:'rgba(255,255,255,.8)',border:`1px solid rgba(16,185,129,.3)`,borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:600}}>~{stats.updatedWH} entries enriched</span>}
               {stats.newEdu>0&&<span style={{background:'rgba(255,255,255,.8)',border:`1px solid rgba(16,185,129,.3)`,borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:600}}>+{stats.newEdu} new education entries</span>}
               {stats.newPubs>0&&<span style={{background:'rgba(255,255,255,.8)',border:`1px solid rgba(16,185,129,.3)`,borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:600}}>+{stats.newPubs} publications (deduped)</span>}
+              {stats.newPeerReviews>0&&<span style={{background:'rgba(255,255,255,.8)',border:`1px solid rgba(16,185,129,.3)`,borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:600}}>+{stats.newPeerReviews} peer reviews</span>}
               {totalNew===0&&stats.updatedWH===0&&<span style={{fontSize:12.5,color:T.mu}}>Everything is already up to date — no new data found.</span>}
             </div>
           </div>
