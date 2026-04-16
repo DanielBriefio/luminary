@@ -23,7 +23,7 @@ import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
-import Footer from './components/Footer';
+
 import OrcidImporter from './profile/OrcidImporter';
 
 // Detect public profile route: /p/:slug
@@ -409,7 +409,7 @@ export default function App() {
                 )}
               </button>
             </div>
-            <Footer sidebar/>
+
           </div>
         )}
 
