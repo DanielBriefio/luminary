@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { T, ORCID_CLIENT_ID, ORCID_AUTHORIZE_URL, ORCID_REDIRECT_URI } from '../lib/constants';
 import Inp from '../components/Inp';
 import Btn from '../components/Btn';
+import Footer from '../components/Footer';
 
 const inputStyle = {
   width: '100%', background: T.s2, border: `1.5px solid ${T.bdr}`,
@@ -38,16 +39,22 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [signupLoading,  setSignupLoading]  = useState(false);
 
   // Invite path
-  const [inviteCode,       setInviteCode]       = useState('');
-  const [inviteValid,      setInviteValid]      = useState(null); // null | true | false
-  const [inviteChecking,   setInviteChecking]   = useState(false);
-  const [inviteError,      setInviteError]      = useState('');
+  const [inviteCode,        setInviteCode]        = useState('');
+  const [inviteValid,       setInviteValid]       = useState(null); // null | true | false
+  const [inviteChecking,    setInviteChecking]    = useState(false);
+  const [inviteError,       setInviteError]       = useState('');
   const [inviteRateLimited, setInviteRateLimited] = useState(false);
+
+  // Consent (both signup paths)
+  const [consentTerms,         setConsentTerms]         = useState(false);
+  const [consentNotifications, setConsentNotifications] = useState(true);
+  const [consentMarketing,     setConsentMarketing]     = useState(false);
 
   const goToMode = (m) => {
     setMode(m); setError(''); setSuccess('');
     setSignupPath(null);
     setInviteCode(''); setInviteValid(null); setInviteError(''); setInviteRateLimited(false);
+    setConsentTerms(false); setConsentNotifications(true); setConsentMarketing(false);
     setSignupEmail(''); setSignupPassword(''); setSignupName(''); setSignupError('');
   };
 
@@ -137,15 +144,20 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
       // 3. Populate profile with ORCID data
       await supabase.from('profiles').update({
-        name:           pending.name,
-        bio:            pending.bio,
-        institution:    pending.institution,
-        title:          pending.title,
-        orcid:          pending.orcid_id,
-        orcid_verified: true,
-        signup_method:  'orcid',
-        work_history:   JSON.parse(pending.work_history || '[]'),
-        education:      JSON.parse(pending.education    || '[]'),
+        name:                 pending.name,
+        bio:                  pending.bio,
+        institution:          pending.institution,
+        title:                pending.title,
+        orcid:                pending.orcid_id,
+        orcid_verified:       true,
+        signup_method:        'orcid',
+        work_history:         JSON.parse(pending.work_history || '[]'),
+        education:            JSON.parse(pending.education    || '[]'),
+        email_notifications:  consentNotifications,
+        email_marketing:      consentMarketing,
+        marketing_consent_at: consentMarketing ? new Date().toISOString() : null,
+        terms_accepted_at:    new Date().toISOString(),
+        privacy_accepted_at:  new Date().toISOString(),
       }).eq('id', userId);
 
       // 4. Insert publications
@@ -203,10 +215,15 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       });
 
       await supabase.from('profiles').upsert({
-        id:            userId,
-        name:          signupName,
-        signup_method: 'invite',
-        card_email:    signupEmail,
+        id:                   userId,
+        name:                 signupName,
+        signup_method:        'invite',
+        card_email:           signupEmail,
+        email_notifications:  consentNotifications,
+        email_marketing:      consentMarketing,
+        marketing_consent_at: consentMarketing ? new Date().toISOString() : null,
+        terms_accepted_at:    new Date().toISOString(),
+        privacy_accepted_at:  new Date().toISOString(),
       });
 
       if (authData.session) {
@@ -254,8 +271,14 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           <div style={{ color: T.ro, fontSize: 12.5, marginTop: 8 }}>{signupError}</div>
         )}
 
+        <ConsentBlock
+          consentTerms={consentTerms} setConsentTerms={setConsentTerms}
+          consentNotifications={consentNotifications} setConsentNotifications={setConsentNotifications}
+          consentMarketing={consentMarketing} setConsentMarketing={setConsentMarketing}
+        />
+
         <Btn variant="s" onClick={handleOrcidSignupComplete}
-          disabled={signupLoading || !signupEmail || !signupPassword}
+          disabled={signupLoading || !signupEmail || !signupPassword || !consentTerms}
           style={{ width: '100%', marginTop: 12, background: T.gr, borderColor: T.gr }}>
           {signupLoading ? 'Creating account...' : 'Create account →'}
         </Btn>
@@ -376,10 +399,16 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           🔬 Once signed in, you can import your full ORCID profile — including work history and publications — from <strong>My Profile → Import → ORCID</strong>.
         </div>
 
+        <ConsentBlock
+          consentTerms={consentTerms} setConsentTerms={setConsentTerms}
+          consentNotifications={consentNotifications} setConsentNotifications={setConsentNotifications}
+          consentMarketing={consentMarketing} setConsentMarketing={setConsentMarketing}
+        />
+
         {signupError && <div style={{ color: T.ro, fontSize: 12.5, marginTop: 4, marginBottom: 8 }}>{signupError}</div>}
 
         <Btn variant="s" onClick={handleInviteSignup}
-          disabled={signupLoading || !signupEmail || !signupPassword || !signupName}
+          disabled={signupLoading || !signupEmail || !signupPassword || !signupName || !consentTerms}
           style={{ width: '100%' }}>
           {signupLoading ? 'Creating account…' : 'Create account →'}
         </Btn>
@@ -388,6 +417,39 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
     return null;
   };
+
+  // ── Shared consent block (used in both signup paths) ─────────────────────
+  const ConsentBlock = ({ consentTerms, setConsentTerms, consentNotifications, setConsentNotifications, consentMarketing, setConsentMarketing }) => (
+    <div style={{ marginTop: 16, padding: '14px 16px', background: T.s2, borderRadius: 12, border: `1px solid ${T.bdr}` }}>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+        <input type="checkbox" checked={consentTerms} onChange={e => setConsentTerms(e.target.checked)}
+          style={{ marginTop: 2, accentColor: T.v, flexShrink: 0 }}/>
+        <span style={{ fontSize: 12.5, color: T.text, lineHeight: 1.55 }}>
+          I agree to the{' '}
+          <a href="https://luminary.to/terms" target="_blank" rel="noopener noreferrer" style={{ color: T.v, fontWeight: 600 }}>Terms of Service</a>
+          {' '}and{' '}
+          <a href="https://luminary.to/privacy" target="_blank" rel="noopener noreferrer" style={{ color: T.v, fontWeight: 600 }}>Privacy Policy</a>
+          <span style={{ color: T.ro }}> *</span>
+        </span>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+        <input type="checkbox" checked={consentNotifications} onChange={e => setConsentNotifications(e.target.checked)}
+          style={{ marginTop: 2, accentColor: T.v, flexShrink: 0 }}/>
+        <span style={{ fontSize: 12.5, color: T.text, lineHeight: 1.55 }}>
+          Send me email notifications for likes, comments, and new followers
+          <span style={{ color: T.mu, fontSize: 11 }}> (you can change this anytime)</span>
+        </span>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+        <input type="checkbox" checked={consentMarketing} onChange={e => setConsentMarketing(e.target.checked)}
+          style={{ marginTop: 2, accentColor: T.v, flexShrink: 0 }}/>
+        <span style={{ fontSize: 12.5, color: T.text, lineHeight: 1.55 }}>
+          Keep me updated on new Luminary features and research community news
+          <span style={{ color: T.mu, fontSize: 11 }}> (max 2 emails per month)</span>
+        </span>
+      </label>
+    </div>
+  );
 
   // ── Main render ───────────────────────────────────────────────────────────
   return (
@@ -468,6 +530,8 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
         {/* Sign-up flow (including ORCID completion) */}
         {(mode === 'signup' || showOrcidEmailForm) && renderSignup()}
+
+        <Footer minimal/>
       </div>
     </div>
   );

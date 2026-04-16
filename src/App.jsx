@@ -22,7 +22,8 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
-import SettingsScreen from './screens/SettingsScreen';
+import AccountSettingsScreen from './screens/AccountSettingsScreen';
+import Footer from './components/Footer';
 import OrcidImporter from './profile/OrcidImporter';
 
 // Detect public profile route: /p/:slug
@@ -254,13 +255,14 @@ export default function App() {
     <>
       {fonts}
       {showCardQR && profile && <CardQROverlay profile={profile} onClose={()=>setShowCardQR(false)}/>}
-      {/* Settings modal */}
+      {/* Account Settings panel */}
       {showSettings && (
-        <SettingsScreen
+        <AccountSettingsScreen
           user={user}
-          onClose={()=>setShowSettings(false)}
-          onDeleted={()=>{ setShowSettings(false); setScreen('feed'); }}
-          onSignOut={()=>{ setShowSettings(false); signOut(); }}
+          profile={profile}
+          setProfile={setProfile}
+          onClose={() => setShowSettings(false)}
+          onSignOut={() => { setShowSettings(false); signOut(); }}
         />
       )}
       {/* ORCID import offer modal */}
@@ -407,6 +409,7 @@ export default function App() {
                 )}
               </button>
             </div>
+            <Footer minimal/>
           </div>
         )}
 
