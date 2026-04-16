@@ -39,7 +39,7 @@ serve(async (req) => {
       { p_ip: ip, p_window_minutes: WINDOW_MINUTES, p_max: MAX_IP_ATTEMPTS }
     );
 
-    if (rlErr) console.error("Rate limit RPC error:", rlErr.message);
+    console.log("rate_limit_check", { blocked, rlErr: rlErr?.message });
 
     if (blocked) {
       return new Response(
