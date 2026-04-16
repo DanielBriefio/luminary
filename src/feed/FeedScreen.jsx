@@ -17,8 +17,82 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     if(saved) return saved;
     return (profile?.topic_interests?.length>0)?'personalised':'chronological';
   });
+  const [potw, setPotw] = useState(null); // { title, journal, year, doi, discussCount }
 
   useEffect(()=>{ localStorage.setItem('luminary_feed_mode',feedMode); },[feedMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Find the most-engaged paper post with a DOI in the last 30 days
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: papers } = await supabase
+        .from('posts_with_meta')
+        .select('paper_doi, paper_title, paper_journal, paper_year, like_count, comment_count')
+        .eq('post_type', 'paper')
+        .not('paper_doi', 'is', null)
+        .gte('created_at', since)
+        .order('like_count', { ascending: false })
+        .limit(20);
+
+      if (cancelled || !papers?.length) return;
+
+      // Pick the highest (likes + comments) entry, deduped by DOI
+      const seen = new Set();
+      const deduped = papers.filter(p => {
+        if (seen.has(p.paper_doi)) return false;
+        seen.add(p.paper_doi);
+        return true;
+      });
+      const best = deduped.reduce((a, b) =>
+        (b.like_count + b.comment_count) > (a.like_count + a.comment_count) ? b : a
+      );
+
+      // Count all posts discussing this DOI
+      const { count } = await supabase
+        .from('posts')
+        .select('id', { count: 'exact', head: true })
+        .eq('paper_doi', best.paper_doi);
+
+      if (cancelled) return;
+
+      // If we already have title+journal from the post, skip CrossRef
+      if (best.paper_title && best.paper_journal) {
+        setPotw({
+          doi: best.paper_doi,
+          title: best.paper_title,
+          journal: best.paper_journal,
+          year: best.paper_year,
+          discussCount: count || 1,
+        });
+        return;
+      }
+
+      // Otherwise fetch from CrossRef
+      try {
+        const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(best.paper_doi)}`);
+        if (!res.ok || cancelled) return;
+        const { message: m } = await res.json();
+        if (cancelled) return;
+        setPotw({
+          doi: best.paper_doi,
+          title: m.title?.[0] || best.paper_title || 'Untitled',
+          journal: m['container-title']?.[0] || best.paper_journal || '',
+          year: m.published?.['date-parts']?.[0]?.[0] || best.paper_year || '',
+          discussCount: count || 1,
+        });
+      } catch {
+        if (!cancelled) setPotw({
+          doi: best.paper_doi,
+          title: best.paper_title || 'Untitled',
+          journal: best.paper_journal || '',
+          year: best.paper_year || '',
+          discussCount: count || 1,
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const withSlugs = useCallback(async (data) => {
     if (!data?.length) return data || [];
@@ -249,12 +323,30 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                   <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",color:T.mu,marginBottom:11,fontWeight:700}}>🎉 Founding Fellows</div>
                   <div style={{fontSize:12,color:T.mu,lineHeight:1.7}}>You're one of the first people on Luminary. Every post you share helps build the scientific community we've been missing.</div>
                 </div>
-                <div style={{background:`linear-gradient(135deg,${T.v2},${T.bl2})`,border:"1px solid rgba(108,99,255,.15)",borderRadius:14,padding:15}}>
-                  <div style={{fontSize:12,fontWeight:700,color:T.v,marginBottom:6}}>Paper of the Week</div>
-                  <div style={{fontSize:11.5,fontWeight:700,lineHeight:1.4,marginBottom:5}}>GLP-1 agonists and cardiovascular outcomes in T2D</div>
-                  <div style={{fontSize:10,color:T.mu,marginBottom:7}}>NEJM · IF 91 · Altmetric 312</div>
-                  <div style={{fontSize:11,color:T.v,fontWeight:700}}>342 researchers discussing →</div>
-                </div>
+                {potw && (
+                  <button
+                    onClick={() => onViewPaper && onViewPaper(potw.doi)}
+                    style={{
+                      background:`linear-gradient(135deg,${T.v2},${T.bl2})`,
+                      border:"1px solid rgba(108,99,255,.15)",borderRadius:14,padding:15,
+                      textAlign:'left', width:'100%', cursor:'pointer', fontFamily:'inherit',
+                      transition:'box-shadow .15s',
+                    }}
+                    onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 18px rgba(108,99,255,.18)'}
+                    onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}
+                  >
+                    <div style={{fontSize:10,fontWeight:700,color:T.v,marginBottom:6,letterSpacing:'.06em',textTransform:'uppercase'}}>Paper of the Week</div>
+                    <div style={{fontSize:12,fontWeight:700,lineHeight:1.45,marginBottom:5,color:T.text}}>
+                      {potw.title.length > 90 ? potw.title.slice(0,90)+'…' : potw.title}
+                    </div>
+                    <div style={{fontSize:10,color:T.mu,marginBottom:8}}>
+                      {[potw.journal, potw.year].filter(Boolean).join(' · ')}
+                    </div>
+                    <div style={{fontSize:11,color:T.v,fontWeight:700}}>
+                      {potw.discussCount} {potw.discussCount === 1 ? 'researcher' : 'researchers'} discussing →
+                    </div>
+                  </button>
+                )}
               </div>
             )}
           </div>

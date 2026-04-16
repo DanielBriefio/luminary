@@ -112,6 +112,34 @@ export default function SettingsScreen({ user, onClose, onDeleted, onSignOut }) 
             </div>
           </button>
 
+          {/* Legal links */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { label: 'Privacy Policy',   href: 'https://luminary.to/privacy' },
+              { label: 'Terms of Service', href: 'https://luminary.to/terms' },
+              { label: 'Cookie Policy',    href: 'https://luminary.to/cookies' },
+            ].map(({ label, href }) => (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '11px 8px', borderRadius: 12,
+                  border: `1.5px solid ${T.bdr}`, background: T.w,
+                  color: T.mu, fontSize: 11.5, fontWeight: 600,
+                  textDecoration: 'none', fontFamily: 'inherit',
+                  transition: 'background .15s', textAlign: 'center',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = T.s2}
+                onMouseLeave={e => e.currentTarget.style.background = T.w}
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+
           {/* Divider */}
           <div style={{ height: 1, background: T.bdr, margin: '8px 0' }}/>
 
