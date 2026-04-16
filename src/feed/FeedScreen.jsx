@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
-import Av from '../components/Av';
+
 import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
 import { useWindowSize } from '../lib/useWindowSize';
@@ -310,15 +310,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
             </div>
             {!isMobile && (
               <div>
-                {profile&&(
-                  <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:15,boxShadow:"0 2px 12px rgba(108,99,255,.07)",marginBottom:12}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                      <Av color={profile.avatar_color||"me"} size={42} name={profile.name}/>
-                      <div><div style={{fontSize:13,fontWeight:700}}>{profile.name||"Complete your profile"}</div><div style={{fontSize:11,color:T.mu}}>{profile.institution||"Add your institution"}</div></div>
-                    </div>
-                    {!profile.name&&<div style={{fontSize:12,color:T.v,fontWeight:600,marginTop:4,cursor:"pointer"}}>→ Edit your profile to get started</div>}
-                  </div>
-                )}
                 <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:15,boxShadow:"0 2px 12px rgba(108,99,255,.07)",marginBottom:12}}>
                   <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",color:T.mu,marginBottom:11,fontWeight:700}}>🎉 Founding Fellows</div>
                   <div style={{fontSize:12,color:T.mu,lineHeight:1.7}}>You're one of the first people on Luminary. Every post you share helps build the scientific community we've been missing.</div>
