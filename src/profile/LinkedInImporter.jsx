@@ -137,38 +137,37 @@ export default function LinkedInImporter({ user, profile, setProfile, onClose })
   );
 
   if (step==='instructions') return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:'20px 0',overflowY:'auto'}}>
-      <div style={{background:T.w,borderRadius:18,padding:32,maxWidth:560,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
-        <div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,marginBottom:8}}>Import from LinkedIn</div>
-        <div style={{fontSize:13,color:T.mu,marginBottom:16,lineHeight:1.7}}>
-          LinkedIn's API doesn't give third parties access to your full profile. Instead, use LinkedIn's built-in data export — it gives you everything: work history, education, publications, patents, skills, and more.
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+      <div style={{background:T.w,borderRadius:18,padding:'24px 28px',maxWidth:740,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
+        <div style={{fontFamily:"'DM Serif Display',serif",fontSize:22,marginBottom:6}}>Import from LinkedIn</div>
+        <div style={{fontSize:12.5,color:T.mu,marginBottom:14,lineHeight:1.6}}>
+          LinkedIn's API doesn't give third parties access to your full profile. Use LinkedIn's built-in data export — it includes everything: work history, education, publications, patents, skills, and more.
         </div>
 
-        <div style={{background:T.gr2,border:`1px solid rgba(16,185,129,.25)`,borderRadius:10,padding:'13px 16px',marginBottom:20}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.gr,marginBottom:6}}>💡 Get the full dataset for best results</div>
-          <div style={{fontSize:12.5,color:T.text,lineHeight:1.7,marginBottom:10}}>
-            We recommend downloading <strong>all</strong> your LinkedIn data in one go. This gives Luminary your complete professional history including patents, publications, and certifications that make a researcher's profile stand out.
-          </div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        <div style={{background:T.gr2,border:`1px solid rgba(16,185,129,.25)`,borderRadius:10,padding:'10px 14px',marginBottom:16}}>
+          <div style={{fontSize:12.5,fontWeight:700,color:T.gr,marginBottom:5}}>💡 Get the full dataset for best results</div>
+          <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
             {['Profile','Positions','Education','Volunteering','Organizations','Honors & Awards','Languages','Skills','Patents','Publications'].map(s=>(
-              <span key={s} style={{background:T.w,border:`1px solid rgba(16,185,129,.3)`,borderRadius:6,padding:'2px 9px',fontSize:11.5,fontWeight:600,color:T.gr}}>✓ {s}</span>
+              <span key={s} style={{background:T.w,border:`1px solid rgba(16,185,129,.3)`,borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:600,color:T.gr}}>✓ {s}</span>
             ))}
           </div>
         </div>
 
-        {[
-          {n:1, t:'Go to LinkedIn Settings', d:<>Click your photo → <strong>Settings & Privacy → Data Privacy → Get a copy of your data</strong></>},
-          {n:2, t:'Select the full data archive', d:<>Select <strong>"Download larger data archive, including connections, verifications, contacts, account history, and information we infer about you based on your profile and activity."</strong> This is the first option and includes everything — positions, education, skills, patents, publications and more. Click <strong>Request archive</strong>.</>},
-          {n:3, t:'Download the ZIP', d:'LinkedIn emails you a download link — usually within 10–30 minutes for the full archive. Download and save the ZIP file.'},
-          {n:4, t:'Upload it here', d:"Everything is parsed locally in your browser. The file never leaves your device or reaches Luminary's servers."},
-        ].map(s=>(
-          <div key={s.n} style={{display:'flex',gap:14,marginBottom:14,alignItems:'flex-start'}}>
-            <div style={{width:28,height:28,borderRadius:'50%',background:T.v,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flexShrink:0}}>{s.n}</div>
-            <div><div style={{fontSize:13,fontWeight:700,marginBottom:2}}>{s.t}</div><div style={{fontSize:12.5,color:T.mu,lineHeight:1.65}}>{s.d}</div></div>
-          </div>
-        ))}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+          {[
+            {n:1, t:'Go to LinkedIn Settings', d:<>Click your photo → <strong>Settings & Privacy → Data Privacy → Get a copy of your data</strong></>},
+            {n:2, t:'Select the full data archive', d:<>Select <strong>"Download larger data archive"</strong> (first option). Click <strong>Request archive</strong>.</>},
+            {n:3, t:'Download the ZIP', d:'LinkedIn emails a download link — usually within 10–30 minutes. Download and save the ZIP file.'},
+            {n:4, t:'Upload it here', d:"Everything is parsed locally in your browser. The file never leaves your device."},
+          ].map(s=>(
+            <div key={s.n} style={{display:'flex',gap:10,alignItems:'flex-start',background:T.s2,borderRadius:10,padding:'10px 12px'}}>
+              <div style={{width:24,height:24,borderRadius:'50%',background:T.v,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12,flexShrink:0}}>{s.n}</div>
+              <div><div style={{fontSize:12.5,fontWeight:700,marginBottom:2}}>{s.t}</div><div style={{fontSize:12,color:T.mu,lineHeight:1.5}}>{s.d}</div></div>
+            </div>
+          ))}
+        </div>
 
-        <div style={{background:T.v2,border:`1px solid rgba(108,99,255,.15)`,borderRadius:10,padding:'10px 14px',fontSize:12,color:T.v,marginBottom:20}}>
+        <div style={{background:T.v2,border:`1px solid rgba(108,99,255,.15)`,borderRadius:10,padding:'8px 14px',fontSize:12,color:T.v,marginBottom:16}}>
           🔒 Parsed locally — the ZIP never leaves your device or goes to Luminary's servers.
         </div>
         <div style={{display:'flex',gap:9,justifyContent:'flex-end'}}>

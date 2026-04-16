@@ -26,16 +26,12 @@ export default function SafeHtml({ html, tags, onTagClick }) {
         <div
           className="rc"
           dangerouslySetInnerHTML={{ __html: sanitiseHtml(html) }}/>
-        {tags?.length>0&&<div style={{marginTop:8}}>
-          {tags.map(t=><span key={t} onClick={()=>onTagClick&&onTagClick(t)} style={{color:'#6c63ff',fontWeight:600,cursor:"pointer",marginRight:4}}>{t}</span>)}
-        </div>}
       </div>
     );
   }
   return (
     <div style={{fontSize:13,lineHeight:1.7,marginBottom:10}}>
       <Linkify text={html}/>
-      {" "}{tags?.map(t=><span key={t} onClick={()=>onTagClick&&onTagClick(t)} style={{color:T.v,fontWeight:600,cursor:"pointer"}}>{t} </span>)}
     </div>
   );
 }
