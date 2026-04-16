@@ -409,7 +409,7 @@ export default function App() {
                 )}
               </button>
             </div>
-            <Footer minimal/>
+            <Footer sidebar/>
           </div>
         )}
 

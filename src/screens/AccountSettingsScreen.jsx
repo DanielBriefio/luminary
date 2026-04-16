@@ -255,6 +255,38 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
             </div>
           </div>
 
+          {/* Feedback */}
+          <SectionHead label="Feedback"/>
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Send us feedback</div>
+            <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 10, lineHeight: 1.6 }}>
+              Bug reports, feature requests, or anything else — we read every message.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <a href="mailto:hello@luminary.to?subject=Bug report" style={{
+                fontSize: 12.5, fontWeight: 600, color: T.v,
+                textDecoration: 'none', padding: '7px 14px',
+                border: `1.5px solid ${T.bdr}`, borderRadius: 9,
+              }}>
+                🐛 Report a bug
+              </a>
+              <a href="mailto:hello@luminary.to?subject=Feature request" style={{
+                fontSize: 12.5, fontWeight: 600, color: T.v,
+                textDecoration: 'none', padding: '7px 14px',
+                border: `1.5px solid ${T.bdr}`, borderRadius: 9,
+              }}>
+                💡 Request a feature
+              </a>
+              <a href="mailto:hello@luminary.to" style={{
+                fontSize: 12.5, fontWeight: 600, color: T.v,
+                textDecoration: 'none', padding: '7px 14px',
+                border: `1.5px solid ${T.bdr}`, borderRadius: 9,
+              }}>
+                ✉️ General feedback
+              </a>
+            </div>
+          </div>
+
           {/* Danger zone */}
           <SectionHead label="Danger zone"/>
           {!confirmDelete ? (
