@@ -24,46 +24,43 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Find the most-engaged paper post with a DOI in the last 30 days
-      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      // Fetch all paper posts with a DOI to aggregate comments across posts per DOI
       const { data: papers } = await supabase
         .from('posts_with_meta')
-        .select('paper_doi, paper_title, paper_journal, paper_year, like_count, comment_count')
+        .select('paper_doi, paper_title, paper_journal, paper_year, comment_count')
         .eq('post_type', 'paper')
         .not('paper_doi', 'is', null)
-        .gte('created_at', since)
-        .order('like_count', { ascending: false })
-        .limit(20);
+        .limit(200);
 
       if (cancelled || !papers?.length) return;
 
-      // Pick the highest (likes + comments) entry, deduped by DOI
-      const seen = new Set();
-      const deduped = papers.filter(p => {
-        if (seen.has(p.paper_doi)) return false;
-        seen.add(p.paper_doi);
-        return true;
-      });
-      const best = deduped.reduce((a, b) =>
-        (b.like_count + b.comment_count) > (a.like_count + a.comment_count) ? b : a
-      );
+      // Aggregate total comments per DOI; keep the most metadata-complete post per DOI
+      const doiMap = {};
+      for (const p of papers) {
+        const d = p.paper_doi;
+        if (!doiMap[d]) {
+          doiMap[d] = { ...p, totalComments: 0 };
+        }
+        doiMap[d].totalComments += p.comment_count || 0;
+        // Prefer whichever row has more metadata
+        if (!doiMap[d].paper_title && p.paper_title) Object.assign(doiMap[d], p);
+      }
 
-      // Count all posts discussing this DOI
-      const { count } = await supabase
-        .from('posts')
-        .select('id', { count: 'exact', head: true })
-        .eq('paper_doi', best.paper_doi);
+      // Pick the DOI with the most total comments
+      const best = Object.values(doiMap).reduce((a, b) =>
+        b.totalComments > a.totalComments ? b : a
+      );
 
       if (cancelled) return;
 
-      // If we already have title+journal from the post, skip CrossRef
+      // If we already have title + journal from the posts, skip CrossRef
       if (best.paper_title && best.paper_journal) {
         setPotw({
           doi: best.paper_doi,
           title: best.paper_title,
           journal: best.paper_journal,
           year: best.paper_year,
-          discussCount: count || 1,
+          discussCount: best.totalComments,
         });
         return;
       }
@@ -79,7 +76,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
           title: m.title?.[0] || best.paper_title || 'Untitled',
           journal: m['container-title']?.[0] || best.paper_journal || '',
           year: m.published?.['date-parts']?.[0]?.[0] || best.paper_year || '',
-          discussCount: count || 1,
+          discussCount: best.totalComments,
         });
       } catch {
         if (!cancelled) setPotw({
@@ -87,7 +84,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
           title: best.paper_title || 'Untitled',
           journal: best.paper_journal || '',
           year: best.paper_year || '',
-          discussCount: count || 1,
+          discussCount: best.totalComments,
         });
       }
     })();
@@ -334,7 +331,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                       {[potw.journal, potw.year].filter(Boolean).join(' · ')}
                     </div>
                     <div style={{fontSize:11,color:T.v,fontWeight:700}}>
-                      {potw.discussCount} {potw.discussCount === 1 ? 'researcher' : 'researchers'} discussing →
+                      {potw.discussCount} {potw.discussCount === 1 ? 'comment' : 'comments'} across all posts →
                     </div>
                   </button>
                 )}
