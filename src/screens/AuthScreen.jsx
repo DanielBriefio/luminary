@@ -38,15 +38,16 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [signupLoading,  setSignupLoading]  = useState(false);
 
   // Invite path
-  const [inviteCode,     setInviteCode]     = useState('');
-  const [inviteValid,    setInviteValid]    = useState(null); // null | true | false
-  const [inviteChecking, setInviteChecking] = useState(false);
-  const [inviteError,    setInviteError]    = useState('');
+  const [inviteCode,       setInviteCode]       = useState('');
+  const [inviteValid,      setInviteValid]      = useState(null); // null | true | false
+  const [inviteChecking,   setInviteChecking]   = useState(false);
+  const [inviteError,      setInviteError]      = useState('');
+  const [inviteRateLimited, setInviteRateLimited] = useState(false);
 
   const goToMode = (m) => {
     setMode(m); setError(''); setSuccess('');
     setSignupPath(null);
-    setInviteCode(''); setInviteValid(null); setInviteError('');
+    setInviteCode(''); setInviteValid(null); setInviteError(''); setInviteRateLimited(false);
     setSignupEmail(''); setSignupPassword(''); setSignupName(''); setSignupError('');
   };
 
@@ -70,6 +71,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
   // ── Invite code validation (via Edge Function — brute-force protected) ────
   const validateInviteCode = async () => {
+    if (inviteRateLimited) return;
     setInviteChecking(true);
     setInviteError('');
 
@@ -78,9 +80,12 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         body: { code: inviteCode.trim().toUpperCase() }
       });
 
+      const reason = data?.reason || (error ? 'Validation failed. Please try again.' : 'Code not found or already used.');
+
       if (error || !data?.valid) {
         setInviteValid(false);
-        setInviteError(data?.reason || 'Code not found or already used.');
+        setInviteError(reason);
+        if (reason.toLowerCase().includes('too many')) setInviteRateLimited(true);
       } else {
         setInviteValid(true);
         setSignupPath('invite-details');
@@ -329,10 +334,11 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
         <input
           value={inviteCode}
-          onChange={e => { setInviteCode(e.target.value.toUpperCase().trim()); setInviteValid(null); setInviteError(''); }}
+          onChange={e => { if (inviteRateLimited) return; setInviteCode(e.target.value.toUpperCase().trim()); setInviteValid(null); setInviteError(''); }}
           onKeyDown={e => { if (e.key === 'Enter' && inviteCode.length >= 6) validateInviteCode(); }}
           placeholder="LM-XXXXXXXX"
-          style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 16, letterSpacing: '.1em', textAlign: 'center' }}
+          disabled={inviteRateLimited}
+          style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 16, letterSpacing: '.1em', textAlign: 'center', opacity: inviteRateLimited ? 0.5 : 1 }}
         />
         {inviteError && (
           <div style={{ color: T.ro, fontSize: 12.5, marginTop: 6 }}>
@@ -345,7 +351,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           <div style={{ color: T.gr, fontSize: 12.5, fontWeight: 600, marginTop: 6 }}>✓ Valid invite code</div>
         )}
         <Btn variant="s" onClick={validateInviteCode}
-          disabled={inviteCode.length < 6 || inviteChecking}
+          disabled={inviteCode.length < 6 || inviteChecking || inviteRateLimited}
           style={{ width: '100%', marginTop: 12 }}>
           {inviteChecking ? 'Checking…' : 'Verify code →'}
         </Btn>
