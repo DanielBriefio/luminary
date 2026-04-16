@@ -73,6 +73,10 @@ export default function App() {
   const [copiedCode,setCopiedCode]=useState(null);
   const [showSettings,setShowSettings]=useState(false);
   const [showOrcidImport,setShowOrcidImport]=useState(false);
+  const [orcidPendingToken,  setOrcidPendingToken]  = useState('');
+  const [orcidPendingName,   setOrcidPendingName]   = useState('');
+  const [showOrcidEmailForm, setShowOrcidEmailForm] = useState(false);
+  const [orcidAuthError,     setOrcidAuthError]     = useState('');
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -182,6 +186,27 @@ export default function App() {
     setShowOrcidImport(true);
   },[profile]);
 
+  // Handle ORCID OAuth callback params (?orcid_token=... or ?orcid_error=...)
+  useEffect(() => {
+    const params    = new URLSearchParams(window.location.search);
+    const orcidToken = params.get('orcid_token');
+    const orcidName  = params.get('orcid_name');
+    const orcidError = params.get('orcid_error');
+
+    if (orcidError) {
+      setOrcidAuthError(decodeURIComponent(orcidError));
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    if (orcidToken) {
+      setOrcidPendingToken(orcidToken);
+      setOrcidPendingName(decodeURIComponent(orcidName || ''));
+      setShowOrcidEmailForm(true);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   // Handle PWA shortcut deep links (?shortcut=post / ?shortcut=explore)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -204,7 +229,12 @@ export default function App() {
 
   if(isPasswordRecovery) return <>{fonts}<ResetPasswordScreen onDone={()=>setIsPasswordRecovery(false)}/></>;
   if(!authChecked) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;
-  if(!session) return <AuthScreen onAuth={()=>setScreen('feed')}/>;
+  if(!session) return <AuthScreen onAuth={()=>setScreen('feed')}
+    orcidPendingToken={orcidPendingToken}
+    orcidPendingName={orcidPendingName}
+    showOrcidEmailForm={showOrcidEmailForm}
+    orcidAuthError={orcidAuthError}
+  />;
 
   const user=session.user;
   const screens={
