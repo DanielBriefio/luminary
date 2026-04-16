@@ -44,7 +44,7 @@ serve(async (req) => {
     if (blocked) {
       return new Response(
         JSON.stringify({ valid: false, reason: "Too many attempts. Please try again later." }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
