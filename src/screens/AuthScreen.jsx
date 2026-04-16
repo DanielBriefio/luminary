@@ -85,7 +85,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       if (error || !data?.valid) {
         setInviteValid(false);
         setInviteError(reason);
-        if (reason.toLowerCase().includes('too many')) setInviteRateLimited(true);
+        if (reason.toLowerCase().includes('too many') || reason === 'locked') setInviteRateLimited(true);
       } else {
         setInviteValid(true);
         setSignupPath('invite-details');
