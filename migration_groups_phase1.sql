@@ -241,7 +241,10 @@ create policy "gm_select" on group_members for select using (
   or group_id in (select get_my_group_ids())
 );
 create policy "gm_insert" on group_members for insert
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id or
+    group_id in (select get_my_admin_group_ids())
+  );
 create policy "gm_update" on group_members for update
   using (
     auth.uid() = user_id or

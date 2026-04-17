@@ -62,6 +62,14 @@ export default function GroupMembers({ groupId, user, myRole, onLeft }) {
     setActionId(req.user_id);
     await supabase.from('group_members').insert({ group_id: groupId, user_id: req.user_id, role: 'member' });
     await supabase.from('group_join_requests').update({ status: 'approved' }).eq('id', req.id);
+    // Notify the approved user
+    const { data: grp } = await supabase.from('groups').select('name').eq('id', groupId).single();
+    await supabase.from('notifications').insert({
+      user_id:    req.user_id,
+      actor_id:   user.id,
+      notif_type: 'group_request_approved',
+      meta:       { group_id: groupId, group_name: grp?.name || '' },
+    });
     setActionId(null);
     fetchMembers();
   };

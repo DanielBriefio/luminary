@@ -35,6 +35,19 @@ function JoinRequestPanel({ group, user, onBack, onJoined }) {
     await supabase.from('group_join_requests').upsert({
       group_id: group.id, user_id: user.id, message: message.trim(), status: 'pending',
     }, { onConflict: 'group_id,user_id' });
+    // Notify all group admins
+    const { data: admins } = await supabase
+      .from('group_members').select('user_id').eq('group_id', group.id).eq('role', 'admin');
+    if (admins?.length) {
+      await supabase.from('notifications').insert(
+        admins.map(a => ({
+          user_id:    a.user_id,
+          actor_id:   user.id,
+          notif_type: 'group_join_request',
+          meta:       { group_id: group.id, group_name: group.name },
+        }))
+      );
+    }
     setSending(false); setSent(true);
   };
 
