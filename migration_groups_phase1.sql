@@ -42,6 +42,10 @@ create table if not exists group_join_requests (
   unique(group_id, user_id)
 );
 
+-- ── ALTER existing group_members if it predates this migration ────────────────
+alter table group_members add column if not exists display_role text default '';
+alter table group_members add column if not exists joined_at    timestamptz default now();
+
 -- ── GROUP POSTS ────────────────────────────────────────────────────────────────
 -- Separate table from public posts.
 -- Includes encryption placeholder columns for Phase 6.
