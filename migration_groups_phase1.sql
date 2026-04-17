@@ -89,6 +89,29 @@ create table if not exists group_posts (
   created_at         timestamptz default now()
 );
 
+-- ── ALTER existing group_posts if it predates this migration ─────────────────
+alter table group_posts add column if not exists content_iv         text default '';
+alter table group_posts add column if not exists content_encrypted  boolean default false;
+alter table group_posts add column if not exists paper_doi          text default '';
+alter table group_posts add column if not exists paper_title        text default '';
+alter table group_posts add column if not exists paper_journal      text default '';
+alter table group_posts add column if not exists paper_authors      text default '';
+alter table group_posts add column if not exists paper_abstract     text default '';
+alter table group_posts add column if not exists paper_year         text default '';
+alter table group_posts add column if not exists link_url           text default '';
+alter table group_posts add column if not exists link_title         text default '';
+alter table group_posts add column if not exists link_description   text default '';
+alter table group_posts add column if not exists image_url          text default '';
+alter table group_posts add column if not exists file_type          text default '';
+alter table group_posts add column if not exists file_name          text default '';
+alter table group_posts add column if not exists tags               text[] default '{}';
+alter table group_posts add column if not exists tier1              text default '';
+alter table group_posts add column if not exists tier2              text[] default '{}';
+alter table group_posts add column if not exists is_sticky          boolean default false;
+alter table group_posts add column if not exists is_announcement    boolean default false;
+alter table group_posts add column if not exists is_reposted_public boolean default false;
+alter table group_posts add column if not exists edited_at          timestamptz default null;
+
 -- ── GROUP POST INTERACTIONS ───────────────────────────────────────────────────
 
 create table if not exists group_post_likes (
