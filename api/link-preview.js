@@ -59,12 +59,19 @@ module.exports = async function handler(req, res) {
       return res.json(null);
     }
 
-    const html = await r.text();
+    const html    = await r.text();
+    const baseUrl = r.url || url;
 
     const title       = ogTag(html, 'title')       || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || '';
     const description = ogTag(html, 'description') || metaTag(html, 'description');
-    const image       = ogTag(html, 'image');
+    const rawImage    = ogTag(html, 'image');
     const publisher   = ogTag(html, 'site_name');
+
+    // Resolve relative image URLs against the final base URL
+    let image = '';
+    if (rawImage) {
+      try { image = new URL(rawImage, baseUrl).href; } catch { image = rawImage; }
+    }
 
     if (!title && !image) {
       res.setHeader('Cache-Control', 'public, s-maxage=300');
@@ -72,7 +79,7 @@ module.exports = async function handler(req, res) {
     }
 
     res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
-    return res.json({ title, description, image, publisher, url: r.url || url });
+    return res.json({ title, description, image, publisher, url: baseUrl });
 
   } catch {
     clearTimeout(timer);
