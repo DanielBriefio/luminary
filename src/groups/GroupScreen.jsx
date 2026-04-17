@@ -4,18 +4,7 @@ import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import GroupFeed from './GroupFeed';
 import GroupMembers from './GroupMembers';
-
-function GroupInitials({ name, size = 48 }) {
-  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: 14, flexShrink: 0,
-      background: 'linear-gradient(135deg,#667eea,#764ba2)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.3, fontWeight: 700, color: '#fff',
-    }}>{initials}</div>
-  );
-}
+import GroupProfile from './GroupProfile';
 
 // Shown when a non-member tries to view a closed group
 function JoinRequestPanel({ group, user, onBack, onJoined }) {
@@ -37,7 +26,6 @@ function JoinRequestPanel({ group, user, onBack, onJoined }) {
       group_id: group.id, user_id: user.id, message: message.trim(), status: 'pending',
     }, { onConflict: 'group_id,user_id' });
     if (upsertErr) { setReqError(upsertErr.message); setSending(false); return; }
-    // Notify all group admins
     const { data: admins } = await supabase
       .from('group_members').select('user_id').eq('group_id', group.id).eq('role', 'admin');
     if (admins?.length) {
@@ -56,13 +44,12 @@ function JoinRequestPanel({ group, user, onBack, onJoined }) {
   return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <div style={{ maxWidth: 440, width: '100%', textAlign: 'center' }}>
-        <GroupInitials name={group.name} size={64}/>
+        <GroupAvatar group={group} size={64}/>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: T.text, marginTop: 16, marginBottom: 6 }}>{group.name}</div>
         {group.research_topic && <div style={{ fontSize: 13, color: T.mu, marginBottom: 16 }}>{group.research_topic}</div>}
         <div style={{ background: T.v2, border: `1px solid rgba(108,99,255,.2)`, borderRadius: 12, padding: '14px 16px', marginBottom: 20, fontSize: 13, color: T.mu, lineHeight: 1.6 }}>
           🔒 This is a <strong>closed group</strong>. You need admin approval to join and see its posts.
         </div>
-
         {sent || existing ? (
           <div style={{ background: T.gr2, border: `1px solid ${T.gr}`, borderRadius: 12, padding: '14px 16px', fontSize: 13, color: T.gr, fontWeight: 600 }}>
             ✓ {existing ? 'Your request is pending.' : 'Request sent! An admin will review it.'}
@@ -93,7 +80,7 @@ function JoinRequestPanel({ group, user, onBack, onJoined }) {
   );
 }
 
-// Shown when a non-member views a public group (can see the name/info, must join to see posts)
+// Shown when a non-member views a public group
 function PublicJoinPanel({ group, user, onBack, onJoined }) {
   const [joining, setJoining] = useState(false);
   const [error,   setError]   = useState('');
@@ -107,7 +94,7 @@ function PublicJoinPanel({ group, user, onBack, onJoined }) {
   return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <div style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-        <GroupInitials name={group.name} size={64}/>
+        <GroupAvatar group={group} size={64}/>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: T.text, marginTop: 16, marginBottom: 6 }}>{group.name}</div>
         {group.research_topic && <div style={{ fontSize: 13, color: T.mu, marginBottom: 16 }}>{group.research_topic}</div>}
         {group.description && <div style={{ fontSize: 13, color: T.mu, marginBottom: 20, lineHeight: 1.6 }}>{group.description}</div>}
@@ -128,12 +115,31 @@ function PublicJoinPanel({ group, user, onBack, onJoined }) {
   );
 }
 
-export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper }) {
+function GroupAvatar({ group, size = 48 }) {
+  const initials = group.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  if (group.avatar_url) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: Math.round(size * 0.28), overflow: 'hidden', flexShrink: 0 }}>
+        <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+      </div>
+    );
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: Math.round(size * 0.28), flexShrink: 0,
+      background: 'linear-gradient(135deg,#667eea,#764ba2)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.3, fontWeight: 700, color: '#fff',
+    }}>{initials}</div>
+  );
+}
+
+export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup }) {
   const [group,      setGroup]      = useState(null);
-  const [myRole,     setMyRole]     = useState(null);    // 'admin' | 'member' | null
+  const [myRole,     setMyRole]     = useState(null);
   const [activeTab,  setActiveTab]  = useState('feed');
   const [loading,    setLoading]    = useState(true);
-  const [memberCount,setMemberCount]= useState(0);
+  const [stats,      setStats]      = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting,   setDeleting]   = useState(false);
 
@@ -143,15 +149,25 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
       supabase.from('group_members').select('role').eq('group_id', groupId).eq('user_id', user.id).maybeSingle(),
     ]);
     setGroup(grp);
-    setMyRole(mem?.role || null);
+    const role = mem?.role || null;
+    setMyRole(role);
 
-    // Member count
-    const { count } = await supabase.from('group_members').select('id', { count: 'exact', head: true }).eq('group_id', groupId).in('role', ['admin', 'member']);
-    setMemberCount(count || 0);
+    // Live stats
+    const { data: s } = await supabase.from('group_stats').select('*').eq('group_id', groupId).single();
+    setStats(s);
+
     setLoading(false);
   };
 
-  useEffect(() => { fetchGroup(); }, [groupId]); // eslint-disable-line
+  useEffect(() => {
+    fetchGroup();
+    // If tab is 'feed' but user is alumni, switch to profile
+  }, [groupId]); // eslint-disable-line
+
+  // Switch alumni away from feed tab if they somehow land there
+  useEffect(() => {
+    if (myRole === 'alumni' && activeTab === 'feed') setActiveTab('profile');
+  }, [myRole, activeTab]);
 
   const leaveGroup = async () => {
     await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', user.id);
@@ -176,10 +192,15 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
     return <PublicJoinPanel group={group} user={user} onBack={onBack} onJoined={fetchGroup}/>;
   }
 
+  const isAlumni = myRole === 'alumni';
   const tabs = [
-    { id: 'feed',    icon: '📋', label: 'Feed' },
+    ...(!isAlumni ? [{ id: 'feed',    icon: '📋', label: 'Feed' }] : []),
     { id: 'members', icon: '👥', label: 'Members' },
+    { id: 'profile', icon: '🏛️', label: 'Profile' },
   ];
+
+  const activeMemberCount = stats?.active_member_count || 0;
+  const alumniCount       = stats?.alumni_count || 0;
 
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -194,26 +215,23 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
         {/* Group info */}
         <div style={{ padding: '14px', borderBottom: `1px solid ${T.bdr}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-              background: 'linear-gradient(135deg,#667eea,#764ba2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 13, fontWeight: 700, color: '#fff',
-            }}>
-              {group.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-            </div>
+            <GroupAvatar group={group} size={40}/>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{group.name}</div>
             </div>
           </div>
           {group.research_topic && <div style={{ fontSize: 10.5, color: T.mu, lineHeight: 1.5, marginBottom: 6 }}>{group.research_topic}</div>}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 10.5, color: T.mu }}>{memberCount} {memberCount === 1 ? 'member' : 'members'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10.5, color: T.mu }}>
+              {activeMemberCount} active{alumniCount > 0 ? ` · ${alumniCount} alumni` : ''}
+            </span>
             <span style={{
               fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 20,
-              background: myRole === 'admin' ? T.v : T.s3,
-              color: myRole === 'admin' ? '#fff' : T.mu,
-            }}>{myRole === 'admin' ? 'Admin' : 'Member'}</span>
+              background: myRole === 'admin' ? T.v : isAlumni ? T.am2 : T.s3,
+              color: myRole === 'admin' ? '#fff' : isAlumni ? T.am : T.mu,
+            }}>
+              {myRole === 'admin' ? 'Admin' : isAlumni ? 'Alumni' : 'Member'}
+            </span>
           </div>
         </div>
 
@@ -274,7 +292,7 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
           {!group.is_public && <span style={{ marginLeft: 8, fontSize: 11, color: T.mu }}>🔒 Closed group</span>}
         </div>
 
-        {activeTab === 'feed' && (
+        {activeTab === 'feed' && !isAlumni && (
           <GroupFeed
             groupId={groupId}
             groupName={group.name}
@@ -287,9 +305,21 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
         {activeTab === 'members' && (
           <GroupMembers
             groupId={groupId}
+            group={group}
             user={user}
             myRole={myRole}
             onLeft={onBack}
+          />
+        )}
+        {activeTab === 'profile' && (
+          <GroupProfile
+            groupId={groupId}
+            group={group}
+            user={user}
+            myRole={myRole}
+            onGroupUpdate={fetchGroup}
+            onViewGroup={onViewGroup}
+            onSwitchTab={setActiveTab}
           />
         )}
       </div>

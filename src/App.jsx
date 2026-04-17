@@ -80,6 +80,8 @@ export default function App() {
   const [orcidPendingName,   setOrcidPendingName]   = useState('');
   const [showOrcidEmailForm, setShowOrcidEmailForm] = useState(false);
   const [orcidAuthError,     setOrcidAuthError]     = useState('');
+  const [groupInviteToken,   setGroupInviteToken]   = useState('');
+  const [joinToast,          setJoinToast]          = useState('');
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -220,6 +222,45 @@ export default function App() {
     }
   }, [session]);
 
+  // Capture group invite token from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinToken = params.get('join_token');
+    if (joinToken) {
+      window.history.replaceState({}, '', window.location.pathname);
+      setGroupInviteToken(joinToken);
+    }
+  }, []);
+
+  // Redeem group invite once authenticated
+  useEffect(() => {
+    if (!groupInviteToken || !session?.user) return;
+    const redeem = async () => {
+      const token = groupInviteToken;
+      setGroupInviteToken('');
+      const { data: inv } = await supabase
+        .from('group_invites')
+        .select('id, group_id, use_count, max_uses, expires_at, groups(name)')
+        .eq('token', token)
+        .single();
+      if (!inv) { setJoinToast('Invite link not found or expired.'); return; }
+      if (new Date(inv.expires_at) < new Date()) { setJoinToast('This invite link has expired.'); return; }
+      if (inv.use_count >= inv.max_uses) { setJoinToast('This invite link has reached its maximum uses.'); return; }
+      const { error } = await supabase.from('group_members').upsert({
+        group_id: inv.group_id, user_id: session.user.id, role: 'member',
+      }, { onConflict: 'group_id,user_id', ignoreDuplicates: true });
+      if (!error) {
+        await supabase.from('group_invites').update({ use_count: inv.use_count + 1 }).eq('id', inv.id);
+        setJoinToast(`You've joined "${inv.groups?.name || 'the group'}"!`);
+        setActiveGroupId(inv.group_id);
+        setScreen('groups');
+      } else {
+        setJoinToast('Could not join group. You may already be a member.');
+      }
+    };
+    redeem();
+  }, [groupInviteToken, session]); // eslint-disable-line
+
   const signOut=async()=>{ await supabase.auth.signOut(); setScreen('feed'); };
 
   const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>;
@@ -242,11 +283,11 @@ export default function App() {
   const user=session.user;
   const screens={
     feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}}/>,
-    explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')}/>,
+    explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
     groups: activeGroupId
-      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper}/>
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
@@ -259,6 +300,20 @@ export default function App() {
     <>
       {fonts}
       {showCardQR && profile && <CardQROverlay profile={profile} onClose={()=>setShowCardQR(false)}/>}
+      {joinToast && (
+        <div style={{
+          position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
+          background:T.text, color:'#fff', borderRadius:12, padding:'11px 22px',
+          fontSize:13, fontWeight:600, zIndex:2000, boxShadow:'0 4px 20px rgba(0,0,0,.25)',
+          maxWidth:380, textAlign:'center',
+        }}>
+          {joinToast}
+          <button onClick={()=>setJoinToast('')} style={{
+            marginLeft:12, background:'transparent', border:'none', color:'rgba(255,255,255,.7)',
+            cursor:'pointer', fontFamily:'inherit', fontSize:13,
+          }}>✕</button>
+        </div>
+      )}
       {/* Account Settings panel */}
       {showSettings && (
         <AccountSettingsScreen

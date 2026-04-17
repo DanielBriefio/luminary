@@ -291,6 +291,7 @@ export default function ExploreScreen({
   onViewUser,
   onViewPaper,
   onNavigateToPost,
+  onViewGroup,
 }) {
   const [q, setQ]                   = useState(initialQuery);
   const [exploreTab, setExploreTab] = useState('posts');
@@ -308,6 +309,11 @@ export default function ExploreScreen({
   const [paperSearching, setPaperSearching] = useState(false);
   const [showMoreDiscussed, setShowMoreDiscussed]   = useState(false);
   const [showMoreInProfiles, setShowMoreInProfiles] = useState(false);
+
+  // Groups tab state
+  const [groupResults,   setGroupResults]   = useState([]);
+  const [groupSearching, setGroupSearching] = useState(false);
+  const [suggestedGroups,setSuggestedGroups]= useState([]);
 
   const [tier1Filter, setTier1Filter] = useState('');
 
@@ -441,6 +447,31 @@ export default function ExploreScreen({
     setPaperSearching(false);
   }, []);
 
+  const searchGroups = useCallback(async (query) => {
+    setGroupSearching(true);
+    if (!query.trim()) {
+      // Suggested groups
+      const { data } = await supabase
+        .from('groups')
+        .select('id, name, description, research_topic, avatar_url, is_public')
+        .eq('is_public', true)
+        .eq('is_searchable', true)
+        .order('created_at', { ascending: false })
+        .limit(6);
+      setSuggestedGroups(data || []);
+      setGroupResults([]);
+    } else {
+      const { data } = await supabase
+        .from('groups')
+        .select('id, name, description, research_topic, avatar_url, is_public')
+        .eq('is_searchable', true)
+        .or(`name.ilike.%${query}%,description.ilike.%${query}%,research_topic.ilike.%${query}%`)
+        .limit(10);
+      setGroupResults(data || []);
+    }
+    setGroupSearching(false);
+  }, []);
+
   // ── Run search when query or tab or tier1Filter changes ──────────────────
 
   useEffect(() => {
@@ -448,9 +479,10 @@ export default function ExploreScreen({
       if (exploreTab === 'posts')       searchPosts(q, tier1Filter);
       if (exploreTab === 'researchers') searchResearchers(q);
       if (exploreTab === 'papers')      searchPapers(q);
+      if (exploreTab === 'groups')      searchGroups(q);
     }, 400);
     return () => clearTimeout(t);
-  }, [q, tier1Filter, exploreTab, searchPosts, searchResearchers, searchPapers]);
+  }, [q, tier1Filter, exploreTab, searchPosts, searchResearchers, searchPapers, searchGroups]);
 
   // Run search immediately if initialQuery is provided
   useEffect(() => {
@@ -478,6 +510,7 @@ export default function ExploreScreen({
     { id: 'posts',       label: 'Posts' },
     { id: 'researchers', label: 'Researchers' },
     { id: 'papers',      label: 'Papers' },
+    { id: 'groups',      label: 'Groups' },
   ];
 
   return (
@@ -721,7 +754,7 @@ export default function ExploreScreen({
                  paperResults.profiles.length === 0 &&
                  paperResults.epmc.length === 0 && (
                   <div style={{ color: T.mu, fontSize: 13, textAlign: 'center', padding: 20 }}>
-                    No results for "{q}" — try different keywords or check the spelling.
+                    No results for &ldquo;{q}&rdquo; — try different keywords or check the spelling.
                   </div>
                 )}
 
@@ -794,7 +827,100 @@ export default function ExploreScreen({
             )}
           </>
         )}
+
+        {/* ═══ Groups tab ═════════════════════════════════════════════════ */}
+        {exploreTab === 'groups' && (
+          <>
+            {groupSearching && <Spinner />}
+
+            {!groupSearching && !q.trim() && (
+              suggestedGroups.length === 0 ? (
+                <div style={{
+                  background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14,
+                  padding: 24, textAlign: 'center', boxShadow: '0 2px 12px rgba(108,99,255,.07)',
+                }}>
+                  <div style={{ fontSize: 28, marginBottom: 12 }}>🔬</div>
+                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 8 }}>
+                    Discover research groups
+                  </div>
+                  <div style={{ fontSize: 13, color: T.mu }}>
+                    Search for groups by name or research topic.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>
+                    Recent groups
+                  </div>
+                  {suggestedGroups.map(g => (
+                    <GroupResultCard key={g.id} group={g} onViewGroup={onViewGroup} />
+                  ))}
+                </>
+              )
+            )}
+
+            {!groupSearching && q.trim() && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>
+                  {groupResults.length} group{groupResults.length !== 1 ? 's' : ''} found
+                </div>
+                {groupResults.length === 0
+                  ? <div style={{ color: T.mu, fontSize: 13, textAlign: 'center', padding: 20 }}>No groups found for "{q}".</div>
+                  : groupResults.map(g => <GroupResultCard key={g.id} group={g} onViewGroup={onViewGroup} />)
+                }
+              </>
+            )}
+          </>
+        )}
+
       </div>
+    </div>
+  );
+}
+
+function GroupResultCard({ group, onViewGroup }) {
+  return (
+    <div style={{
+      display: 'flex', gap: 12, padding: '14px 0',
+      borderBottom: `1px solid ${T.bdr}`, alignItems: 'flex-start',
+    }}>
+      <div style={{
+        width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+        background: 'linear-gradient(135deg,#667eea,#764ba2)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 18, fontWeight: 700, color: '#fff', overflow: 'hidden',
+      }}>
+        {group.avatar_url
+          ? <img src={group.avatar_url} alt={group.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+          : group.name?.charAt(0).toUpperCase()
+        }
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{group.name}</div>
+        {group.research_topic && (
+          <div style={{ fontSize: 12, color: T.v, fontWeight: 600, marginBottom: 3 }}>{group.research_topic}</div>
+        )}
+        {group.description && (
+          <div style={{
+            fontSize: 12, color: T.mu,
+            overflow: 'hidden', textOverflow: 'ellipsis',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+          }}>
+            {group.description}
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: T.mu, marginTop: 4 }}>
+          {group.is_public ? '🌐 Public group' : '🔒 Closed group'}
+        </div>
+      </div>
+      <button onClick={() => onViewGroup?.(group.id)} style={{
+        padding: '6px 14px', borderRadius: 20, flexShrink: 0,
+        border: `1.5px solid ${T.v}`, background: T.v2,
+        color: T.v, fontSize: 12, fontWeight: 700,
+        fontFamily: 'inherit', cursor: 'pointer',
+      }}>
+        View →
+      </button>
     </div>
   );
 }
