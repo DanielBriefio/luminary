@@ -360,13 +360,18 @@ export default function App() {
             </div>
             <div style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
               {NAV.map(n=>(
-                <div key={n.id} onClick={()=>setScreen(n.id)}
+                <div key={n.id} onClick={()=>{ if(n.id==='notifs') setUnreadNotifs(0); setScreen(n.id); }}
                   style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",margin:"1px 8px",borderRadius:9,cursor:"pointer",fontSize:12.5,fontWeight:screen===n.id?700:500,color:screen===n.id?T.v:T.mu,background:screen===n.id?T.v2:"transparent"}}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{flexShrink:0}}><path d={n.p}/></svg>
                   {n.l}
                   {n.id==='messages' && unreadMessages>0 && (
                     <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,background:T.ro,color:"#fff",padding:"1px 6px",borderRadius:20,minWidth:16,textAlign:"center"}}>
                       {unreadMessages>9?'9+':unreadMessages}
+                    </span>
+                  )}
+                  {n.id==='notifs' && unreadNotifs>0 && (
+                    <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,background:T.ro,color:"#fff",padding:"1px 6px",borderRadius:20,minWidth:16,textAlign:"center"}}>
+                      {unreadNotifs>9?'9+':unreadNotifs}
                     </span>
                   )}
                 </div>
