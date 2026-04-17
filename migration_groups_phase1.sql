@@ -136,7 +136,8 @@ create table if not exists group_post_comments (
 
 -- ── VIEW ──────────────────────────────────────────────────────────────────────
 
-create or replace view group_posts_with_meta as
+drop view if exists group_posts_with_meta;
+create view group_posts_with_meta as
 select
   gp.*,
   pr.name           as author_name,
