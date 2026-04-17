@@ -2,12 +2,17 @@ import { useState, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
+import { useWindowSize } from '../lib/useWindowSize';
 import Av from '../components/Av';
+import Bdg from '../components/Bdg';
 import SafeHtml from '../components/SafeHtml';
+import FilePreview from '../components/FilePreview';
 import PaperPreview from '../components/PaperPreview';
 import RichTextEditor from '../components/RichTextEditor';
+import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 
 export default function GroupPostCard({ post, currentUserId, currentProfile, groupName, myRole, onRefresh, onViewPaper }) {
+  const { isMobile } = useWindowSize();
   const [liked,         setLiked]         = useState(post.user_liked || false);
   const [likeCount,     setLikeCount]     = useState(parseInt(post.like_count) || 0);
   const [saving,        setSaving]        = useState(false);
@@ -31,11 +36,13 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
   const [commCount,     setCommCount]     = useState(parseInt(post.comment_count) || 0);
   const commInputRef = useRef(null);
 
-  const isOwner = currentUserId === post.user_id;
-  const isAdmin = myRole === 'admin';
+  const isOwner  = currentUserId === post.user_id;
+  const isAdmin  = myRole === 'admin';
   const canManage = isOwner || isAdmin;
-
   const roleBadge = post.author_display_role || (post.author_group_role === 'admin' ? 'Admin' : null);
+
+  const typeColor = { text: 'v', paper: 'v', image: 't', audio: 'r', link: 'a', pdf: 'b', data: 'g' };
+  const typeLabel = { text: 'Post', paper: 'Paper', image: 'Photo', audio: 'Audio', link: 'Link', pdf: 'PDF', data: 'Data' };
 
   const toggleLike = async () => {
     if (!currentUserId || saving) return;
@@ -71,24 +78,24 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
     setReposting(true);
     const note = groupName ? `\n\n<em style="font-size:11.5px;color:#7a7fa8">Shared from <strong>${groupName}</strong></em>` : '';
     await supabase.from('posts').insert({
-      user_id:       currentUserId,
-      post_type:     post.post_type,
-      content:       (post.content || '') + note,
-      paper_title:   post.paper_title,
-      paper_journal: post.paper_journal,
-      paper_doi:     post.paper_doi,
-      paper_abstract:post.paper_abstract,
-      paper_authors: post.paper_authors,
-      paper_year:    post.paper_year,
-      link_url:      post.link_url,
-      link_title:    post.link_title,
-      image_url:     post.image_url,
-      file_type:     post.file_type,
-      file_name:     post.file_name,
-      tags:          post.tags || [],
-      tier1:         post.tier1 || '',
-      tier2:         post.tier2 || [],
-      visibility:    'everyone',
+      user_id:        currentUserId,
+      post_type:      post.post_type,
+      content:        (post.content || '') + note,
+      paper_title:    post.paper_title,
+      paper_journal:  post.paper_journal,
+      paper_doi:      post.paper_doi,
+      paper_abstract: post.paper_abstract,
+      paper_authors:  post.paper_authors,
+      paper_year:     post.paper_year,
+      link_url:       post.link_url,
+      link_title:     post.link_title,
+      image_url:      post.image_url,
+      file_type:      post.file_type,
+      file_name:      post.file_name,
+      tags:           post.tags || [],
+      tier1:          post.tier1 || '',
+      tier2:          post.tier2 || [],
+      visibility:     'everyone',
     });
     await supabase.from('group_posts').update({ is_reposted_public: true }).eq('id', post.id);
     setReposted(true); setRepostConfirm(false); setReposting(false); setMenuOpen(false);
@@ -99,7 +106,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
     setCommLoading(true);
     const { data } = await supabase
       .from('group_post_comments')
-      .select('*, profiles(name, avatar_color, avatar_url, institution)')
+      .select('*, profiles(name, avatar_color, avatar_url, institution, profile_slug)')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true });
     setComments(data || []); setCommLoaded(true); setCommLoading(false);
@@ -116,7 +123,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
     const { data } = await supabase
       .from('group_post_comments')
       .insert({ post_id: post.id, user_id: currentUserId, content: commText.trim() })
-      .select('*, profiles(name, avatar_color, avatar_url, institution)')
+      .select('*, profiles(name, avatar_color, avatar_url, institution, profile_slug)')
       .single();
     if (data) { setComments(c => [...c, data]); setCommCount(n => n + 1); setCommText(''); }
     setCommSaving(false);
@@ -130,6 +137,11 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
 
   if (deleted) return null;
 
+  // YouTube embed helper
+  const ytMatch = post.post_type === 'link' && post.link_url?.match(
+    /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/
+  );
+
   return (
     <div style={{ background: T.w, border: `1px solid ${sticky ? T.v : T.bdr}`, borderRadius: 14, overflow: 'hidden', boxShadow: sticky ? `0 2px 12px rgba(108,99,255,.12)` : '0 1px 6px rgba(108,99,255,.06)' }}>
 
@@ -139,15 +151,23 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
         </div>
       )}
 
-      <div style={{ padding: 14, position: 'relative' }}>
+      <div style={{ padding: 16, position: 'relative' }}>
+
+        {/* Author header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-          <Av color={post.author_avatar || 'me'} size={36} name={post.author_name} url={post.author_avatar_url || ''}/>
+          <Av color={post.author_avatar || 'me'} size={38} name={post.author_name} url={post.author_avatar_url || ''}/>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ color: T.text }}>{post.author_name || 'Member'}</span>
+              <span style={{ color: T.v }}>{post.author_name || 'Member'}</span>
+              <Bdg color={typeColor[post.post_type] || 'v'}>{typeLabel[post.post_type] || 'Post'}</Bdg>
               {roleBadge && (
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 20, background: post.author_group_role === 'admin' ? T.v : T.s3, color: post.author_group_role === 'admin' ? '#fff' : T.mu }}>
                   {roleBadge}
+                </span>
+              )}
+              {post.author_identity_tier2 && (
+                <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.2)` }}>
+                  {post.author_identity_tier2}
                 </span>
               )}
             </div>
@@ -157,31 +177,24 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
             </div>
           </div>
 
+          {/* ··· menu for owners and admins */}
           {canManage && (
             <div style={{ position: 'relative' }}>
-              <button onClick={() => setMenuOpen(!menuOpen)} style={{
-                width: 28, height: 28, borderRadius: '50%', border: 'none',
-                background: menuOpen ? T.s2 : 'transparent', cursor: 'pointer',
-                fontSize: 16, color: T.mu, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>···</button>
+              <button onClick={() => setMenuOpen(!menuOpen)} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: menuOpen ? T.s2 : 'transparent', cursor: 'pointer', fontSize: 16, color: T.mu, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>···</button>
               {menuOpen && (
                 <>
                   <div onClick={() => { setMenuOpen(false); setConfirmDelete(false); setRepostConfirm(false); }} style={{ position: 'fixed', inset: 0, zIndex: 9 }}/>
                   <div style={{ position: 'absolute', right: 0, top: 32, background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 11, boxShadow: '0 4px 20px rgba(0,0,0,.12)', zIndex: 10, minWidth: 180, overflow: 'hidden' }}>
                     {!confirmDelete && !repostConfirm ? (
                       <>
-                        {isOwner && <button onClick={() => { setEditing(true); setMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: T.text, textAlign: 'left' }}>✏️ Edit post</button>}
-                        <button onClick={toggleSticky} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: T.text, textAlign: 'left' }}>
-                          {sticky ? '📌 Unpin post' : '📌 Pin post'}
-                        </button>
-                        {!reposted && (
-                          <button onClick={() => setRepostConfirm(true)} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: T.bl, textAlign: 'left' }}>↗ Repost publicly</button>
-                        )}
-                        {reposted && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px', fontSize: 12.5, color: T.gr }}>✓ Reposted publicly</div>
-                        )}
+                        {isOwner && <button onClick={() => { setEditing(true); setMenuOpen(false); }} style={menuItemStyle(T.text)}>✏️ Edit post</button>}
+                        <button onClick={toggleSticky} style={menuItemStyle(T.text)}>{sticky ? '📌 Unpin post' : '📌 Pin post'}</button>
+                        {!reposted
+                          ? <button onClick={() => setRepostConfirm(true)} style={menuItemStyle(T.bl)}>↗ Repost publicly</button>
+                          : <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px', fontSize: 12.5, color: T.gr }}>✓ Reposted publicly</div>
+                        }
                         <div style={{ height: 1, background: T.bdr, margin: '0 10px' }}/>
-                        <button onClick={() => setConfirmDelete(true)} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: T.ro, textAlign: 'left' }}>🗑️ Delete post</button>
+                        <button onClick={() => setConfirmDelete(true)} style={menuItemStyle(T.ro)}>🗑️ Delete post</button>
                       </>
                     ) : confirmDelete ? (
                       <div style={{ padding: '14px 16px' }}>
@@ -195,14 +208,10 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
                     ) : repostConfirm ? (
                       <div style={{ padding: '14px 16px' }}>
                         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: T.text }}>Repost publicly?</div>
-                        <div style={{ fontSize: 12, color: T.mu, lineHeight: 1.6, marginBottom: 12 }}>
-                          This will make this post visible to everyone on Luminary, including people outside this group.
-                        </div>
+                        <div style={{ fontSize: 12, color: T.mu, lineHeight: 1.6, marginBottom: 12 }}>This will make the post visible to everyone on Luminary.</div>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={() => { setRepostConfirm(false); setMenuOpen(false); }} style={{ flex: 1, padding: '7px', border: `1px solid ${T.bdr}`, borderRadius: 9, background: T.w, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 600, color: T.mu }}>Cancel</button>
-                          <button onClick={repostPublic} disabled={reposting} style={{ flex: 1, padding: '7px', border: 'none', borderRadius: 9, background: T.bl, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, color: '#fff' }}>
-                            {reposting ? '…' : 'Repost'}
-                          </button>
+                          <button onClick={repostPublic} disabled={reposting} style={{ flex: 1, padding: '7px', border: 'none', borderRadius: 9, background: T.bl, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, color: '#fff' }}>{reposting ? '…' : 'Repost'}</button>
                         </div>
                       </div>
                     ) : null}
@@ -213,6 +222,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
           )}
         </div>
 
+        {/* Content */}
         {editing ? (
           <div style={{ marginBottom: 12 }}>
             <RichTextEditor value={editText} onChange={setEditText} placeholder="Edit your post…" minHeight={80}/>
@@ -224,43 +234,110 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
             </div>
           </div>
         ) : (
-          post.content && <SafeHtml html={post.content}/>
+          <>
+            {post.content && <SafeHtml html={post.content} tags={post.tags}/>}
+            {post.post_type === 'text' && (() => {
+              const url = extractFirstUrl(post.content || '');
+              return url ? <LinkPreview url={url}/> : null;
+            })()}
+          </>
         )}
 
-        {post.image_url && (
-          <img src={post.image_url} alt={post.file_name || 'attachment'} style={{ width: '100%', maxHeight: 360, objectFit: 'cover', borderRadius: 10, marginTop: 8 }}/>
-        )}
+        {/* File / image */}
+        {post.image_url && <FilePreview url={post.image_url} fileType={post.file_type || 'image'} fileName={post.file_name}/>}
+
+        {/* Paper card */}
         {post.post_type === 'paper' && post.paper_title && (
           <PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper}/>
         )}
-        {post.post_type === 'link' && post.link_url && (
-          <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
-            <div style={{ background: T.s2, border: `1px solid ${T.bdr}`, borderRadius: 9, padding: '10px 13px', margin: '8px 0', display: 'flex', gap: 11 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 8, background: T.am2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🔗</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, marginBottom: 2 }}>{post.link_title || post.link_url}</div>
-                <div style={{ fontSize: 10.5, color: T.v, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.link_url}</div>
-              </div>
-              <div style={{ flexShrink: 0, fontSize: 13, color: T.v, fontWeight: 700 }}>↗</div>
-            </div>
-          </a>
-        )}
 
-        {/* Tags */}
-        {(post.tags?.length > 0) && (
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 10 }}>
-            {post.tags.map(tag => (
-              <span key={tag} style={{ fontSize: 11, color: T.mu, padding: '2px 8px', borderRadius: 20, background: T.s2, border: `1px solid ${T.bdr}` }}>{tag}</span>
-            ))}
+        {/* Link card */}
+        {post.post_type === 'link' && post.link_url && (() => {
+          if (ytMatch) {
+            const videoId = ytMatch[1];
+            if (isMobile) {
+              return (
+                <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: `1px solid ${T.bdr}` }}>
+                  <div style={{ position: 'relative' }}>
+                    <img src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`} alt={post.link_title} style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }}/>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.3)' }}>
+                      <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(0,0,0,.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: 22, marginLeft: 4 }}>▶</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ padding: '9px 13px', background: T.s2 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{post.link_title}</div>
+                    <div style={{ fontSize: 10.5, color: T.v }}>Tap to watch on YouTube ↗</div>
+                  </div>
+                </a>
+              );
+            }
+            return (
+              <div style={{ margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: `1px solid ${T.bdr}` }}>
+                <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
+                  <iframe src={`https://www.youtube.com/embed/${videoId}`} title={post.link_title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}/>
+                </div>
+                <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
+                  <div style={{ padding: '9px 13px', background: T.s2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 16 }}>▶️</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.link_title}</div>
+                      <div style={{ fontSize: 10.5, color: T.v }}>youtube.com</div>
+                    </div>
+                    <span style={{ fontSize: 13, color: T.v, fontWeight: 700, flexShrink: 0 }}>↗</span>
+                  </div>
+                </a>
+              </div>
+            );
+          }
+          return (
+            <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
+              <div style={{ background: T.s2, border: `1px solid ${T.bdr}`, borderRadius: 9, padding: '10px 13px', margin: '8px 0', display: 'flex', gap: 11 }}>
+                <div style={{ width: 50, height: 50, borderRadius: 8, background: T.am2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🔗</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.4, marginBottom: 2, color: T.text }}>{post.link_title}</div>
+                  <div style={{ fontSize: 10.5, color: T.v, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.link_url}</div>
+                </div>
+                <div style={{ flexShrink: 0, fontSize: 13, color: T.v, fontWeight: 700 }}>↗</div>
+              </div>
+            </a>
+          );
+        })()}
+
+        {/* Taxonomy tags */}
+        {(post.tier1 || post.tier2?.length > 0 || post.tags?.length > 0) && (
+          <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.bdr}` }}>
+            {post.tier1 && (
+              <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', border: '1px solid rgba(108,99,255,.15)', display: 'inline-block', marginBottom: 5 }}>
+                {post.tier1}
+              </span>
+            )}
+            {post.tier2?.length > 0 && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 5 }}>
+                {post.tier2.map(t => (
+                  <span key={t} style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.2)` }}>{t}</span>
+                ))}
+              </div>
+            )}
+            {post.tags?.length > 0 && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {post.tags.map(tag => (
+                  <span key={tag} style={{ fontSize: 11, color: T.mu, padding: '2px 8px', borderRadius: 20, background: T.s2, border: `1px solid ${T.bdr}` }}>{tag}</span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.bdr}` }}>
-          <button onClick={toggleLike} style={{ fontSize: 12, color: liked ? T.ro : T.mu, cursor: 'pointer', padding: '3px 9px', borderRadius: 20, fontWeight: 600, background: liked ? T.ro2 : 'transparent', border: 'none', fontFamily: 'inherit' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.bdr}` }}>
+          <button onClick={toggleLike} style={{ fontSize: 12, color: liked ? T.ro : T.mu, cursor: 'pointer', padding: isMobile ? '8px 10px' : '3px 9px', borderRadius: 20, fontWeight: 600, background: liked ? T.ro2 : 'transparent', border: 'none', fontFamily: 'inherit' }}>
             {liked ? '❤️' : '🤍'} {likeCount}
           </button>
-          <button onClick={toggleComments} style={{ fontSize: 12, color: showComments ? T.v : T.mu, cursor: 'pointer', padding: '3px 9px', borderRadius: 20, fontWeight: 600, border: 'none', background: showComments ? T.v2 : 'transparent', fontFamily: 'inherit' }}>
+          <button onClick={toggleComments} style={{ fontSize: 12, color: showComments ? T.v : T.mu, cursor: 'pointer', padding: isMobile ? '8px 10px' : '3px 9px', borderRadius: 20, fontWeight: 600, border: 'none', background: showComments ? T.v2 : 'transparent', fontFamily: 'inherit' }}>
             💬 {commCount}
           </button>
           <div style={{ marginLeft: 'auto' }}>
@@ -289,10 +366,11 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
           {commLoading && <div style={{ padding: '14px 16px', fontSize: 12.5, color: T.mu }}>Loading comments…</div>}
           {!commLoading && comments.map(c => (
             <div key={c.id} style={{ display: 'flex', gap: 10, padding: '12px 16px', borderBottom: `1px solid ${T.bdr}`, background: T.w }}>
-              <Av color={c.profiles?.avatar_color || 'me'} size={28} name={c.profiles?.name} url={c.profiles?.avatar_url || ''}/>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>{c.profiles?.name || 'Member'}</span>
+              <Av color={c.profiles?.avatar_color || 'me'} size={30} name={c.profiles?.name} url={c.profiles?.avatar_url || ''}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: T.v }}>{c.profiles?.name || 'Member'}</span>
+                  {c.profiles?.institution && <span style={{ fontSize: 10.5, color: T.mu }}>{c.profiles.institution}</span>}
                   <span style={{ fontSize: 10.5, color: T.mu, marginLeft: 'auto' }}>{timeAgo(c.created_at)}</span>
                 </div>
                 <div style={{ fontSize: 13, lineHeight: 1.65, color: T.text, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{c.content}</div>
@@ -303,17 +381,17 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
             </div>
           ))}
           {!commLoading && comments.length === 0 && commLoaded && (
-            <div style={{ padding: '14px 16px', fontSize: 12.5, color: T.mu, textAlign: 'center', background: T.w }}>No comments yet.</div>
+            <div style={{ padding: '14px 16px', fontSize: 12.5, color: T.mu, textAlign: 'center', background: T.w }}>No comments yet — be the first to reply.</div>
           )}
           {currentUserId && (
             <div style={{ display: 'flex', gap: 10, padding: '12px 16px', alignItems: 'flex-start', background: T.w, borderTop: `1px solid ${T.bdr}` }}>
-              <Av color={currentProfile?.avatar_color || 'me'} size={28} name={currentProfile?.name} url={currentProfile?.avatar_url || ''}/>
+              <Av color={currentProfile?.avatar_color || 'me'} size={30} name={currentProfile?.name} url={currentProfile?.avatar_url || ''}/>
               <div style={{ flex: 1, display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                 <textarea ref={commInputRef} value={commText} onChange={e => setCommText(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); } }}
-                  placeholder="Write a comment… (Enter to submit)"
+                  placeholder="Write a comment… (Enter to submit, Shift+Enter for new line)"
                   rows={1}
-                  style={{ flex: 1, background: T.s2, border: `1.5px solid ${T.bdr}`, borderRadius: 20, padding: '8px 14px', fontSize: 13, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5, color: T.text, minHeight: 36 }}/>
+                  style={{ flex: 1, background: T.s2, border: `1.5px solid ${T.bdr}`, borderRadius: 20, padding: '8px 14px', fontSize: 13, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5, color: T.text, minHeight: 36, maxHeight: 120, overflowY: 'auto' }}/>
                 <button onClick={submitComment} disabled={commSaving || !commText.trim()}
                   style={{ padding: '8px 16px', borderRadius: 20, border: 'none', background: commText.trim() ? T.v : T.bdr, color: commText.trim() ? '#fff' : T.mu, cursor: commText.trim() ? 'pointer' : 'default', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, flexShrink: 0 }}>
                   {commSaving ? '…' : 'Reply'}
@@ -325,4 +403,8 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
       )}
     </div>
   );
+}
+
+function menuItemStyle(color) {
+  return { display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color, textAlign: 'left' };
 }
