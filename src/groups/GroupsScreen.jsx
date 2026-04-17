@@ -59,7 +59,7 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
       .eq('user_id', user.id);
     const myIds = (myMemberships || []).map(r => r.group_id);
 
-    let q = supabase.from('groups').select('*').eq('is_public', true).limit(20);
+    let q = supabase.from('groups').select('*').limit(40);
     if (myIds.length) q = q.not('id', 'in', `(${myIds.join(',')})`);
 
     const { data: groups } = await q;
@@ -78,6 +78,7 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
   useEffect(() => { fetchMyGroups(); fetchDiscover(); }, [fetchMyGroups, fetchDiscover]);
 
   const joinGroup = async (group) => {
+    if (!group.is_public) { onGroupSelect(group.id); return; }
     setJoining(group.id);
     await supabase.from('group_members').insert({ group_id: group.id, user_id: user.id, role: 'member' });
     setJoining(null);
@@ -186,7 +187,7 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
             {loadingDisc ? <Spinner/> : filteredDiscover.length === 0 ? (
               <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14, padding: '24px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: 13, color: T.mu }}>
-                  {discoverQuery ? 'No groups match your search.' : 'No public groups to discover yet.'}
+                  {discoverQuery ? 'No groups match your search.' : 'No groups to discover yet.'}
                 </div>
               </div>
             ) : (
@@ -201,18 +202,21 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 2 }}>{g.name}</div>
                       {g.research_topic && <div style={{ fontSize: 11, color: T.mu, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.research_topic}</div>}
-                      <div style={{ fontSize: 10.5, color: T.mu }}>{g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 10.5, color: T.mu }}>{g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}</span>
+                        {!g.is_public && <span style={{ fontSize: 10, color: T.mu }}>🔒 Closed</span>}
+                      </div>
                     </div>
                     <button
                       onClick={() => joinGroup(g)}
                       disabled={joining === g.id}
                       style={{
                         padding: '7px 16px', borderRadius: 20, border: `1.5px solid ${T.v}`,
-                        background: T.v, color: '#fff', cursor: 'pointer',
-                        fontFamily: 'inherit', fontSize: 12, fontWeight: 700, flexShrink: 0,
+                        background: g.is_public ? T.v : T.w, color: g.is_public ? '#fff' : T.v,
+                        cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, flexShrink: 0,
                         opacity: joining === g.id ? .6 : 1,
                       }}>
-                      {joining === g.id ? '…' : 'Join'}
+                      {joining === g.id ? '…' : g.is_public ? 'Join' : 'View →'}
                     </button>
                   </div>
                 ))}

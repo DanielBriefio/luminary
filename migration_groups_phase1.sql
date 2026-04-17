@@ -172,32 +172,21 @@ alter table group_posts         enable row level security;
 alter table group_post_likes    enable row level security;
 alter table group_post_comments enable row level security;
 
--- Drop all policies before recreating so this script is safely re-runnable
-drop policy if exists "groups_select" on groups;
-drop policy if exists "groups_insert" on groups;
-drop policy if exists "groups_update" on groups;
-
-drop policy if exists "gm_select" on group_members;
-drop policy if exists "gm_insert" on group_members;
-drop policy if exists "gm_update" on group_members;
-drop policy if exists "gm_delete" on group_members;
-
-drop policy if exists "gjr_select" on group_join_requests;
-drop policy if exists "gjr_insert" on group_join_requests;
-drop policy if exists "gjr_update" on group_join_requests;
-
-drop policy if exists "gp_select"  on group_posts;
-drop policy if exists "gp_insert"  on group_posts;
-drop policy if exists "gp_update"  on group_posts;
-drop policy if exists "gp_delete"  on group_posts;
-
-drop policy if exists "gpl_select" on group_post_likes;
-drop policy if exists "gpl_insert" on group_post_likes;
-drop policy if exists "gpl_delete" on group_post_likes;
-
-drop policy if exists "gpc_select" on group_post_comments;
-drop policy if exists "gpc_insert" on group_post_comments;
-drop policy if exists "gpc_delete" on group_post_comments;
+-- Drop ALL policies on every affected table (handles any legacy names too)
+do $$
+declare r record;
+begin
+  for r in
+    select policyname, tablename
+    from pg_policies
+    where tablename in (
+      'groups','group_members','group_join_requests',
+      'group_posts','group_post_likes','group_post_comments'
+    )
+  loop
+    execute format('drop policy if exists %I on %I', r.policyname, r.tablename);
+  end loop;
+end $$;
 
 -- ── SECURITY DEFINER HELPERS ─────────────────────────────────────────────────
 -- Drop first so the script is re-runnable
@@ -238,8 +227,7 @@ $$;
 
 -- Groups
 create policy "groups_select" on groups for select using (
-  is_public = true or
-  id in (select get_my_group_ids())
+  auth.uid() is not null
 );
 create policy "groups_insert" on groups for insert
   with check (auth.uid() = created_by);

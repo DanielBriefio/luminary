@@ -46,16 +46,18 @@ T.te2   = #f0f9ff   (teal tint)
 
 ```
 src/
-  App.jsx                        — Root: auth, routing, sidebar, nav
+  App.jsx                        — Root: auth, routing, sidebar, nav, activeGroupId state
   supabase.js                    — Supabase client
   index.js                       — React entry point
   lib/
-    constants.js                 — T (tokens), NAV, PUB_TYPES, EDGE_FN
+    constants.js                 — T (tokens), NAV, PUB_TYPES, EDGE_FN, EDGE_HEADERS
     utils.js                     — timeAgo, fuzzy dedup, match scoring
     htmlUtils.js                 — sanitiseHtml
     fileUtils.js                 — getFileCategory
     linkedInUtils.js             — parseCsv, parseLinkedInDate, formatDateRange, cleanBio, buildName
     pubUtils.js                  — typeIcon, typeLabel
+    useWindowSize.js             — useWindowSize hook (isMobile < 768px)
+    useSuggestedTopics.js        — topic suggestion logic
   components/
     Av.jsx                       — Avatar (avatar_color or avatar_url)
     Btn.jsx                      — Button: variant="" grey / "v" violet outline / "s" violet solid
@@ -70,17 +72,23 @@ src/
     ConflictResolverModal.jsx    — Dedup conflict resolution UI for imports
     ExpandableBio.jsx            — Truncated bio with expand toggle
     Linkify.jsx                  — Auto-link URLs in text
+    LinkPreview.jsx              — URL preview card
+    ShareModal.jsx               — Share/repost UI
+    BottomNav.jsx                — Mobile bottom navigation
+    TopicInterestsPicker.jsx     — Topic selection UI
   screens/
-    AuthScreen.jsx               — Login / sign-up (card, maxWidth 420px)
+    AuthScreen.jsx               — Login / sign-up (card, maxWidth 420px); handles ORCID callback
     OnboardingScreen.jsx         — First-run wizard: follow suggestions + add publications
     NewPostScreen.jsx            — Compose: text, paper, link, upload, tip
     ExploreScreen.jsx            — Search posts + topic tag browse (2-col grid with right sidebar)
-    GroupsScreen.jsx             — Private research groups
-    NotifsScreen.jsx             — Notifications (mark-as-read)
+    NotifsScreen.jsx             — Notifications (mark-as-read); supports group_post type
     NetworkScreen.jsx            — Followers/following, suggested connections (2-col grid)
     MessagesScreen.jsx           — DM conversations + real-time threads + compose panel
+    AccountSettingsScreen.jsx    — Account settings (email, password, notifications, data export)
+    SettingsScreen.jsx           — Settings (legal links, danger zone, sign out)
+    ResetPasswordScreen.jsx      — Password recovery
   feed/
-    FeedScreen.jsx               — Main feed (For You / Following, All / Papers tabs; 2-col grid with right sidebar)
+    FeedScreen.jsx               — Main feed (For You / Following, All / Papers tabs; 2-col grid + right sidebar with live Paper of the Week)
     PostCard.jsx                 — Post display: like, comment, edit, delete, follow
   profile/
     ProfileScreen.jsx            — Editable profile (About / Publications / Posts tabs)
@@ -92,18 +100,31 @@ src/
     ShareProfilePanel.jsx        — Share panel: slug editor, visibility, SVG badge, QR code
     PubRow.jsx                   — Single publication row
     SectionGroup.jsx             — Collapsible profile section group
+    BusinessCardView.jsx         — Business card visualisation
+    CardPage.jsx                 — Public card at /c/:slug
+    CvExportPanel.jsx            — CV export functionality
   post/
     PublicPostPage.jsx           — Public post at /s/:postId (no auth required; maxWidth 640px)
   paper/
     PaperDetailPage.jsx          — Paper detail at /paper/:doi (public + auth; maxWidth 740px)
+  groups/
+    GroupsScreen.jsx             — Group list: My Groups + Discover; create group button
+    GroupScreen.jsx              — Group container: 200px sidebar + Feed/Members tabs
+    GroupFeed.jsx                — Group post feed (sticky posts first); compose trigger
+    GroupNewPost.jsx             — Post composer: text, paper (EuropePMC), link; auto-tag
+    GroupPostCard.jsx            — Group post: like, comment, edit, delete, sticky, repost-to-public
+    GroupMembers.jsx             — Members list; admin controls: promote/demote/remove; join requests
+    CreateGroupModal.jsx         — Create group: name, description, research_topic, public/closed toggle
 ```
+
+> **Note:** `src/screens/GroupsScreen.jsx` is a legacy file — the active groups screen is `src/groups/GroupsScreen.jsx`. The legacy file should not be edited.
 
 ## Screens & Features
 
 ### Feed (`FeedScreen`)
 - Toggle: **For You** (all posts) / **Following** (posts by followed users + followed papers by DOI)
 - Tabs: **All** / **Papers**
-- Right sidebar: profile mini-card + "Founding Fellows" message + Paper of the Week (static)
+- Right sidebar: live **Paper of the Week** (most-commented paper by DOI across all posts, fetched from CrossRef) + "Founding Fellows" message
 - `posts_with_meta` view gives `like_count` and `comment_count`
 
 ### New Post (`NewPostScreen`)
@@ -139,16 +160,20 @@ All posts support:
 - Right sidebar: 264px (quick follow suggestions)
 - Message button on each user card → opens DM thread
 
-### Groups (`GroupsScreen`)
-- Create private research groups (name + institution)
-- Group feed: text posts within the group
-- Creator is automatically added as `owner` in `group_members`
-- Non-owners can follow groups via `FollowBtn`
+### Groups (`src/groups/`)
+- **GroupsScreen**: My Groups list + Discover (public groups search); "Create group" opens modal
+- **CreateGroupModal**: name (required), description, research_topic, public/closed toggle; inserts to `groups` with `created_by: user.id`, then adds creator to `group_members` as `role: 'admin'`
+- **GroupScreen**: 200px sidebar (initials avatar, name, topic, member count, role badge, Feed/Members tabs, leave/delete); non-members see JoinRequestPanel (closed) or PublicJoinPanel (public)
+- **GroupFeed**: fetches `group_posts_with_meta` ordered by `is_sticky DESC, created_at DESC`; compose trigger opens GroupNewPost inline
+- **GroupNewPost**: post types text/paper/link; uploads to `post-files` bucket; fire-and-forget auto-tag; notifies all group members (`notif_type: 'group_post'`)
+- **GroupPostCard**: like/comment (group tables); sticky toggle; repost to public `posts` table; owner+admin menu
+- **GroupMembers**: admin list + member list with promote/demote/remove; pending join requests with approve/reject
 
 ### Notifications (`NotifsScreen`)
-- Types: `new_post`, `new_comment`, `paper_comment`, `new_follower`, `group_announcement`, `group_member_added`
+- Types handled: `new_post`, `new_comment`, `paper_comment`, `new_follower`, `group_post`
+- `group_post` notifications: click → `onViewGroup(groupId)` → navigates to group
 - Unread badge count; marks all as read on open
-- Actor profile fetched in batch
+- Actor profiles fetched in batch
 
 ### My Profile (`ProfileScreen`)
 Tabs: **About**, **Publications**, **Posts**
@@ -161,7 +186,7 @@ Import menu (top-right):
 - **CV upload** (PDF/DOCX/TXT) — calls `extract-publications` edge function in `mode:'full_cv'`, imports bio/title/location/honors/languages/skills/work_history/education + publications
 
 Profile sections (stored as JSONB arrays in `profiles`):
-`work_history`, `education`, `volunteering`, `organizations`, `honors`, `languages`, `skills`, `patents`
+`work_history`, `education`, `volunteering`, `organizations`, `honors`, `languages`, `skills`, `patents`, `grants`
 
 **Publications tab** (`PublicationsTab`):
 - CRUD for `publications` table
@@ -211,23 +236,125 @@ Profile sections (stored as JSONB arrays in `profiles`):
 - Shows: avatar, name, title, institution, bio, work history, education, skills, publications
 - Tab: About / Publications
 
-## Database Schema (Supabase / PostgreSQL)
+## Database Schema (live — verified against Supabase 2026-04-17)
 
-| Table | Key columns |
-|-------|-------------|
-| `profiles` | id (FK auth.users), name, title, institution, location, bio, orcid, twitter, avatar_color, avatar_url, work_history (JSONB[]), education (JSONB[]), volunteering (JSONB[]), organizations (JSONB[]), honors (JSONB[]), languages (JSONB[]), skills (JSONB[]), patents (JSONB[]), **profile_slug** TEXT UNIQUE, **profile_visibility** JSONB |
-| `posts` | id, user_id, content, post_type, paper_title, paper_journal, paper_doi, paper_abstract, paper_authors, paper_year, link_title, link_url, image_url, file_type, file_name, tags (TEXT[]), visibility |
-| `posts_with_meta` | VIEW: posts + like_count, comment_count |
-| `likes` | user_id, post_id |
-| `comments` | id, post_id, user_id, content, created_at + profiles join |
-| `follows` | follower_id, target_type (user\|paper\|group), target_id |
-| `groups` | id, name, institution, owner_id, created_at |
-| `group_members` | group_id, user_id, role (owner\|member) |
-| `group_posts` | id, group_id, user_id, content, post_type, created_at |
-| `notifications` | id, user_id, actor_id, notif_type, meta (JSONB), read, created_at |
-| `publications` | id, user_id, title, authors, journal, year, doi, pub_type, venue, created_at |
-| `conversations` | id, user_id_a, user_id_b (sorted for canonical dedup), last_message, last_message_at |
-| `messages` | id, conversation_id, sender_id, content, created_at, read_at |
+### `profiles`
+id (FK auth.users), name, title, institution, location, bio, orcid, twitter, website,
+avatar_color, avatar_url, profile_slug (TEXT UNIQUE), profile_visibility (JSONB),
+work_history (JSONB), education (JSONB), volunteering (JSONB), organizations (JSONB),
+honors (JSONB), languages (JSONB), skills (JSONB), patents (JSONB), grants (JSONB),
+li_publications (JSONB), certifications (JSONB),
+first_name, middle_name, last_name, name_prefix, name_suffix,
+identity_tier1, identity_tier2, field_tags (TEXT[]), topic_interests (TEXT[]),
+h_index, i10_index, xp, level,
+onboarding_completed (bool), signup_method, orcid_verified, orcid_imported_at,
+linkedin_imported_at,
+email_notifications (bool), email_marketing (bool),
+marketing_consent_at, terms_accepted_at, privacy_accepted_at,
+card_email, card_phone, card_address, card_linkedin, card_website,
+card_visible, card_show_email, card_show_phone, card_show_address,
+card_show_linkedin, card_show_website, card_show_orcid, card_show_twitter,
+created_at
+
+### `posts`
+id, user_id, content, post_type, visibility,
+paper_title, paper_journal, paper_doi, paper_abstract, paper_authors, paper_year,
+link_title, link_url, link_source,
+image_url, file_type, file_name,
+tags (TEXT[]), tier1, tier2 (TEXT[]),
+created_at
+
+### `posts_with_meta`
+VIEW: posts + author profile fields + like_count, comment_count
+
+### `likes`
+id, user_id, post_id, created_at
+
+### `comments`
+id, post_id, user_id, content, created_at
+
+### `reposts`
+id, user_id, post_id, created_at
+
+### `follows`
+id, follower_id, target_type (user|paper|group), target_id (TEXT), created_at
+
+### `publications`
+id, user_id, title, authors, journal, year, doi, pub_type, venue,
+pmid, source, citations, is_open_access, full_text_url, created_at
+
+### `notifications`
+id, user_id, actor_id, notif_type, target_type, target_id, meta (JSONB), read, created_at
+- notif_type values in use: new_post, new_comment, paper_comment, new_follower, group_post
+
+### `conversations`
+id, user_id_a, user_id_b (sorted for canonical dedup), last_message, last_message_at, created_at
+
+### `messages`
+id, conversation_id, sender_id, content, read_at, created_at, updated_at, inserted_at,
+topic, extension, payload (JSONB), event, private
+
+### `invite_codes`
+id, code, created_by, claimed_by, claimed_at, batch_label, attempts, locked_at, created_at
+
+### `invite_rate_limits`
+ip, window_start, attempts
+
+### `orcid_pending`
+id, token, orcid_id, name, bio, institution, title,
+work_history, education, publications, keywords (all TEXT/JSON strings), expires_at, created_at
+
+### `groups`
+id, name, description, research_topic, avatar_url, cover_url,
+is_public (bool, default true) — **use this for public/closed logic**,
+is_private (bool, legacy — do not use),
+owner_id (uuid, legacy — nullable, do not use for new logic),
+created_by (uuid FK profiles — use this),
+institution (legacy), field_tags (TEXT[], legacy),
+created_at, updated_at
+
+### `group_members`
+id, group_id, user_id,
+role (TEXT: 'admin' | 'member' | 'alumni' — stored as text, not enum),
+display_role (TEXT), joined_at, created_at
+- Legacy 'owner' role was migrated → 'admin'
+
+### `group_join_requests`
+id, group_id, user_id, message, status ('pending'|'approved'|'rejected'), created_at
+
+### `group_posts`
+id, group_id, user_id, content (NOT NULL), post_type,
+paper_doi, paper_title, paper_journal, paper_authors, paper_abstract, paper_year,
+link_url, link_title, link_description,
+image_url, file_type, file_name,
+tags (TEXT[]), tier1, tier2 (TEXT[]),
+content_iv, content_encrypted (bool),
+is_sticky (bool), is_announcement (bool), is_reposted_public (bool),
+edited_at, created_at
+
+### `group_posts_with_meta`
+VIEW: group_posts + author_name, author_title, author_institution,
+author_avatar (avatar_color), author_avatar_url,
+author_identity_tier1, author_identity_tier2,
+author_group_role, author_display_role,
+like_count, comment_count
+
+### `group_post_likes`
+id, post_id, user_id, created_at
+
+### `group_post_comments`
+id, post_id, user_id, content (NOT NULL), read_at, created_at
+
+## RLS — Groups (key policies)
+
+All group RLS uses SECURITY DEFINER helper functions to avoid infinite recursion:
+- `get_my_group_ids()` — group_ids where I am any role
+- `get_my_admin_group_ids()` — group_ids where I am admin
+- `get_my_member_group_ids()` — group_ids where I am admin or member
+- `get_public_group_ids()` — groups where is_public = true
+- `get_my_member_post_ids()` — post ids in groups where I am admin or member
+
+Key policy: `groups_select` allows `is_public = true OR created_by = auth.uid() OR id in (get_my_group_ids())`. The `created_by` check is critical — it allows the creator to read back the group immediately after insert, before the group_members row is added.
 
 ## Edge Functions (Supabase)
 
@@ -261,6 +388,7 @@ Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level s
 
 **Screens with internal split panel** (fixed left panel + flexible right):
 - `MessagesScreen`: 280px conversation list + flex-1 thread
+- `GroupScreen`: 200px group sidebar + flex-1 content
 
 **Screens with centred content** (no sidebar):
 - `NewPostScreen` (maxWidth 640px), `ProfileScreen`, `UserProfileScreen` (740px), `PaperDetailPage` (740px), `PublicPostPage` (640px), `PublicProfilePage` (780px)
@@ -278,4 +406,7 @@ Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level s
 - **Supabase queries** use `.from()` chained calls; no ORM
 - **Fuzzy dedup** for imports: `deduplicateSectionFuzzy` + `scoreWorkMatch` / `scoreEduMatch` in `src/lib/utils.js`
 - Public profile pages skip auth entirely (`if(publicSlug) return` early in useEffect)
-- **Responsive**: No media queries exist yet. All styles are inline JS. Responsive work uses a `useWindowSize` hook (to be added) returning `isMobile` (< 768px).
+- **groups.role** is stored as plain TEXT ('admin'|'member'|'alumni'), not a PostgreSQL enum
+- **groups.created_by** is the authoritative owner field; `owner_id` is legacy and nullable — never use `owner_id` in new code
+- **groups.is_public** is the authoritative visibility field; `is_private` is legacy — never use `is_private` in new code
+- **Responsive**: No media queries exist yet. All styles are inline JS. `useWindowSize` hook in `src/lib/useWindowSize.js` returns `{ isMobile }` (< 768px).

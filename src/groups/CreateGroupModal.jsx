@@ -23,7 +23,6 @@ export default function CreateGroupModal({ user, onGroupCreated, onClose }) {
           research_topic: researchTopic.trim(),
           is_public:      isPublic,
           created_by:     user.id,
-          owner_id:       user.id,
         })
         .select()
         .single();

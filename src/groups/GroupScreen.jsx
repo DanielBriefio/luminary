@@ -80,10 +80,12 @@ function JoinRequestPanel({ group, user, onBack, onJoined }) {
 // Shown when a non-member views a public group (can see the name/info, must join to see posts)
 function PublicJoinPanel({ group, user, onBack, onJoined }) {
   const [joining, setJoining] = useState(false);
+  const [error,   setError]   = useState('');
   const join = async () => {
-    setJoining(true);
-    await supabase.from('group_members').insert({ group_id: group.id, user_id: user.id, role: 'member' });
+    setJoining(true); setError('');
+    const { error: e } = await supabase.from('group_members').insert({ group_id: group.id, user_id: user.id, role: 'member' });
     setJoining(false);
+    if (e) { setError(e.message); return; }
     onJoined();
   };
   return (
@@ -96,6 +98,7 @@ function PublicJoinPanel({ group, user, onBack, onJoined }) {
         <div style={{ background: T.s2, borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: T.mu }}>
           Join this group to see posts and contribute.
         </div>
+        {error && <div style={{ background: T.ro2, border: `1px solid ${T.ro}`, borderRadius: 9, padding: '9px 13px', fontSize: 12.5, color: T.ro, marginBottom: 12 }}>{error}</div>}
         <button onClick={join} disabled={joining} style={{
           width: '100%', padding: '11px', borderRadius: 11, border: 'none',
           background: T.v, color: '#fff', cursor: 'pointer',
