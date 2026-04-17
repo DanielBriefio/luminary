@@ -171,19 +171,16 @@ drop policy if exists "gpc_select" on group_post_comments;
 drop policy if exists "gpc_insert" on group_post_comments;
 drop policy if exists "gpc_delete" on group_post_comments;
 
--- Groups
-create policy "groups_select" on groups for select using (
-  is_public = true or
-  id in (select group_id from group_members where user_id = auth.uid())
-);
-create policy "groups_insert" on groups for insert
-  with check (auth.uid() = created_by);
-create policy "groups_update" on groups for update
-  using (id in (
-    select group_id from group_members where user_id = auth.uid() and role = 'admin'
-  ));
+-- ── SECURITY DEFINER HELPERS ─────────────────────────────────────────────────
+-- Drop first so the script is re-runnable
+drop function if exists get_my_group_ids();
+drop function if exists get_my_admin_group_ids();
+drop function if exists get_my_member_group_ids();
+drop function if exists get_public_group_ids();
+drop function if exists get_my_member_post_ids();
+-- All membership checks go through these functions so RLS on group_members /
+-- groups is never re-entered, preventing infinite recursion in every policy.
 
--- Security-definer helpers avoid infinite recursion in group_members policies
 create or replace function get_my_group_ids()
 returns setof uuid language sql security definer stable set search_path = public as $$
   select group_id from group_members where user_id = auth.uid();
@@ -194,10 +191,37 @@ returns setof uuid language sql security definer stable set search_path = public
   select group_id from group_members where user_id = auth.uid() and role = 'admin';
 $$;
 
+create or replace function get_my_member_group_ids()
+returns setof uuid language sql security definer stable set search_path = public as $$
+  select group_id from group_members where user_id = auth.uid() and role in ('admin','member');
+$$;
+
+create or replace function get_public_group_ids()
+returns setof uuid language sql security definer stable set search_path = public as $$
+  select id from groups where is_public = true;
+$$;
+
+create or replace function get_my_member_post_ids()
+returns setof uuid language sql security definer stable set search_path = public as $$
+  select gp.id from group_posts gp
+  join group_members gm on gm.group_id = gp.group_id
+  where gm.user_id = auth.uid() and gm.role in ('admin','member');
+$$;
+
+-- Groups
+create policy "groups_select" on groups for select using (
+  is_public = true or
+  id in (select get_my_group_ids())
+);
+create policy "groups_insert" on groups for insert
+  with check (auth.uid() = created_by);
+create policy "groups_update" on groups for update
+  using (id in (select get_my_admin_group_ids()));
+
 -- Group members
 create policy "gm_select" on group_members for select using (
   user_id = auth.uid()
-  or group_id in (select id from groups where is_public = true)
+  or group_id in (select get_public_group_ids())
   or group_id in (select get_my_group_ids())
 );
 create policy "gm_insert" on group_members for insert
@@ -216,40 +240,36 @@ create policy "gm_delete" on group_members for delete
 -- Join requests
 create policy "gjr_select" on group_join_requests for select using (
   auth.uid() = user_id or
-  group_id in (select group_id from group_members where user_id = auth.uid() and role = 'admin')
+  group_id in (select get_my_admin_group_ids())
 );
 create policy "gjr_insert" on group_join_requests for insert
   with check (auth.uid() = user_id);
 create policy "gjr_update" on group_join_requests for update
-  using (group_id in (select group_id from group_members where user_id = auth.uid() and role = 'admin'));
+  using (group_id in (select get_my_admin_group_ids()));
 
 -- Group posts
 create policy "gp_select" on group_posts for select using (
-  group_id in (
-    select group_id from group_members where user_id = auth.uid() and role in ('admin', 'member')
-  )
+  group_id in (select get_my_member_group_ids())
 );
 create policy "gp_insert" on group_posts for insert
   with check (
     auth.uid() = user_id and
-    group_id in (
-      select group_id from group_members where user_id = auth.uid() and role in ('admin', 'member')
-    )
+    group_id in (select get_my_member_group_ids())
   );
 create policy "gp_update" on group_posts for update
   using (
     auth.uid() = user_id or
-    group_id in (select group_id from group_members where user_id = auth.uid() and role = 'admin')
+    group_id in (select get_my_admin_group_ids())
   );
 create policy "gp_delete" on group_posts for delete
   using (
     auth.uid() = user_id or
-    group_id in (select group_id from group_members where user_id = auth.uid() and role = 'admin')
+    group_id in (select get_my_admin_group_ids())
   );
 
 -- Likes
 create policy "gpl_select" on group_post_likes for select using (
-  post_id in (select id from group_posts)
+  post_id in (select get_my_member_post_ids())
 );
 create policy "gpl_insert" on group_post_likes for insert
   with check (auth.uid() = user_id);
@@ -258,7 +278,7 @@ create policy "gpl_delete" on group_post_likes for delete
 
 -- Comments
 create policy "gpc_select" on group_post_comments for select using (
-  post_id in (select id from group_posts)
+  post_id in (select get_my_member_post_ids())
 );
 create policy "gpc_insert" on group_post_comments for insert
   with check (auth.uid() = user_id);
