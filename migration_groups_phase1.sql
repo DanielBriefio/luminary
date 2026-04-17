@@ -236,9 +236,7 @@ create policy "groups_update" on groups for update
 
 -- Group members
 create policy "gm_select" on group_members for select using (
-  user_id = auth.uid()
-  or group_id in (select get_public_group_ids())
-  or group_id in (select get_my_group_ids())
+  auth.uid() is not null
 );
 create policy "gm_insert" on group_members for insert
   with check (
