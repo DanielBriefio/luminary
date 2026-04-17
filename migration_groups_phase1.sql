@@ -264,7 +264,15 @@ create policy "gjr_select" on group_join_requests for select using (
 create policy "gjr_insert" on group_join_requests for insert
   with check (auth.uid() = user_id);
 create policy "gjr_update" on group_join_requests for update
-  using (group_id in (select get_my_admin_group_ids()));
+  using (
+    auth.uid() = user_id or
+    group_id in (select get_my_admin_group_ids())
+  );
+create policy "gjr_delete" on group_join_requests for delete
+  using (
+    auth.uid() = user_id or
+    group_id in (select get_my_admin_group_ids())
+  );
 
 -- Group posts
 create policy "gp_select" on group_posts for select using (

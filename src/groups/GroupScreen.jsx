@@ -23,6 +23,7 @@ function JoinRequestPanel({ group, user, onBack, onJoined }) {
   const [sent,      setSent]      = useState(false);
   const [sending,   setSending]   = useState(false);
   const [existing,  setExisting]  = useState(false);
+  const [reqError,  setReqError]  = useState('');
 
   useEffect(() => {
     supabase.from('group_join_requests')
@@ -31,10 +32,11 @@ function JoinRequestPanel({ group, user, onBack, onJoined }) {
   }, [group.id, user.id]);
 
   const sendRequest = async () => {
-    setSending(true);
-    await supabase.from('group_join_requests').upsert({
+    setSending(true); setReqError('');
+    const { error: upsertErr } = await supabase.from('group_join_requests').upsert({
       group_id: group.id, user_id: user.id, message: message.trim(), status: 'pending',
     }, { onConflict: 'group_id,user_id' });
+    if (upsertErr) { setReqError(upsertErr.message); setSending(false); return; }
     // Notify all group admins
     const { data: admins } = await supabase
       .from('group_members').select('user_id').eq('group_id', group.id).eq('role', 'admin');
@@ -67,6 +69,7 @@ function JoinRequestPanel({ group, user, onBack, onJoined }) {
           </div>
         ) : (
           <div>
+            {reqError && <div style={{ background: T.ro2, border: `1px solid ${T.ro}`, borderRadius: 9, padding: '9px 13px', fontSize: 12.5, color: T.ro, marginBottom: 12 }}>{reqError}</div>}
             <textarea value={message} onChange={e => setMessage(e.target.value)}
               placeholder="Optional: introduce yourself or explain your interest in joining…"
               style={{
