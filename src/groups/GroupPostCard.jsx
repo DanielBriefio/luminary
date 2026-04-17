@@ -71,7 +71,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
     setReposting(true);
     const note = groupName ? `\n\n<em style="font-size:11.5px;color:#7a7fa8">Shared from <strong>${groupName}</strong></em>` : '';
     await supabase.from('posts').insert({
-      user_id:       post.user_id,
+      user_id:       currentUserId,
       post_type:     post.post_type,
       content:       (post.content || '') + note,
       paper_title:   post.paper_title,
@@ -263,6 +263,23 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
           <button onClick={toggleComments} style={{ fontSize: 12, color: showComments ? T.v : T.mu, cursor: 'pointer', padding: '3px 9px', borderRadius: 20, fontWeight: 600, border: 'none', background: showComments ? T.v2 : 'transparent', fontFamily: 'inherit' }}>
             💬 {commCount}
           </button>
+          <div style={{ marginLeft: 'auto' }}>
+            {reposted ? (
+              <span style={{ fontSize: 11, color: T.gr, fontWeight: 600 }}>✓ Shared publicly</span>
+            ) : repostConfirm ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11.5, color: T.mu }}>Share to public feed?</span>
+                <button onClick={repostPublic} disabled={reposting} style={{ fontSize: 11.5, fontWeight: 700, color: '#fff', background: T.bl, border: 'none', borderRadius: 20, padding: '3px 11px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {reposting ? '…' : 'Share'}
+                </button>
+                <button onClick={() => setRepostConfirm(false)} style={{ fontSize: 11.5, color: T.mu, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setRepostConfirm(true)} style={{ fontSize: 12, color: T.mu, cursor: 'pointer', padding: '3px 9px', borderRadius: 20, fontWeight: 600, border: 'none', background: 'transparent', fontFamily: 'inherit' }}>
+                ↗ Share
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
