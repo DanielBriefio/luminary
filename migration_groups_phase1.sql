@@ -13,6 +13,15 @@ create table if not exists groups (
   updated_at    timestamptz default now()
 );
 
+-- ── ALTER existing groups if it predates this migration ──────────────────────
+alter table groups add column if not exists description    text default '';
+alter table groups add column if not exists research_topic text default '';
+alter table groups add column if not exists avatar_url     text default '';
+alter table groups add column if not exists cover_url      text default '';
+alter table groups add column if not exists is_public      boolean default true;
+alter table groups add column if not exists created_by     uuid references profiles(id) on delete set null;
+alter table groups add column if not exists updated_at     timestamptz default now();
+
 -- ── GROUP MEMBERS ──────────────────────────────────────────────────────────────
 
 do $$ begin
