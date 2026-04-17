@@ -138,10 +138,6 @@ export default function PublicPostPage({ postId }) {
     </div>
   );
 
-  const ytMatch = post.post_type === 'link' && post.link_url?.match(
-    /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/
-  );
-
   return (
     <div style={{ minHeight: '100vh', background: T.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.text }}>
       {/* Top bar */}
@@ -206,42 +202,6 @@ export default function PublicPostPage({ postId }) {
               <PaperPreview post={post} currentUserId={null} />
             )}
 
-            {/* Link / YouTube */}
-            {post.post_type === 'link' && post.link_title && (
-              ytMatch ? (
-                <div style={{ margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: `1px solid ${T.bdr}` }}>
-                  <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
-                    <iframe
-                      src={`https://www.youtube.com/embed/${ytMatch[1]}`}
-                      title={post.link_title}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-                    />
-                  </div>
-                  <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
-                    <div style={{ padding: '9px 13px', background: T.s2, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 16 }}>▶️</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.link_title}</div>
-                        <div style={{ fontSize: 10.5, color: T.v }}>youtube.com</div>
-                      </div>
-                    </div>
-                  </a>
-                </div>
-              ) : (
-                <a href={post.link_url || '#'} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
-                  <div style={{ background: T.s2, border: `1px solid ${T.bdr}`, borderRadius: 9, padding: '10px 13px', margin: '8px 0', display: 'flex', gap: 11, cursor: 'pointer' }}>
-                    <div style={{ width: 50, height: 50, borderRadius: 8, background: T.am2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🔗</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.4, marginBottom: 2, color: T.text }}>{post.link_title}</div>
-                      {post.link_url && <div style={{ fontSize: 10.5, color: T.v, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.link_url}</div>}
-                    </div>
-                    <div style={{ flexShrink: 0, fontSize: 13, color: T.v, paddingTop: 2, fontWeight: 700 }}>↗</div>
-                  </div>
-                </a>
-              )
-            )}
 
             {/* Stats row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.bdr}` }}>

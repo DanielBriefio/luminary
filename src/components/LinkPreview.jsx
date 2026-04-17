@@ -29,17 +29,17 @@ export default function LinkPreview({ url, compact = false }) {
 
     let cancelled = false;
     setLoading(true);
-    fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`)
+    fetch(`/api/link-preview?url=${encodeURIComponent(url)}`)
       .then(r => r.json())
       .then(json => {
         if (cancelled) return;
-        if (json.status === 'success') {
+        if (json) {
           const d = {
-            title:       json.data.title || '',
-            description: json.data.description || '',
-            image:       json.data.image?.url || '',
-            url:         json.data.url || url,
-            publisher:   json.data.publisher || '',
+            title:       json.title       || '',
+            description: json.description || '',
+            image:       json.image       || '',
+            url:         json.url         || url,
+            publisher:   json.publisher   || '',
           };
           cache[url] = d;
           setData(d);

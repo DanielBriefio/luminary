@@ -137,11 +137,6 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
 
   if (deleted) return null;
 
-  // YouTube embed helper
-  const ytMatch = post.post_type === 'link' && post.link_url?.match(
-    /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/
-  );
-
   return (
     <div style={{ background: T.w, border: `1px solid ${sticky ? T.v : T.bdr}`, borderRadius: 14, overflow: 'hidden', boxShadow: sticky ? `0 2px 12px rgba(108,99,255,.12)` : '0 1px 6px rgba(108,99,255,.06)' }}>
 
@@ -250,62 +245,6 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
         {post.post_type === 'paper' && post.paper_title && (
           <PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper}/>
         )}
-
-        {/* Link card */}
-        {post.post_type === 'link' && post.link_url && (() => {
-          if (ytMatch) {
-            const videoId = ytMatch[1];
-            if (isMobile) {
-              return (
-                <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: `1px solid ${T.bdr}` }}>
-                  <div style={{ position: 'relative' }}>
-                    <img src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`} alt={post.link_title} style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }}/>
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.3)' }}>
-                      <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(0,0,0,.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ fontSize: 22, marginLeft: 4 }}>▶</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ padding: '9px 13px', background: T.s2 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{post.link_title}</div>
-                    <div style={{ fontSize: 10.5, color: T.v }}>Tap to watch on YouTube ↗</div>
-                  </div>
-                </a>
-              );
-            }
-            return (
-              <div style={{ margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: `1px solid ${T.bdr}` }}>
-                <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
-                  <iframe src={`https://www.youtube.com/embed/${videoId}`} title={post.link_title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}/>
-                </div>
-                <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
-                  <div style={{ padding: '9px 13px', background: T.s2, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 16 }}>▶️</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.link_title}</div>
-                      <div style={{ fontSize: 10.5, color: T.v }}>youtube.com</div>
-                    </div>
-                    <span style={{ fontSize: 13, color: T.v, fontWeight: 700, flexShrink: 0 }}>↗</span>
-                  </div>
-                </a>
-              </div>
-            );
-          }
-          return (
-            <a href={post.link_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
-              <div style={{ background: T.s2, border: `1px solid ${T.bdr}`, borderRadius: 9, padding: '10px 13px', margin: '8px 0', display: 'flex', gap: 11 }}>
-                <div style={{ width: 50, height: 50, borderRadius: 8, background: T.am2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🔗</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.4, marginBottom: 2, color: T.text }}>{post.link_title}</div>
-                  <div style={{ fontSize: 10.5, color: T.v, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.link_url}</div>
-                </div>
-                <div style={{ flexShrink: 0, fontSize: 13, color: T.v, fontWeight: 700 }}>↗</div>
-              </div>
-            </a>
-          );
-        })()}
 
         {/* Taxonomy tags */}
         {(post.tier1 || post.tier2?.length > 0 || post.tags?.length > 0) && (

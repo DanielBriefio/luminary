@@ -77,9 +77,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
   const [epError,setEpError]             = useState('');
 
   // Attachments (for text / tip posts)
-  const [attachType,setAttachType]       = useState(null); // null | 'file' | 'link'
-  const [linkTitle,setLinkTitle]         = useState('');
-  const [linkUrl,setLinkUrl]             = useState('');
+  const [attachType,setAttachType]       = useState(null); // null | 'file'
   const [uploadFile,setUploadFile]       = useState(null);
   const [uploadPreview,setUploadPreview] = useState('');
   const [uploadCategory,setUploadCategory] = useState('');
@@ -223,14 +221,12 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
 
   const clearAttachment = () => {
     clearFile();
-    setLinkTitle(''); setLinkUrl('');
     setAttachType(null);
   };
 
   const switchAttachType = (type) => {
     if (attachType === type) { clearAttachment(); return; }
     clearFile();
-    setLinkTitle(''); setLinkUrl('');
     setAttachType(type);
   };
 
@@ -254,7 +250,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
   const publish = async () => {
     const plainContent = content.replace(/<[^>]+>/g,'').trim();
     if(postType === 'paper' && !paperTitle.trim()) { setError('Please add a paper title.'); return; }
-    if(postType !== 'paper' && !plainContent && !uploadFile && !linkUrl.trim()) {
+    if(postType !== 'paper' && !plainContent && !uploadFile) {
       setError('Please write something or add an attachment.'); return;
     }
     setLoading(true); setError('');
@@ -269,8 +265,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
 
     // Derive post_type from attachment
     let resolvedPostType = postType;
-    if (uploadFile)          resolvedPostType = uploadCategory || 'text';
-    else if (linkUrl.trim()) resolvedPostType = 'link';
+    if (uploadFile) resolvedPostType = uploadCategory || 'text';
 
     const manualTags = tags.split(/[\s,]+/).filter(t=>t.trim()).map(t=>t.startsWith('#')?t:`#${t}`);
 
@@ -319,8 +314,6 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
       paper_abstract:paperAbstract.trim(),
       paper_authors: paperAuthors.trim(),
       paper_year:    paperYear.trim(),
-      link_title:    linkTitle.trim(),
-      link_url:      linkUrl.trim(),
       image_url:     fileUrl,
       file_type:     uploadCategory,
       file_name:     uploadFile?.name || '',
