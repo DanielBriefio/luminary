@@ -45,6 +45,9 @@ create table if not exists group_members (
 alter table group_members add column if not exists display_role text default '';
 alter table group_members add column if not exists joined_at    timestamptz default now();
 
+-- Migrate legacy 'owner' role → 'admin' so all permission checks work
+update group_members set role = 'admin' where role = 'owner';
+
 -- ── GROUP JOIN REQUESTS ────────────────────────────────────────────────────────
 
 create table if not exists group_join_requests (
