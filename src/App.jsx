@@ -8,7 +8,8 @@ import { useWindowSize } from './lib/useWindowSize';
 import AuthScreen from './screens/AuthScreen';
 import FeedScreen from './feed/FeedScreen';
 import ExploreScreen from './screens/ExploreScreen';
-import GroupsScreen from './screens/GroupsScreen';
+import GroupsScreen from './groups/GroupsScreen';
+import GroupScreen from './groups/GroupScreen';
 import NotifsScreen from './screens/NotifsScreen';
 import NewPostScreen from './screens/NewPostScreen';
 import ProfileScreen from './profile/ProfileScreen';
@@ -73,6 +74,7 @@ export default function App() {
   const [invitesRemaining,setInvitesRemaining]=useState(0);
   const [copiedCode,setCopiedCode]=useState(null);
   const [showSettings,setShowSettings]=useState(false);
+  const [activeGroupId,setActiveGroupId]=useState(null);
   const [showOrcidImport,setShowOrcidImport]=useState(false);
   const [orcidPendingToken,  setOrcidPendingToken]  = useState('');
   const [orcidPendingName,   setOrcidPendingName]   = useState('');
@@ -243,9 +245,11 @@ export default function App() {
     explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
-    groups:       <GroupsScreen user={user}/>,
+    groups: activeGroupId
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper}/>
+      : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,
-    notifs:       <NotifsScreen user={user}/>,
+    notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     post:         <NewPostScreen user={user} profile={profile} onPostCreated={()=>setScreen('feed')}/>,
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,

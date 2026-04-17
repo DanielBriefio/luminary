@@ -10,6 +10,7 @@ const NOTIF_CONFIG = {
   new_comment:        { icon: '💬', label: () => `commented on your post` },
   paper_comment:      { icon: '📄', label: (n) => `commented on a paper you follow${n.meta?.paper_title ? ` — ${n.meta.paper_title}` : ''}` },
   new_follower:       { icon: '👤', label: () => `started following you` },
+  group_post:         { icon: '🔬', label: (n) => `posted in ${n.meta?.group_name ? `"${n.meta.group_name}"` : 'your group'}` },
   group_announcement: { icon: '📢', label: () => `posted a group announcement` },
   group_member_added: { icon: '🤝', label: () => `was added to a group` },
 };
@@ -27,7 +28,7 @@ function postSnippet(post) {
   return trimmed.length > 160 ? trimmed.slice(0, 160).replace(/\s\S*$/, '') + '…' : trimmed;
 }
 
-export default function NotifsScreen({ user }) {
+export default function NotifsScreen({ user, onViewGroup }) {
   const [notifs,   setNotifs]   = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [actorMap, setActorMap] = useState({});
@@ -119,23 +120,27 @@ export default function NotifsScreen({ user }) {
               const actor    = actorMap[n.actor_id];
               const cfg      = NOTIF_CONFIG[n.notif_type] || { icon: '🔔', label: () => n.notif_type };
               const isUnread = !n.read;
-              const postId   = POST_NOTIF_TYPES.has(n.notif_type) ? n.target_id : null;
-              const post     = postId ? postMap[postId] : null;
-              const snippet  = postSnippet(post);
+              const postId    = POST_NOTIF_TYPES.has(n.notif_type) ? n.target_id : null;
+              const groupId   = n.notif_type === 'group_post' ? n.meta?.group_id : null;
+              const post      = postId ? postMap[postId] : null;
+              const snippet   = postSnippet(post);
               const goToActor = () => { if (actor?.profile_slug) window.location.href = `/p/${actor.profile_slug}`; };
               const goToPost  = () => { if (postId) window.location.href = `/s/${postId}`; };
+              const goToGroup = () => { if (groupId && onViewGroup) onViewGroup(groupId); };
+              const isClickable = !!(postId || groupId);
+              const handleClick = groupId ? goToGroup : (postId ? goToPost : undefined);
               return (
                 <div key={n.id}
-                  onClick={postId ? goToPost : undefined}
+                  onClick={handleClick}
                   style={{
                     display:"flex",alignItems:"flex-start",gap:12,
                     padding:"14px 18px",
                     borderBottom:`1px solid ${T.bdr}`,
                     background: isUnread ? T.v2 : T.w,
-                    cursor: postId ? "pointer" : "default",
+                    cursor: isClickable ? "pointer" : "default",
                     transition:"background .15s",
                   }}
-                  onMouseEnter={e=>{ if(postId) e.currentTarget.style.background = isUnread ? '#e4e2ff' : T.s2; }}
+                  onMouseEnter={e=>{ if(isClickable) e.currentTarget.style.background = isUnread ? '#e4e2ff' : T.s2; }}
                   onMouseLeave={e=>{ e.currentTarget.style.background = isUnread ? T.v2 : T.w; }}
                 >
                   <div onClick={e=>{ e.stopPropagation(); goToActor(); }}
@@ -175,6 +180,7 @@ export default function NotifsScreen({ user }) {
                     <div style={{fontSize:10.5,color:T.mu,marginTop:5,display:'flex',alignItems:'center',gap:8}}>
                       {timeAgo(n.created_at)}
                       {postId && <span style={{color:T.v,fontWeight:600}}>View post →</span>}
+                      {groupId && <span style={{color:T.v,fontWeight:600}}>Open group →</span>}
                     </div>
                   </div>
                   {isUnread && (
