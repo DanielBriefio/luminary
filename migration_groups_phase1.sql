@@ -15,7 +15,10 @@ create table if not exists groups (
 
 -- ── GROUP MEMBERS ──────────────────────────────────────────────────────────────
 
-create type if not exists group_role as enum ('admin', 'member', 'alumni');
+do $$ begin
+  create type group_role as enum ('admin', 'member', 'alumni');
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists group_members (
   id           uuid primary key default gen_random_uuid(),
