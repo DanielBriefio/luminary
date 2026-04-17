@@ -14,6 +14,7 @@ create table if not exists groups (
 );
 
 -- Add columns that may be missing on a pre-existing groups table
+alter table groups alter column owner_id drop not null;
 alter table groups add column if not exists description    text default '';
 alter table groups add column if not exists research_topic text default '';
 alter table groups add column if not exists avatar_url     text default '';
