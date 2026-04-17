@@ -183,22 +183,34 @@ create policy "groups_update" on groups for update
     select group_id from group_members where user_id = auth.uid() and role = 'admin'
   ));
 
+-- Security-definer helpers avoid infinite recursion in group_members policies
+create or replace function get_my_group_ids()
+returns setof uuid language sql security definer stable set search_path = public as $$
+  select group_id from group_members where user_id = auth.uid();
+$$;
+
+create or replace function get_my_admin_group_ids()
+returns setof uuid language sql security definer stable set search_path = public as $$
+  select group_id from group_members where user_id = auth.uid() and role = 'admin';
+$$;
+
 -- Group members
 create policy "gm_select" on group_members for select using (
-  group_id in (select group_id from group_members where user_id = auth.uid())
+  user_id = auth.uid()
   or group_id in (select id from groups where is_public = true)
+  or group_id in (select get_my_group_ids())
 );
 create policy "gm_insert" on group_members for insert
   with check (auth.uid() = user_id);
 create policy "gm_update" on group_members for update
   using (
     auth.uid() = user_id or
-    group_id in (select group_id from group_members where user_id = auth.uid() and role = 'admin')
+    group_id in (select get_my_admin_group_ids())
   );
 create policy "gm_delete" on group_members for delete
   using (
     auth.uid() = user_id or
-    group_id in (select group_id from group_members where user_id = auth.uid() and role = 'admin')
+    group_id in (select get_my_admin_group_ids())
   );
 
 -- Join requests
