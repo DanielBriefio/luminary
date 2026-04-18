@@ -129,14 +129,14 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   return (
     <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,overflow:"hidden",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
 
-      {/* Group source banner */}
+      {/* Group source banner — entire row is clickable */}
       {post.group_id && post.group_name && (
-        <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",background:T.v2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600}}>
-          🔬 Shared from{' '}
-          <button onClick={e=>{ e.stopPropagation(); onViewGroup?.(post.group_id); }}
-            style={{color:T.v,fontWeight:700,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:"inherit",padding:0}}>
-            {post.group_name}
-          </button>
+        <div
+          onClick={e=>{ e.stopPropagation(); onViewGroup?.(post.group_id); }}
+          style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",background:T.v2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600,cursor:onViewGroup?"pointer":"default"}}
+        >
+          🔬 Shared from <span style={{color:T.v,fontWeight:700}}>{post.group_name}</span>
+          {onViewGroup && <span style={{marginLeft:"auto",fontSize:10.5,color:T.v}}>Open group →</span>}
         </div>
       )}
 

@@ -76,11 +76,10 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
 
   const repostPublic = async () => {
     setReposting(true);
-    const note = groupName ? `\n\n<em style="font-size:11.5px;color:#7a7fa8">Shared from <strong>${groupName}</strong></em>` : '';
     await supabase.from('posts').insert({
       user_id:        currentUserId,
       post_type:      post.post_type,
-      content:        (post.content || '') + note,
+      content:        post.content || '',
       paper_title:    post.paper_title,
       paper_journal:  post.paper_journal,
       paper_doi:      post.paper_doi,
@@ -96,6 +95,8 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
       tier1:          post.tier1 || '',
       tier2:          post.tier2 || [],
       visibility:     'everyone',
+      group_id:       post.group_id,
+      group_name:     groupName || '',
     });
     await supabase.from('group_posts').update({ is_reposted_public: true }).eq('id', post.id);
     setReposted(true); setRepostConfirm(false); setReposting(false); setMenuOpen(false);
