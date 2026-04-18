@@ -134,7 +134,7 @@ function GroupAvatar({ group, size = 48 }) {
   );
 }
 
-export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup }) {
+export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup, onMarkRead }) {
   const [group,      setGroup]      = useState(null);
   const [myRole,     setMyRole]     = useState(null);
   const [activeTab,  setActiveTab]  = useState('feed');
@@ -207,9 +207,12 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
 
       {/* Group sidebar */}
       <div style={{ width: 200, flexShrink: 0, background: T.w, borderRight: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column' }}>
-        {/* Back */}
-        <div style={{ padding: '10px 14px', borderBottom: `1px solid ${T.bdr}` }}>
-          <button onClick={onBack} style={{ fontSize: 12, color: T.v, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, padding: 0 }}>← All groups</button>
+        {/* Breadcrumb */}
+        <div onClick={onBack} style={{
+          fontSize: 11, color: T.mu, cursor: 'pointer',
+          padding: '8px 14px 4px', display: 'flex', alignItems: 'center', gap: 4,
+        }}>
+          ← All groups
         </div>
 
         {/* Group info */}
@@ -300,6 +303,7 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
             profile={profile}
             myRole={myRole}
             onViewPaper={onViewPaper}
+            onMarkRead={onMarkRead}
           />
         )}
         {activeTab === 'members' && (

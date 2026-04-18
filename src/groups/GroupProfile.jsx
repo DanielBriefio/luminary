@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T } from '../lib/constants';
+import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
+import FollowBtn from '../components/FollowBtn';
 
 export default function GroupProfile({ groupId, group, user, myRole, onGroupUpdate, onViewGroup, onSwitchTab }) {
   const [stats,         setStats]         = useState(null);
@@ -16,6 +17,8 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
   const [editName,     setEditName]     = useState('');
   const [editDesc,     setEditDesc]     = useState('');
   const [editTopic,    setEditTopic]    = useState('');
+  const [editTier1,    setEditTier1]    = useState('');
+  const [editTier2,    setEditTier2]    = useState([]);
   const [editLocation, setEditLocation] = useState('');
   const [editEmail,    setEditEmail]    = useState('');
   const [editWebsite,  setEditWebsite]  = useState('');
@@ -23,6 +26,16 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
   const [editCollabs,  setEditCollabs]  = useState([]);
   const [collabSearch, setCollabSearch] = useState('');
   const [collabResults,setCollabResults]= useState([]);
+  // Public profile settings
+  const [editSlug,          setEditSlug]          = useState('');
+  const [slugError,         setSlugError]         = useState('');
+  const [editPublicEnabled, setEditPublicEnabled] = useState(false);
+  const [editShowMembers,   setEditShowMembers]   = useState(true);
+  const [editShowLeader,    setEditShowLeader]    = useState(true);
+  const [editShowLocation,  setEditShowLocation]  = useState(true);
+  const [editShowContact,   setEditShowContact]   = useState(false);
+  const [editShowPosts,     setEditShowPosts]     = useState(true);
+  const qrRef = useRef(null);
 
   // Image uploads
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -65,11 +78,20 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     setEditName(group.name || '');
     setEditDesc(group.description || '');
     setEditTopic(group.research_topic || '');
+    setEditTier1(group.tier1 || '');
+    setEditTier2(group.tier2 || []);
     setEditLocation(group.location || '');
     setEditEmail(group.contact_email || '');
     setEditWebsite(group.website_url || '');
     setEditCollabs(group.collaborating_groups || []);
-    // Fetch current admin's display_role
+    setEditSlug(group.slug || '');
+    setEditPublicEnabled(group.public_profile_enabled || false);
+    setEditShowMembers(group.public_show_members ?? true);
+    setEditShowLeader(group.public_show_leader ?? true);
+    setEditShowLocation(group.public_show_location ?? true);
+    setEditShowContact(group.public_show_contact ?? false);
+    setEditShowPosts(group.public_show_posts ?? true);
+    setSlugError('');
     const { data: mem } = await supabase
       .from('group_members').select('display_role')
       .eq('group_id', groupId).eq('user_id', user.id).maybeSingle();
@@ -77,18 +99,43 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     setEditing(true);
   };
 
+  useEffect(() => {
+    if (!group?.slug || !group?.public_profile_enabled || !qrRef.current) return;
+    import('qrcode').then(QRCode => {
+      QRCode.toCanvas(qrRef.current, `https://luminary.to/g/${group.slug}`,
+        { width: 140, margin: 1, color: { dark: '#1b1d36', light: '#ffffff' } });
+    }).catch(() => {});
+  }, [group?.slug, group?.public_profile_enabled]);
+
   const cancelEdit = () => { setEditing(false); setCollabSearch(''); setCollabResults([]); };
+
+  const updateSlug = async () => {
+    if (!editSlug.trim()) return;
+    const clean = editSlug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    setEditSlug(clean);
+    const { error } = await supabase.from('groups').update({ slug: clean }).eq('id', groupId);
+    if (error?.code === '23505') { setSlugError('This slug is already taken.'); }
+    else { setSlugError(''); onGroupUpdate?.(); }
+  };
 
   const saveEdit = async () => {
     setSaving(true);
     await supabase.from('groups').update({
-      name:                 editName,
-      description:          editDesc,
-      research_topic:       editTopic,
-      location:             editLocation,
-      contact_email:        editEmail,
-      website_url:          editWebsite,
-      collaborating_groups: editCollabs,
+      name:                   editName,
+      description:            editDesc,
+      research_topic:         editTopic,
+      tier1:                  editTier1,
+      tier2:                  editTier2,
+      location:               editLocation,
+      contact_email:          editEmail,
+      website_url:            editWebsite,
+      collaborating_groups:   editCollabs,
+      public_profile_enabled: editPublicEnabled,
+      public_show_members:    editShowMembers,
+      public_show_leader:     editShowLeader,
+      public_show_location:   editShowLocation,
+      public_show_contact:    editShowContact,
+      public_show_posts:      editShowPosts,
     }).eq('id', groupId);
     await supabase.from('group_members').update({ display_role: editDispRole })
       .eq('group_id', groupId).eq('user_id', user.id);
@@ -217,15 +264,20 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
               </>
             )}
           </div>
-          {isAdmin && !editing && (
-            <button onClick={startEdit} style={{
-              padding: '7px 16px', borderRadius: 20,
-              border: `1.5px solid ${T.bdr}`, background: T.w,
-              cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: T.mu,
-            }}>
-              Edit profile
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {!myRole && user && (
+              <FollowBtn targetType="group" targetId={groupId} currentUserId={user.id}/>
+            )}
+            {isAdmin && !editing && (
+              <button onClick={startEdit} style={{
+                padding: '7px 16px', borderRadius: 20,
+                border: `1.5px solid ${T.bdr}`, background: T.w,
+                cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: T.mu,
+              }}>
+                Edit profile
+              </button>
+            )}
+          </div>
           {editing && (
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={cancelEdit} style={{
@@ -261,13 +313,57 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
             </div>
           )}
 
-          {/* Research topic */}
+          {/* Taxonomy badges / edit */}
           {editing ? (
-            <input value={editTopic} onChange={e => setEditTopic(e.target.value)}
-              style={{ ...inputStyle, marginTop: 6 }} placeholder="Research focus area"/>
-          ) : group.research_topic ? (
-            <div style={{ fontSize: 13, color: T.v, fontWeight: 600, marginBottom: 8 }}>{group.research_topic}</div>
-          ) : null}
+            <div style={{ marginTop: 8 }}>
+              <select value={editTier1} onChange={e => { setEditTier1(e.target.value); setEditTier2([]); }}
+                style={{ ...inputStyle, marginBottom: 6, appearance: 'none' }}>
+                <option value="">Select primary discipline…</option>
+                {TIER1_LIST.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              {editTier1 && (
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {getTier2(editTier1).map(t => (
+                    <button key={t} type="button"
+                      onClick={() => setEditTier2(prev =>
+                        prev.includes(t) ? prev.filter(x => x !== t) : prev.length < 3 ? [...prev, t] : prev
+                      )}
+                      style={{
+                        padding: '2px 9px', borderRadius: 20, cursor: 'pointer',
+                        fontSize: 11, fontFamily: 'inherit',
+                        border: `1.5px solid ${editTier2.includes(t) ? T.v : T.bdr}`,
+                        background: editTier2.includes(t) ? T.v2 : T.w,
+                        color: editTier2.includes(t) ? T.v : T.text,
+                      }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input value={editTopic} onChange={e => setEditTopic(e.target.value)}
+                style={{ ...inputStyle }} placeholder="Research details (specific focus, methods, goals…)"/>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 8 }}>
+              {(group.tier1 || group.tier2?.length > 0) && (
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 5 }}>
+                  {group.tier1 && (
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', fontWeight: 700 }}>
+                      {group.tier1}
+                    </span>
+                  )}
+                  {(group.tier2 || []).map(t => (
+                    <span key={t} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: T.v2, color: T.v, fontWeight: 600 }}>
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {group.research_topic && (
+                <div style={{ fontSize: 13, color: T.v, fontWeight: 600 }}>{group.research_topic}</div>
+              )}
+            </div>
+          )}
 
           {/* Contact row */}
           {editing ? (
@@ -460,6 +556,91 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Public profile settings — admin edit mode only */}
+        {isAdmin && editing && (
+          <div style={{ marginBottom: 20, background: T.s2, borderRadius: 12, padding: '14px 16px', border: `1px solid ${T.bdr}` }}>
+            <SectionLabel>Public profile</SectionLabel>
+
+            {/* Enable toggle */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={editPublicEnabled} onChange={e => setEditPublicEnabled(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: T.v, cursor: 'pointer' }}/>
+              <span style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>
+                Enable public profile at <span style={{ color: T.v }}>luminary.to/g/{editSlug || '…'}</span>
+              </span>
+            </label>
+
+            {editPublicEnabled && (
+              <>
+                {/* Slug editor */}
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 4 }}>URL slug</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input value={editSlug} onChange={e => { setEditSlug(e.target.value); setSlugError(''); }}
+                      style={{ ...inputStyle, flex: 1 }} placeholder="group-slug"/>
+                    <button onClick={updateSlug} style={{
+                      padding: '8px 14px', borderRadius: 9, border: 'none',
+                      background: T.v, color: '#fff', cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: 12, fontWeight: 700, flexShrink: 0,
+                    }}>Save slug</button>
+                  </div>
+                  {slugError && <div style={{ fontSize: 11.5, color: T.ro, marginTop: 4 }}>{slugError}</div>}
+                </div>
+
+                {/* Visibility toggles */}
+                <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>Show on public profile:</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', marginBottom: 12 }}>
+                  {[
+                    ['editShowMembers',  editShowMembers,  setEditShowMembers,  'Member count'],
+                    ['editShowLeader',   editShowLeader,   setEditShowLeader,   'Group leader'],
+                    ['editShowLocation', editShowLocation, setEditShowLocation, 'Location'],
+                    ['editShowContact',  editShowContact,  setEditShowContact,  'Contact email'],
+                    ['editShowPosts',    editShowPosts,    setEditShowPosts,    'Public posts'],
+                  ].map(([key, val, setter, label]) => (
+                    <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={val} onChange={e => setter(e.target.checked)}
+                        style={{ accentColor: T.v, cursor: 'pointer' }}/>
+                      <span style={{ fontSize: 12, color: T.text }}>{label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {/* QR + copy link */}
+                {group.slug && group.public_profile_enabled && (
+                  <div style={{ textAlign: 'center', paddingTop: 8 }}>
+                    <canvas ref={qrRef} style={{ borderRadius: 10, display: 'block', margin: '0 auto 8px' }}/>
+                    <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 8 }}>
+                      luminary.to/g/{group.slug}
+                    </div>
+                    <button onClick={() => navigator.clipboard.writeText(`https://luminary.to/g/${group.slug}`)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${T.v}`,
+                        background: T.v2, color: T.v, cursor: 'pointer',
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                      }}>
+                      Copy link
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Public profile info — view mode */}
+        {isAdmin && !editing && group.public_profile_enabled && group.slug && (
+          <div style={{ marginBottom: 20 }}>
+            <SectionLabel>Public profile</SectionLabel>
+            <div style={{ background: T.gr2, border: `1px solid ${T.gr}`, borderRadius: 10, padding: '10px 14px', fontSize: 12.5 }}>
+              ✅ Public at{' '}
+              <a href={`/g/${group.slug}`} target="_blank" rel="noopener noreferrer"
+                style={{ color: T.v, fontWeight: 700, textDecoration: 'none' }}>
+                luminary.to/g/{group.slug}
+              </a>
+            </div>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabase';
 import { T, NAV } from './lib/constants';
 import Av from './components/Av';
@@ -24,6 +24,7 @@ import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
+import PublicGroupProfileScreen from './groups/PublicGroupProfileScreen';
 
 import OrcidImporter from './profile/OrcidImporter';
 
@@ -51,11 +52,18 @@ const getPublicCardSlug = () => {
   return m ? m[1] : null;
 };
 
+// Detect public group route: /g/:slug
+const getPublicGroupSlug = () => {
+  const m = window.location.pathname.match(/^\/g\/([^/]+)\/?$/);
+  return m ? m[1] : null;
+};
+
 export default function App() {
-  const [publicSlug]     = useState(getPublicSlug);
-  const [publicPostId]   = useState(getPublicPostId);
-  const [publicPaperDoi] = useState(getPublicPaperDoi);
-  const [publicCardSlug] = useState(getPublicCardSlug);
+  const [publicSlug]      = useState(getPublicSlug);
+  const [publicPostId]    = useState(getPublicPostId);
+  const [publicPaperDoi]  = useState(getPublicPaperDoi);
+  const [publicCardSlug]  = useState(getPublicCardSlug);
+  const [publicGroupSlug] = useState(getPublicGroupSlug);
   const { isMobile } = useWindowSize();
   const [session,setSession]=useState(null);
   const [profile,setProfile]=useState(null);
@@ -75,6 +83,7 @@ export default function App() {
   const [copiedCode,setCopiedCode]=useState(null);
   const [showSettings,setShowSettings]=useState(false);
   const [activeGroupId,setActiveGroupId]=useState(null);
+  const [groupUnreadCount,setGroupUnreadCount]=useState(0);
   const [showOrcidImport,setShowOrcidImport]=useState(false);
   const [orcidPendingToken,  setOrcidPendingToken]  = useState('');
   const [orcidPendingName,   setOrcidPendingName]   = useState('');
@@ -94,7 +103,7 @@ export default function App() {
   };
 
   useEffect(()=>{
-    if(publicSlug || publicPostId || publicPaperDoi || publicCardSlug) return; // no auth needed for public pages
+    if(publicSlug || publicPostId || publicPaperDoi || publicCardSlug || publicGroupSlug) return; // no auth needed for public pages
     supabase.auth.getSession().then(({data})=>{ setSession(data.session); setAuthChecked(true); });
     const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{
       setSession(s);
@@ -157,6 +166,31 @@ export default function App() {
     const interval = setInterval(fetchUnreadNotifs, 30000);
     return ()=>clearInterval(interval);
   },[session]);
+
+  // Unread group posts badge — poll every 60s
+  const fetchGroupUnreadCount = useCallback(async () => {
+    if (!session?.user) return;
+    const { data: memberships } = await supabase
+      .from('group_members').select('group_id, last_read_at')
+      .eq('user_id', session.user.id).in('role', ['admin', 'member']);
+    if (!memberships?.length) { setGroupUnreadCount(0); return; }
+    let total = 0;
+    for (const m of memberships) {
+      const { count } = await supabase.from('group_posts')
+        .select('id', { count: 'exact', head: true })
+        .eq('group_id', m.group_id)
+        .gt('created_at', m.last_read_at || '1970-01-01');
+      total += count || 0;
+    }
+    setGroupUnreadCount(total);
+  }, [session]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    fetchGroupUnreadCount();
+    const interval = setInterval(fetchGroupUnreadCount, 60000);
+    return () => clearInterval(interval);
+  }, [session, fetchGroupUnreadCount]);
 
   // Invite codes
   useEffect(()=>{
@@ -266,10 +300,11 @@ export default function App() {
   const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>;
 
   // Public pages — no auth required
-  if(publicSlug)     return <>{fonts}<PublicProfilePage slug={publicSlug}/></>;
-  if(publicPostId)   return <>{fonts}<PublicPostPage postId={publicPostId}/></>;
-  if(publicPaperDoi) return <>{fonts}<PaperDetailPage doi={publicPaperDoi} isPublicPage={true}/></>;
-  if(publicCardSlug) return <>{fonts}<CardPage slug={publicCardSlug}/>;</>;
+  if(publicSlug)      return <>{fonts}<PublicProfilePage slug={publicSlug}/></>;
+  if(publicPostId)    return <>{fonts}<PublicPostPage postId={publicPostId}/></>;
+  if(publicPaperDoi)  return <>{fonts}<PaperDetailPage doi={publicPaperDoi} isPublicPage={true}/></>;
+  if(publicCardSlug)  return <>{fonts}<CardPage slug={publicCardSlug}/></>;
+  if(publicGroupSlug) return <>{fonts}<PublicGroupProfileScreen slug={publicGroupSlug}/></>;
 
   if(isPasswordRecovery) return <>{fonts}<ResetPasswordScreen onDone={()=>setIsPasswordRecovery(false)}/></>;
   if(!authChecked) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;
@@ -282,12 +317,12 @@ export default function App() {
 
   const user=session.user;
   const screens={
-    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}}/>,
+    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
     groups: activeGroupId
-      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}}/>
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
@@ -415,7 +450,11 @@ export default function App() {
             </div>
             <div style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
               {NAV.map(n=>(
-                <div key={n.id} onClick={()=>{ if(n.id==='notifs') setUnreadNotifs(0); setScreen(n.id); }}
+                <div key={n.id} onClick={()=>{
+                  if(n.id==='notifs') setUnreadNotifs(0);
+                  if(n.id==='groups') setActiveGroupId(null);
+                  setScreen(n.id);
+                }}
                   style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",margin:"1px 8px",borderRadius:9,cursor:"pointer",fontSize:12.5,fontWeight:screen===n.id?700:500,color:screen===n.id?T.v:T.mu,background:screen===n.id?T.v2:"transparent"}}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{flexShrink:0}}><path d={n.p}/></svg>
                   {n.l}
@@ -427,6 +466,11 @@ export default function App() {
                   {n.id==='notifs' && unreadNotifs>0 && (
                     <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,background:T.ro,color:"#fff",padding:"1px 6px",borderRadius:20,minWidth:16,textAlign:"center"}}>
                       {unreadNotifs>9?'9+':unreadNotifs}
+                    </span>
+                  )}
+                  {n.id==='groups' && groupUnreadCount>0 && (
+                    <span style={{marginLeft:"auto",fontSize:10,fontWeight:700,background:T.v,color:"#fff",padding:"1px 6px",borderRadius:20,minWidth:16,textAlign:"center"}}>
+                      {groupUnreadCount>99?'99+':groupUnreadCount}
                     </span>
                   )}
                 </div>

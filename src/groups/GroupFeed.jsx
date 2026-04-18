@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import GroupPostCard from './GroupPostCard';
 import GroupNewPost from './GroupNewPost';
 
-export default function GroupFeed({ groupId, groupName, user, profile, myRole, onViewPaper }) {
+export default function GroupFeed({ groupId, groupName, user, profile, myRole, onViewPaper, onMarkRead }) {
   const [posts,      setPosts]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [showCompose,setShowCompose]= useState(false);
@@ -39,6 +39,15 @@ export default function GroupFeed({ groupId, groupName, user, profile, myRole, o
   }, [groupId, user]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
+
+  // Mark group as read when feed is opened
+  useEffect(() => {
+    if (!groupId || !user) return;
+    supabase.from('group_members')
+      .update({ last_read_at: new Date().toISOString() })
+      .eq('group_id', groupId).eq('user_id', user.id)
+      .then(() => { onMarkRead?.(); });
+  }, [groupId]); // eslint-disable-line
 
   const handlePostCreated = () => {
     setShowCompose(false);

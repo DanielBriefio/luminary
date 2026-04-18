@@ -6,7 +6,7 @@ import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
 import { useWindowSize } from '../lib/useWindowSize';
 
-export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick }) {
+export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup }) {
   const { isMobile } = useWindowSize();
   const [posts,setPosts]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -168,8 +168,33 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       }
     }
 
+    // ── 3b. Group reposts for Following feed ─────────────────────────────
+    let groupRepostPromise = Promise.resolve([]);
+    if (fp === 'fol' && tab !== 'papers') {
+      groupRepostPromise = (async () => {
+        const { data: followedGroups } = await supabase
+          .from('follows').select('target_id')
+          .eq('follower_id', user.id).eq('target_type', 'group');
+        const followedGroupIds = (followedGroups || []).map(f => f.target_id);
+        if (!followedGroupIds.length) return [];
+        const { data } = await supabase
+          .from('group_posts_with_meta').select('*')
+          .in('group_id', followedGroupIds)
+          .eq('is_reposted_public', true)
+          .order('created_at', { ascending: false }).limit(20);
+        return (data || []).map(p => ({
+          ...p,
+          _itemKey:   `gp_${p.id}`,
+          _sortTime:  p.created_at,
+          isRepost:   false,
+          group_id:   p.group_id,
+          group_name: p.group_name,
+        }));
+      })();
+    }
+
     // ── 4. Await both in parallel ────────────────────────────────────────
-    const [{ data: regularData }, repostItems] = await Promise.all([postQ, repostPromise]);
+    const [{ data: regularData }, repostItems, groupRepostItems] = await Promise.all([postQ, repostPromise, groupRepostPromise]);
 
     // ── 5. Merge ─────────────────────────────────────────────────────────
     const followedUserSet  = new Set(followedUserIds);
@@ -183,6 +208,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         followedUserSet.has(item.user_id) ||
         (item.paper_doi && followedPaperSet.has(item.paper_doi))
       ),
+      ...groupRepostItems,
     ];
     if (!allItems.length) { setPosts([]); setLoading(false); return; }
 
@@ -303,7 +329,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                   <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:8}}>{emptyMsg.title}</div>
                   <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                 </div>
-              ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick}/>)}
+              ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup}/>)}
             </div>
             {!isMobile && (
               <div>

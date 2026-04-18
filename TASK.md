@@ -1,751 +1,824 @@
-# Task: Invite code brute-force protection + ORCID OAuth sign-up
+# Task: Groups — Phase 2 Refinements
 
 ## Context
 
 Read CLAUDE.md and PRODUCT_STATE.md first.
 
-This task covers two security improvements:
+Phase 2 has already been built. This task adds refinements to the
+groups feature covering navigation improvements, group badge cards,
+taxonomy for research areas, public group profiles with QR codes,
+group following with feed integration, unread indicators, and
+"From [Group]" links in posts.
 
-1. **Invite code attempts counter** — lock a code after 5 failed attempts
-   to prevent brute-force guessing of valid codes.
-
-2. **ORCID OAuth sign-up** — replace the current ORCID iD text input
-   (which can be faked) with a true OAuth flow that verifies the user
-   actually controls that ORCID account. Auto-populates profile and
-   publications on account creation.
-
----
-
-## IMPORTANT — Before starting
-
-The ORCID OAuth requires credentials that the user must obtain manually:
-
-- `ORCID_CLIENT_ID` — from orcid.org/developer-tools
-- `ORCID_CLIENT_SECRET` — from orcid.org/developer-tools
-
-**For development/testing**, use the ORCID Sandbox:
-- Register at: https://sandbox.orcid.org/developer-tools
-- Sandbox authorize URL: `https://sandbox.orcid.org/oauth/authorize`
-- Sandbox token URL: `https://sandbox.orcid.org/oauth/token`
-- Sandbox API: `https://pub.sandbox.orcid.org/v3.0`
-- Test ORCID accounts can be created at sandbox.orcid.org
-
-**For production**, use:
-- Register at: https://orcid.org/developer-tools
-- Production authorize URL: `https://orcid.org/oauth/authorize`
-- Production token URL: `https://orcid.org/oauth/token`
-- Production API: `https://pub.orcid.org/v3.0`
-
-The redirect URI to register in both:
-```
-https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/orcid-callback
-```
-
-Once the user has their credentials, they must add them as Supabase secrets:
-```bash
-npx supabase secrets set ORCID_CLIENT_ID=your_client_id
-npx supabase secrets set ORCID_CLIENT_SECRET=your_client_secret
-npx supabase secrets set ORCID_REDIRECT_URI=https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/orcid-callback
-npx supabase secrets set APP_URL=https://luminary.to
-```
-
-For sandbox testing, also set:
-```bash
-npx supabase secrets set ORCID_ENV=sandbox
-```
-For production:
-```bash
-npx supabase secrets set ORCID_ENV=production
-```
-
-Build the code so it works with sandbox credentials now and switches to
-production by changing the ORCID_ENV secret — no code changes needed.
+Do NOT re-implement anything already built in Phase 1 or Phase 2.
+Read the existing group files carefully before making changes.
 
 ---
 
-## Part 1 — Invite code attempts counter
+## Step 1 — SQL migration
 
-### SQL migration
-
-Create `migration_security.sql`:
+Create `migration_groups_phase2b.sql` in the project root:
 
 ```sql
--- Add attempts counter to invite codes
-alter table invite_codes
-  add column if not exists attempts    integer default 0,
-  add column if not exists locked_at   timestamptz default null;
+-- Group slug for public profile URL
+alter table groups
+  add column if not exists slug             text unique,
+  add column if not exists tier1            text    default '',
+  add column if not exists tier2            text[]  default '{}',
+  add column if not exists research_details text    default '',
+  -- Visibility toggles for public profile
+  add column if not exists public_show_members    boolean default true,
+  add column if not exists public_show_leader     boolean default true,
+  add column if not exists public_show_location   boolean default true,
+  add column if not exists public_show_contact    boolean default false,
+  add column if not exists public_show_posts      boolean default true,
+  add column if not exists public_profile_enabled boolean default false;
 
--- Max attempts before lockout
--- (enforced in application code, 5 attempts)
+-- Auto-generate slug from group name on insert
+create or replace function generate_group_slug()
+returns trigger language plpgsql as $$
+declare
+  base_slug text;
+  final_slug text;
+  counter   integer := 0;
+begin
+  base_slug := lower(regexp_replace(new.name, '[^a-zA-Z0-9]+', '-', 'g'));
+  base_slug := trim(both '-' from base_slug);
+  final_slug := base_slug;
+  loop
+    exit when not exists (
+      select 1 from groups where slug = final_slug and id != new.id
+    );
+    counter    := counter + 1;
+    final_slug := base_slug || '-' || counter;
+  end loop;
+  new.slug := final_slug;
+  return new;
+end;
+$$;
+
+create trigger group_slug_trigger
+  before insert on groups
+  for each row
+  when (new.slug is null or new.slug = '')
+  execute function generate_group_slug();
+
+-- Backfill slugs for existing groups
+update groups set slug = null where slug is null or slug = '';
+
+-- Group follows (users following groups to see their public posts)
+create table if not exists group_follows (
+  id         uuid primary key default gen_random_uuid(),
+  group_id   uuid references groups(id) on delete cascade not null,
+  user_id    uuid references profiles(id) on delete cascade not null,
+  created_at timestamptz default now(),
+  unique(group_id, user_id)
+);
+
+alter table group_follows enable row level security;
+create policy "gf_select" on group_follows for select using (true);
+create policy "gf_insert" on group_follows for insert
+  with check (auth.uid() = user_id);
+create policy "gf_delete" on group_follows for delete
+  using (auth.uid() = user_id);
+
+create index if not exists idx_group_follows_user
+  on group_follows(user_id);
+create index if not exists idx_group_follows_group
+  on group_follows(group_id);
+
+-- Track unread group posts per member
+-- We use a simple "last_read_at" approach per member per group
+alter table group_members
+  add column if not exists last_read_at timestamptz default now();
 ```
 
-### Frontend changes
+Tell the user to run this in Supabase SQL Editor.
 
-In `src/screens/AuthScreen.jsx`, find the `validateInviteCode` function.
+---
 
-Replace the current validation with a call to a new Edge Function
-(see Part 1 Edge Function below) instead of querying the database
-directly from the frontend:
+## Step 2 — Navigation fix: Groups sidebar button
+
+In `App.jsx` (or wherever the sidebar nav is rendered), change the
+Groups nav item behaviour:
+
+**Current:** clicking Groups when already in a group does nothing.
+**New:** clicking Groups ALWAYS navigates to the GroupsScreen overview.
 
 ```javascript
-const validateInviteCode = async () => {
-  setInviteChecking(true);
-  setInviteError('');
+// In the nav click handler:
+case 'groups':
+  setActiveGroupId(null);  // clear active group
+  setScreen('groups');
+  break;
+```
 
-  try {
-    const { data, error } = await supabase.functions.invoke('validate-invite', {
-      body: { code: inviteCode.trim().toUpperCase() }
-    });
+Inside `GroupScreen.jsx`, remove the "All Groups" / "← Back" link
+from the group sidebar — the main nav Groups button now serves this
+purpose. Replace it with a subtle breadcrumb at the top of the
+group sidebar:
 
-    if (error || !data?.valid) {
-      setInviteValid(false);
-      setInviteError(data?.reason || 'Code not found or already used.');
-    } else {
-      setInviteValid(true);
-      setSignupPath('invite-details');
-    }
-  } catch(e) {
-    setInviteValid(false);
-    setInviteError('Validation failed. Please try again.');
+```jsx
+<div
+  onClick={() => { setActiveGroupId(null); setScreen('groups'); }}
+  style={{
+    fontSize: 11, color: T.mu, cursor: 'pointer',
+    padding: '8px 14px 0', display: 'flex', alignItems: 'center', gap: 4,
+  }}
+>
+  ← All groups
+</div>
+```
+
+---
+
+## Step 3 — Group badge cards on overview
+
+In `src/groups/GroupsScreen.jsx`, replace the current group list
+items with rich badge cards.
+
+### Fetch data for badges
+
+```javascript
+const fetchMyGroups = async () => {
+  const { data } = await supabase
+    .from('group_members')
+    .select(`
+      role, last_read_at,
+      groups(
+        id, name, slug, avatar_url, cover_url, is_public,
+        research_topic, research_details, tier1, tier2,
+        location, contact_email,
+        group_members(count),
+        group_stats(active_member_count, alumni_count)
+      )
+    `)
+    .eq('user_id', user.id)
+    .in('role', ['admin', 'member', 'alumni']);
+  return data || [];
+};
+
+// Fetch unread count per group
+const fetchUnreadCounts = async (groupIds) => {
+  // For each group, count posts newer than last_read_at
+  const counts = {};
+  for (const item of myGroupMemberships) {
+    const { count } = await supabase
+      .from('group_posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('group_id', item.groups.id)
+      .gt('created_at', item.last_read_at || '1970-01-01');
+    counts[item.groups.id] = count || 0;
   }
+  return counts;
+};
 
-  setInviteChecking(false);
+// Fetch mutual members for each group
+const fetchMutualMembers = async (groupId) => {
+  // People I follow who are in this group
+  const { data: following } = await supabase
+    .from('follows')
+    .select('target_id')
+    .eq('follower_id', user.id)
+    .eq('target_type', 'user');
+
+  const followingIds = (following || []).map(f => f.target_id);
+  if (!followingIds.length) return [];
+
+  const { data } = await supabase
+    .from('group_members')
+    .select('user_id, profiles(name, avatar_url, avatar_color)')
+    .eq('group_id', groupId)
+    .in('user_id', followingIds)
+    .limit(3);
+  return data || [];
 };
 ```
 
-Show the lock message clearly when reason is 'locked':
+### Group badge card design
+
+```jsx
+function GroupBadgeCard({ membership, unreadCount, onSelect, onFollow, currentUserId }) {
+  const group   = membership.groups;
+  const isAdmin = membership.role === 'admin';
+  const isMember = ['admin','member'].includes(membership.role);
+
+  return (
+    <div
+      onClick={() => onSelect(group.id)}
+      style={{
+        position: 'relative',
+        background: T.w,
+        border: `1.5px solid ${unreadCount > 0 ? T.v : T.bdr}`,
+        borderRadius: 16,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'box-shadow .15s',
+        boxShadow: unreadCount > 0
+          ? '0 2px 12px rgba(108,99,255,.15)'
+          : '0 1px 4px rgba(0,0,0,.06)',
+      }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,.1)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = unreadCount > 0
+        ? '0 2px 12px rgba(108,99,255,.15)' : '0 1px 4px rgba(0,0,0,.06)'}
+    >
+      {/* Unread badge */}
+      {unreadCount > 0 && (
+        <div style={{
+          position: 'absolute', top: 10, right: 10, zIndex: 2,
+          background: T.v, color: '#fff',
+          fontSize: 10.5, fontWeight: 700,
+          padding: '2px 7px', borderRadius: 20, minWidth: 20,
+          textAlign: 'center',
+        }}>
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </div>
+      )}
+
+      {/* Cover strip */}
+      <div style={{
+        height: 6,
+        background: group.cover_url
+          ? `url(${group.cover_url}) center/cover`
+          : 'linear-gradient(90deg, #667eea, #764ba2, #f093fb)',
+      }}/>
+
+      <div style={{ padding: '14px 16px 16px' }}>
+        {/* Top row: avatar + name + badges */}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+          {/* Group avatar */}
+          <div style={{
+            width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+            background: T.v2, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', fontSize: 20, fontWeight: 700,
+            color: T.v, overflow: 'hidden', border: `2px solid ${T.w}`,
+            boxShadow: '0 1px 4px rgba(0,0,0,.1)',
+          }}>
+            {group.avatar_url
+              ? <img src={group.avatar_url} alt=""
+                  style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+              : group.name?.charAt(0).toUpperCase()
+            }
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{
+                fontSize: 14, fontWeight: 700,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {group.name}
+              </span>
+              {isAdmin && (
+                <span style={{
+                  fontSize: 9.5, fontWeight: 700, padding: '1px 6px',
+                  borderRadius: 20, background: T.v, color: '#fff',
+                  textTransform: 'uppercase', letterSpacing: '.05em',
+                }}>
+                  Admin
+                </span>
+              )}
+              <span style={{
+                fontSize: 9.5, fontWeight: 600, padding: '1px 6px',
+                borderRadius: 20,
+                background: group.is_public ? T.gr2 : T.am2,
+                color: group.is_public ? T.gr : T.am,
+                border: `1px solid ${group.is_public ? 'rgba(16,185,129,.2)' : 'rgba(245,158,11,.2)'}`,
+              }}>
+                {group.is_public ? '🌐 Public' : '🔒 Closed'}
+              </span>
+            </div>
+
+            {/* Taxonomy tags */}
+            {(group.tier1 || group.tier2?.length > 0) && (
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                {group.tier1 && (
+                  <span style={{
+                    fontSize: 10.5, padding: '1px 7px', borderRadius: 20,
+                    background: '#f1f0ff', color: '#5b52cc', fontWeight: 600,
+                  }}>
+                    {group.tier1}
+                  </span>
+                )}
+                {(group.tier2 || []).slice(0, 2).map(t => (
+                  <span key={t} style={{
+                    fontSize: 10.5, padding: '1px 7px', borderRadius: 20,
+                    background: T.v2, color: T.v, fontWeight: 600,
+                  }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Leader / PI */}
+        {group.leader_display && (
+          <div style={{ fontSize: 12, color: T.mu, marginBottom: 6 }}>
+            👤 {group.leader_display}
+          </div>
+        )}
+
+        {/* Location */}
+        {group.location && (
+          <div style={{ fontSize: 12, color: T.mu, marginBottom: 6 }}>
+            📍 {group.location}
+          </div>
+        )}
+
+        {/* Stats row */}
+        <div style={{
+          display: 'flex', gap: 14, marginBottom: 10,
+          paddingTop: 8, borderTop: `1px solid ${T.bdr}`,
+        }}>
+          {[
+            [group.group_stats?.active_member_count || 0, 'members'],
+            [0, 'publications'],  // Phase 4
+          ].map(([n, label]) => (
+            <div key={label} style={{ fontSize: 11.5, color: T.mu }}>
+              <strong style={{ color: T.text, fontWeight: 700 }}>{n}</strong> {label}
+            </div>
+          ))}
+        </div>
+
+        {/* Action button */}
+        {!isMember && (
+          <button
+            onClick={e => { e.stopPropagation(); onFollow(group); }}
+            style={{
+              width: '100%', padding: '7px',
+              borderRadius: 9, fontSize: 12, fontWeight: 700,
+              fontFamily: 'inherit', cursor: 'pointer',
+              border: `1.5px solid ${T.v}`,
+              background: T.v2, color: T.v,
+            }}
+          >
+            {group.is_public ? '+ Join group' : '🔒 Request to join'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+Show My Groups as a grid (2 columns on desktop, 1 on narrow sidebar):
 ```javascript
-{inviteError && (
-  <div style={{color: T.ro, fontSize:12.5, marginTop:6}}>
-    {inviteError === 'locked'
-      ? '🔒 This code has been locked after too many attempts. Contact the person who shared it with you.'
-      : inviteError}
+gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))'
+```
+
+---
+
+## Step 4 — Taxonomy picker on group create/edit
+
+In `CreateGroupModal.jsx` and in the group profile edit mode in
+`GroupProfile.jsx`, replace the free-text "Research topic" field with:
+
+**Research Area (taxonomy):**
+- Tier 1 dropdown (same TIER1_LIST from constants.js)
+- Tier 2 multi-select (filtered by selected Tier 1, same getTier2 helper)
+- Max 3 Tier 2 selections
+
+**Research Details (free text):**
+- Rename existing `research_topic` field to "Research Details"
+- Keep as free text textarea
+- Placeholder: "Describe your group's specific research focus, methods,
+  or goals in more detail..."
+
+Update the save handler to include `tier1` and `tier2` columns.
+
+Import `TAXONOMY, TIER1_LIST, getTier2` from `../lib/constants`.
+
+```jsx
+{/* Tier 1 */}
+<select value={tier1} onChange={e => { setTier1(e.target.value); setTier2([]); }}
+  style={{...selectStyle}}>
+  <option value="">Select primary discipline...</option>
+  {TIER1_LIST.map(t => <option key={t} value={t}>{t}</option>)}
+</select>
+
+{/* Tier 2 — shown when Tier 1 selected */}
+{tier1 && (
+  <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:8}}>
+    {getTier2(tier1).map(t => (
+      <button key={t}
+        onClick={() => setTier2(prev =>
+          prev.includes(t) ? prev.filter(x=>x!==t)
+          : prev.length < 3 ? [...prev, t] : prev
+        )}
+        style={{
+          padding:'3px 10px', borderRadius:20, cursor:'pointer',
+          fontSize:11.5, fontFamily:'inherit', fontWeight:500,
+          border:`1.5px solid ${tier2.includes(t) ? T.v : T.bdr}`,
+          background: tier2.includes(t) ? T.v2 : T.w,
+          color: tier2.includes(t) ? T.v : T.text,
+        }}>
+        {t}
+      </button>
+    ))}
   </div>
 )}
 ```
 
-### Edge Function — validate-invite
-
-Create `supabase/functions/validate-invite/index.ts`:
-
-```typescript
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-const MAX_ATTEMPTS = 5;
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-
-  try {
-    const { code } = await req.json();
-    if (!code) throw new Error("No code provided");
-
-    // Use service role to bypass RLS for this server-side operation
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const { data: invite, error } = await supabase
-      .from("invite_codes")
-      .select("id, claimed_by, attempts, locked_at")
-      .eq("code", code.trim().toUpperCase())
-      .single();
-
-    // Code not found — increment attempt on a dummy record isn't possible
-    // so just return invalid. Don't reveal whether code exists.
-    if (error || !invite) {
-      return new Response(
-        JSON.stringify({ valid: false, reason: "Code not found or already used." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Already claimed
-    if (invite.claimed_by) {
-      return new Response(
-        JSON.stringify({ valid: false, reason: "This code has already been used." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Locked
-    if (invite.locked_at || invite.attempts >= MAX_ATTEMPTS) {
-      return new Response(
-        JSON.stringify({ valid: false, reason: "locked" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Valid — reset attempts on successful validation
-    await supabase
-      .from("invite_codes")
-      .update({ attempts: 0 })
-      .eq("id", invite.id);
-
-    return new Response(
-      JSON.stringify({ valid: true }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-
-  } catch (err: any) {
-    // On any error, increment attempts for the provided code
-    // (best-effort, ignore if it fails)
-    try {
-      const { code } = await req.clone().json();
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-      await supabase.rpc("increment_invite_attempts", { p_code: code });
-    } catch(_) {}
-
-    return new Response(
-      JSON.stringify({ valid: false, reason: "Validation failed." }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
-```
-
-Also add the increment function to `migration_security.sql`:
-
-```sql
--- Function to safely increment attempts and lock if over threshold
-create or replace function increment_invite_attempts(p_code text)
-returns void language plpgsql as $$
-begin
-  update invite_codes
-  set
-    attempts  = attempts + 1,
-    locked_at = case when attempts + 1 >= 5 then now() else locked_at end
-  where code = upper(p_code) and claimed_by is null;
-end;
-$$;
-```
-
-The Edge Function needs to call `increment_invite_attempts` when
-validation fails. Restructure the function so it increments attempts
-on every failed validation attempt (code found but invalid state)
-using the RPC call above.
-
-Deploy: `npx supabase functions deploy validate-invite`
-
 ---
 
-## Part 2 — ORCID OAuth
+## Step 5 — Public group profile at /g/:slug
 
-### Overview of the flow
-
-```
-1. User clicks "Sign up with ORCID" in AuthScreen
-2. Browser redirects to orcid.org OAuth authorize URL
-3. User logs into ORCID and approves Luminary's access request
-4. ORCID redirects to our Edge Function callback with ?code=XXX
-5. Edge Function exchanges code for access token (server-side — secret safe)
-6. Edge Function fetches full ORCID record using access token
-7. Edge Function creates Supabase auth user + populates profile
-8. Edge Function redirects browser to app with a session token
-9. App detects the session and shows the onboarding wizard
-```
-
-### Edge Function — orcid-callback
-
-Create `supabase/functions/orcid-callback/index.ts`:
-
-```typescript
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-serve(async (req) => {
-  const url    = new URL(req.url);
-  const code   = url.searchParams.get("code");
-  const state  = url.searchParams.get("state"); // 'signup' or 'link'
-  const appUrl = Deno.env.get("APP_URL") || "https://luminary.to";
-
-  const isProduction = Deno.env.get("ORCID_ENV") === "production";
-  const orcidBase    = isProduction
-    ? "https://orcid.org"
-    : "https://sandbox.orcid.org";
-  const orcidApiBase = isProduction
-    ? "https://pub.orcid.org/v3.0"
-    : "https://pub.sandbox.orcid.org/v3.0";
-
-  const clientId     = Deno.env.get("ORCID_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("ORCID_CLIENT_SECRET")!;
-  const redirectUri  = Deno.env.get("ORCID_REDIRECT_URI")!;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  const redirectError = (msg: string) =>
-    Response.redirect(`${appUrl}?orcid_error=${encodeURIComponent(msg)}`, 302);
-
-  try {
-    if (!code) return redirectError("No authorisation code received from ORCID.");
-
-    // ── Step 1: Exchange code for access token ───────────────────────────────
-    const tokenResp = await fetch(`${orcidBase}/oauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id:     clientId,
-        client_secret: clientSecret,
-        grant_type:    "authorization_code",
-        code,
-        redirect_uri:  redirectUri,
-      }),
-    });
-
-    if (!tokenResp.ok) {
-      const err = await tokenResp.text();
-      console.error("Token exchange failed:", err);
-      return redirectError("ORCID authentication failed. Please try again.");
-    }
-
-    const tokenData = await tokenResp.json();
-    const orcidId   = tokenData.orcid;
-    const accessToken = tokenData.access_token;
-
-    if (!orcidId) return redirectError("Could not retrieve ORCID iD.");
-
-    // ── Step 2: Fetch full ORCID record ──────────────────────────────────────
-    const recordResp = await fetch(`${orcidApiBase}/${orcidId}/record`, {
-      headers: {
-        "Accept": "application/json",
-        "Authorization": `Bearer ${accessToken}`,
-      },
-    });
-
-    const record = recordResp.ok ? await recordResp.json() : null;
-
-    // Parse person info
-    const person  = record?.person || {};
-    const given   = person.name?.["given-names"]?.value || "";
-    const family  = person.name?.["family-name"]?.value || "";
-    const fullName = `${given} ${family}`.trim();
-    const bio     = person.biography?.content || "";
-    const keywords = (person.keywords?.keyword || [])
-      .map((k: any) => k.content).filter(Boolean);
-
-    // Parse employment
-    const employments = (record?.["activities-summary"]?.employments
-      ?.["affiliation-group"] || [])
-      .flatMap((g: any) => g.summaries || [])
-      .map((s: any) => s["employment-summary"] || s)
-      .map((e: any) => ({
-        title:    e["role-title"] || "",
-        company:  e.organization?.name || "",
-        location: [
-          e.organization?.address?.city,
-          e.organization?.address?.country,
-        ].filter(Boolean).join(", "),
-        start: e["start-date"]?.year?.value
-          ? `${e["start-date"].year.value}-${String(e["start-date"].month?.value || 1).padStart(2,"0")}`
-          : "",
-        end: e["end-date"]?.year?.value
-          ? `${e["end-date"].year.value}-${String(e["end-date"].month?.value || 1).padStart(2,"0")}`
-          : "",
-        description: "",
-      }))
-      .filter((e: any) => e.company || e.title);
-
-    // Parse education
-    const educations = (record?.["activities-summary"]?.educations
-      ?.["affiliation-group"] || [])
-      .flatMap((g: any) => g.summaries || [])
-      .map((s: any) => s["education-summary"] || s)
-      .map((e: any) => ({
-        school: e.organization?.name || "",
-        degree: e["role-title"] || "",
-        field:  "",
-        start:  e["start-date"]?.year?.value || "",
-        end:    e["end-date"]?.year?.value   || "",
-      }))
-      .filter((e: any) => e.school);
-
-    // Current institution (most recent employment)
-    const currentInstitution = employments[0]?.company || "";
-    const currentTitle       = employments[0]?.title   || "";
-
-    // Parse publications
-    const works = record?.["activities-summary"]?.works?.group || [];
-    const publications = works.map((g: any) => {
-      const ws  = g["work-summary"]?.[0];
-      if (!ws) return null;
-      const doi  = (ws["external-ids"]?.["external-id"] || [])
-        .find((x: any) => x["external-id-type"] === "doi");
-      const pmid = (ws["external-ids"]?.["external-id"] || [])
-        .find((x: any) => x["external-id-type"] === "pmid");
-      return {
-        title:   ws.title?.title?.value || "",
-        journal: ws["journal-title"]?.value || "",
-        year:    ws["publication-date"]?.year?.value || "",
-        doi:     doi?.["external-id-value"] || "",
-        pmid:    pmid?.["external-id-value"] || "",
-        source:  "orcid",
-      };
-    }).filter((p: any) => p && p.title);
-
-    // ── Step 3: Check if ORCID already registered ────────────────────────────
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("orcid", orcidId)
-      .single();
-
-    if (existing) {
-      // User already has an account — sign them in
-      // Get their email to create a session
-      const { data: authUser } = await supabase.auth.admin.getUserById(existing.id);
-      if (!authUser?.user?.email) return redirectError("Account found but could not sign in. Please use email/password.");
-
-      // Create a magic link they can use to sign in
-      const { data: magicLink } = await supabase.auth.admin.generateLink({
-        type:  "magiclink",
-        email: authUser.user.email,
-      });
-
-      if (magicLink?.properties?.action_link) {
-        return Response.redirect(magicLink.properties.action_link, 302);
-      }
-      return redirectError("Account found. Please sign in with your email and password.");
-    }
-
-    // ── Step 4: Store ORCID data in session for the sign-up form ────────────
-    // We can't create the account yet — we need the user's email and password.
-    // Store the ORCID data in a temporary table and pass back a token.
-
-    const tempToken = crypto.randomUUID();
-    await supabase.from("orcid_pending").insert({
-      token:       tempToken,
-      orcid_id:    orcidId,
-      name:        fullName,
-      bio,
-      institution: currentInstitution,
-      title:       currentTitle,
-      work_history: JSON.stringify(employments),
-      education:    JSON.stringify(educations),
-      publications: JSON.stringify(publications),
-      keywords:     JSON.stringify(keywords),
-      expires_at:   new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min
-    });
-
-    // Redirect back to app with token
-    return Response.redirect(
-      `${appUrl}?orcid_token=${tempToken}&orcid_name=${encodeURIComponent(fullName)}`,
-      302
-    );
-
-  } catch (err: any) {
-    console.error("ORCID callback error:", err.message);
-    return redirectError("Something went wrong. Please try again.");
-  }
-});
-```
-
-### Temporary storage for ORCID pending sign-ups
-
-Add to `migration_security.sql`:
-
-```sql
--- Temporary storage for ORCID data between OAuth callback and account creation
-create table if not exists orcid_pending (
-  id           uuid primary key default gen_random_uuid(),
-  token        text unique not null,
-  orcid_id     text not null,
-  name         text default '',
-  bio          text default '',
-  institution  text default '',
-  title        text default '',
-  work_history text default '[]',  -- JSON string
-  education    text default '[]',
-  publications text default '[]',
-  keywords     text default '[]',
-  expires_at   timestamptz not null,
-  created_at   timestamptz default now()
-);
-
--- Clean up expired pending records automatically
-create or replace function cleanup_orcid_pending()
-returns void language sql as $$
-  delete from orcid_pending where expires_at < now();
-$$;
-
--- No RLS needed — accessed only via service role from Edge Function
-```
-
-### Deploy the callback
-
-```bash
-npx supabase functions deploy orcid-callback
-```
-
-**Important:** The callback Edge Function must have JWT verification **OFF**
-because it's called by ORCID's servers, not by an authenticated user.
-Go to Supabase → Edge Functions → orcid-callback → Verify JWT → OFF.
-
-The validate-invite function should have JWT verification OFF too
-(called during sign-up before the user has a session).
-
-All other Edge Functions (auto-tag, extract-publications) keep JWT ON.
-
----
-
-### Frontend — AuthScreen changes
-
-In `src/screens/AuthScreen.jsx`:
-
-**1. Add ORCID OAuth button**
-
-Replace the current ORCID iD text input path with an OAuth button:
-
-```jsx
-// In the sign-up entry screen, replace the ORCID path card content:
-<button onClick={handleOrcidOAuth} style={{
-  width:'100%', padding:'16px', borderRadius:14, marginBottom:12,
-  border:`2px solid ${T.bdr}`, background:T.w, cursor:'pointer',
-  textAlign:'left', fontFamily:'inherit',
-  display:'flex', alignItems:'center', gap:14,
-}}>
-  <span style={{fontSize:28}}>🔬</span>
-  <div>
-    <div style={{fontSize:14, fontWeight:700, marginBottom:2}}>
-      Sign up with ORCID
-    </div>
-    <div style={{fontSize:12, color:T.mu}}>
-      Verified researcher identity — auto-fills your profile
-    </div>
-  </div>
-  <span style={{marginLeft:'auto', color:T.mu}}>→</span>
-</button>
-```
-
-**2. ORCID OAuth redirect function**
+Similar to `/p/:slug` for user profiles, add a public group profile
+route detected in `App.jsx` before auth:
 
 ```javascript
-const ORCID_BASE = 'https://sandbox.orcid.org'; // change to orcid.org for production
-const ORCID_CLIENT_ID = 'YOUR_SANDBOX_CLIENT_ID'; // store in constants or env
-
-const handleOrcidOAuth = () => {
-  const params = new URLSearchParams({
-    client_id:     ORCID_CLIENT_ID,
-    response_type: 'code',
-    scope:         '/authenticate /read-limited',
-    redirect_uri:  'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/orcid-callback',
-    state:         'signup',
-  });
-  window.location.href = `${ORCID_BASE}/oauth/authorize?${params}`;
-};
+// In App.jsx, before auth check:
+const path = window.location.pathname;
+if (path.startsWith('/g/')) {
+  const slug = path.replace('/g/', '');
+  return <PublicGroupProfileScreen slug={slug}/>;
+}
 ```
 
-Store `ORCID_CLIENT_ID` in `src/lib/constants.js` — it is not secret
-(it's a public identifier, like the anon key).
+Create `src/groups/PublicGroupProfileScreen.jsx`:
 
-**3. Handle the redirect back from ORCID**
+Fetch group by slug:
+```javascript
+const { data: group } = await supabase
+  .from('groups')
+  .select(`
+    *, 
+    group_members(count),
+    group_stats(active_member_count, alumni_count)
+  `)
+  .eq('slug', slug)
+  .eq('public_profile_enabled', true)
+  .single();
+```
 
-In `App.jsx`, on mount check for ORCID callback parameters:
+Show fields based on visibility toggles (`public_show_*` columns).
+
+Layout — same clean style as `/p/:slug` user profile:
+- Cover image + avatar
+- Group name + taxonomy badges
+- Leader/PI (if `public_show_leader`)
+- Location + website + contact (if `public_show_location` / `public_show_contact`)
+- Stats: Members / Alumni / Publications (if `public_show_members`)
+- Research area (taxonomy) + research details
+- Recent public posts from this group (if `public_show_posts`)
+  — only posts with `is_reposted_public = true`
+
+Bottom action buttons:
+```jsx
+<Btn variant="s">
+  {group.is_public ? 'Join this group' : 'Request to join'}
+</Btn>
+<Btn onClick={() => window.location.href = 'https://luminary.to'}>
+  View on Luminary
+</Btn>
+```
+
+### QR code and sharing
+
+In the group profile edit section (Admin only), add a "Public Profile"
+subsection:
+
+```
+Public profile
+[ ] Enable public profile at luminary.to/g/your-group-slug
+
+Slug: [your-group-slug] [Edit]
+
+Show on public profile:
+[✓] Member count    [✓] Group leader
+[✓] Location        [ ] Contact email
+[✓] Public posts
+
+[QR Code — 180px]
+luminary.to/g/your-group-slug
+[Copy link]  [Download QR]
+```
+
+Generate QR the same way as the user business card — using the `qrcode`
+npm package already in the project:
 
 ```javascript
 useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const orcidToken = params.get('orcid_token');
-  const orcidName  = params.get('orcid_name');
-  const orcidError = params.get('orcid_error');
-
-  if (orcidError) {
-    // Show error on auth screen
-    setOrcidAuthError(decodeURIComponent(orcidError));
-    // Clean URL
-    window.history.replaceState({}, '', window.location.pathname);
-    return;
-  }
-
-  if (orcidToken) {
-    // ORCID OAuth succeeded — show email/password form with data pre-filled
-    setOrcidPendingToken(orcidToken);
-    setOrcidPendingName(decodeURIComponent(orcidName || ''));
-    setShowOrcidEmailForm(true);
-    // Clean URL
-    window.history.replaceState({}, '', window.location.pathname);
-  }
-}, []);
+  if (!group?.slug || !group?.public_profile_enabled) return;
+  const QRCode = require('qrcode');
+  QRCode.toCanvas(
+    document.getElementById('group-qr'),
+    `https://luminary.to/g/${group.slug}`,
+    { width: 180, margin: 1, color: { dark: '#1a1a2e', light: '#ffffff' } }
+  );
+}, [group?.slug, group?.public_profile_enabled]);
 ```
 
-State to add in App.jsx:
+### Slug editing
+
+Allow Admin to edit the slug (with uniqueness validation):
 ```javascript
-const [orcidPendingToken,  setOrcidPendingToken]  = useState('');
-const [orcidPendingName,   setOrcidPendingName]   = useState('');
-const [showOrcidEmailForm, setShowOrcidEmailForm] = useState(false);
-const [orcidAuthError,     setOrcidAuthError]     = useState('');
-```
-
-**4. ORCID email/password completion form**
-
-When `showOrcidEmailForm` is true, show in AuthScreen:
-
-```jsx
-<div>
-  {/* Success banner */}
-  <div style={{
-    background:T.gr2, border:`1px solid rgba(16,185,129,.2)`,
-    borderRadius:12, padding:'14px 16px', marginBottom:20,
-  }}>
-    <div style={{fontSize:12, fontWeight:700, color:T.gr, marginBottom:4}}>
-      ✓ ORCID verified
-    </div>
-    <div style={{fontSize:14, fontWeight:700}}>{orcidPendingName}</div>
-    <div style={{fontSize:12, color:T.mu}}>
-      Your profile, work history, and publications will be imported automatically.
-    </div>
-  </div>
-
-  <div style={{fontSize:13, fontWeight:600, marginBottom:12}}>
-    Set your login email and password:
-  </div>
-
-  <Inp label="Email address" type="email" value={signupEmail}
-    onChange={e => setSignupEmail(e.target.value)}
-    placeholder="your@email.com"/>
-  <Inp label="Password" type="password" value={signupPassword}
-    onChange={e => setSignupPassword(e.target.value)}
-    placeholder="At least 8 characters"/>
-
-  {signupError && (
-    <div style={{color:T.ro, fontSize:12.5, marginTop:8}}>{signupError}</div>
-  )}
-
-  <Btn variant="s" onClick={handleOrcidSignupComplete}
-    disabled={signupLoading || !signupEmail || !signupPassword}
-    style={{width:'100%', marginTop:12, background:T.gr, borderColor:T.gr}}>
-    {signupLoading ? 'Creating account...' : 'Create account →'}
-  </Btn>
-</div>
-```
-
-**5. Complete ORCID sign-up handler**
-
-```javascript
-const handleOrcidSignupComplete = async () => {
-  setSignupLoading(true);
-  setSignupError('');
-  try {
-    // 1. Fetch the pending ORCID data using the token
-    const { data: pending } = await supabase
-      .from('orcid_pending')
-      .select('*')
-      .eq('token', orcidPendingToken)
-      .gt('expires_at', new Date().toISOString())
-      .single();
-
-    if (!pending) throw new Error('ORCID session expired. Please sign up again.');
-
-    // 2. Create Supabase auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email:    signupEmail,
-      password: signupPassword,
-    });
-    if (authError) throw authError;
-
-    const userId = authData.user?.id;
-    if (!userId) throw new Error('Account creation failed.');
-
-    // 3. Populate profile with ORCID data
-    await supabase.from('profiles').update({
-      name:          pending.name,
-      bio:           pending.bio,
-      institution:   pending.institution,
-      title:         pending.title,
-      orcid:         pending.orcid_id,
-      orcid_verified: true,
-      signup_method: 'orcid',
-      work_history:  JSON.parse(pending.work_history || '[]'),
-      education:     JSON.parse(pending.education    || '[]'),
-    }).eq('id', userId);
-
-    // 4. Insert publications
-    const pubs = JSON.parse(pending.publications || '[]');
-    if (pubs.length) {
-      await supabase.from('publications').insert(
-        pubs.map((p: any) => ({
-          user_id: userId,
-          title:   p.title,
-          journal: p.journal,
-          year:    p.year,
-          doi:     p.doi || '',
-          pmid:    p.pmid || '',
-          source:  'orcid',
-        }))
-      );
-    }
-
-    // 5. Generate 5 invite codes
-    await supabase.rpc('generate_user_invites', { user_id: userId, count: 5 });
-
-    // 6. Clean up pending record
-    await supabase.from('orcid_pending').delete().eq('token', orcidPendingToken);
-
-    // Done — Supabase auth session is now active, app will re-render
-  } catch(e: any) {
-    setSignupError(e.message || 'Sign-up failed. Please try again.');
-  }
-  setSignupLoading(false);
+const updateSlug = async (newSlug) => {
+  const clean = newSlug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+  const { error } = await supabase
+    .from('groups')
+    .update({ slug: clean })
+    .eq('id', groupId);
+  if (error?.code === '23505') setSlugError('This slug is already taken.');
 };
 ```
 
 ---
 
-## Deployment order
+## Step 6 — Follow groups
 
-1. Run `migration_security.sql` in Supabase SQL Editor
-2. Add Supabase secrets (ORCID credentials, APP_URL, ORCID_ENV)
-3. Deploy Edge Functions:
-   ```bash
-   npx supabase functions deploy validate-invite
-   npx supabase functions deploy orcid-callback
-   ```
-4. Set JWT verification:
-   - `validate-invite` → JWT **OFF** (called before user has session)
-   - `orcid-callback`  → JWT **OFF** (called by ORCID servers)
-   - `auto-tag`        → JWT **ON**  (unchanged)
-   - `extract-publications` → JWT **ON** (unchanged)
-5. Add `ORCID_CLIENT_ID` to `src/lib/constants.js`
-6. Deploy frontend: `git add . && git commit -m "ORCID OAuth + invite protection" && git push`
+In `GroupProfile.jsx` and the public group profile, non-members can
+follow a public group to see its public posts in their Following feed.
+
+The existing `FollowBtn` component supports `targetType="group"` — use it:
+
+```jsx
+<FollowBtn
+  targetType="group"
+  targetId={group.id}
+  currentUserId={user?.id}
+/>
+```
+
+This uses the existing `follows` table. No new table needed.
+
+In `FeedScreen.jsx`, update the Following feed query to include
+reposted group posts from groups the user follows:
+
+```javascript
+// In the Following feed fetch, add:
+// Get group IDs the user follows
+const { data: followedGroups } = await supabase
+  .from('follows')
+  .select('target_id')
+  .eq('follower_id', user.id)
+  .eq('target_type', 'group');
+
+const followedGroupIds = (followedGroups || []).map(f => f.target_id);
+
+// Fetch reposted public posts from those groups
+let groupReposts = [];
+if (followedGroupIds.length) {
+  const { data } = await supabase
+    .from('group_posts_with_meta')
+    .select('*')
+    .in('group_id', followedGroupIds)
+    .eq('is_reposted_public', true)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  groupReposts = data || [];
+}
+
+// Merge with regular following posts and re-sort by created_at
+const allPosts = [...regularPosts, ...groupReposts]
+  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+```
+
+In `PostCard.jsx` (or wherever group reposts are displayed), if the
+post has a `group_id` field, show:
+
+```jsx
+{post.group_id && post.group_name && (
+  <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+    Shared from{' '}
+    <button
+      onClick={e => {
+        e.stopPropagation();
+        onViewGroup && onViewGroup(post.group_id);
+      }}
+      style={{
+        color: T.v, fontWeight: 700,
+        border: 'none', background: 'transparent',
+        cursor: 'pointer', fontFamily: 'inherit',
+        fontSize: 'inherit', padding: 0,
+      }}
+    >
+      {post.group_name}
+    </button>
+  </div>
+)}
+```
+
+Pass `onViewGroup` callback from App.jsx through FeedScreen → PostCard.
+When clicked: `setActiveGroupId(post.group_id); setScreen('groups');`
 
 ---
 
-## Testing checklist
+## Step 7 — Unread indicators
 
-### Invite code attempts
-- [ ] Try an invalid code 5 times → verify it shows "locked" message
-- [ ] Try a valid code → verify it works and resets attempts to 0
-- [ ] Check Supabase table → verify attempts column increments correctly
+### Groups sidebar nav badge
 
-### ORCID OAuth (sandbox first)
-- [ ] Create a sandbox ORCID account at sandbox.orcid.org
-- [ ] Click "Sign up with ORCID" → verify redirect to sandbox.orcid.org
-- [ ] Approve access → verify redirect back to app with orcid_token param
-- [ ] Complete email/password form → verify account created
-- [ ] Check profiles table → verify name, institution, orcid populated
-- [ ] Check publications table → verify ORCID works imported
-- [ ] Try signing up again with same ORCID → verify "already registered" handling
+In the sidebar nav, show a count badge on the Groups nav item for
+total unread posts across all the user's groups:
+
+```javascript
+// In App.jsx, fetch total unread group posts
+const fetchGroupUnreadCount = async () => {
+  if (!user) return;
+  const { data: memberships } = await supabase
+    .from('group_members')
+    .select('group_id, last_read_at')
+    .eq('user_id', user.id)
+    .in('role', ['admin', 'member']);
+
+  if (!memberships?.length) { setGroupUnreadCount(0); return; }
+
+  let total = 0;
+  for (const m of memberships) {
+    const { count } = await supabase
+      .from('group_posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('group_id', m.group_id)
+      .gt('created_at', m.last_read_at || '1970-01-01');
+    total += count || 0;
+  }
+  setGroupUnreadCount(total);
+};
+```
+
+Show in the sidebar next to the Groups nav item (same pattern as
+the Messages unread badge):
+```jsx
+{groupUnreadCount > 0 && (
+  <span style={{
+    marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+    background: T.v, color: '#fff',
+    padding: '1px 6px', borderRadius: 20,
+    minWidth: 18, textAlign: 'center',
+  }}>
+    {groupUnreadCount > 99 ? '99+' : groupUnreadCount}
+  </span>
+)}
+```
+
+Poll every 60 seconds (less frequent than messages since group posts
+are less time-sensitive than DMs):
+```javascript
+useEffect(() => {
+  fetchGroupUnreadCount();
+  const interval = setInterval(fetchGroupUnreadCount, 60000);
+  return () => clearInterval(interval);
+}, [user]);
+```
+
+### Update last_read_at when entering a group feed
+
+In `GroupFeed.jsx`, when the component mounts or groupId changes,
+update the member's `last_read_at` to now:
+
+```javascript
+useEffect(() => {
+  if (!groupId || !user) return;
+  // Mark as read
+  supabase
+    .from('group_members')
+    .update({ last_read_at: new Date().toISOString() })
+    .eq('group_id', groupId)
+    .eq('user_id', user.id)
+    .then(() => {
+      // Trigger refresh of unread count in parent
+      onMarkRead && onMarkRead();
+    });
+}, [groupId]);
+```
+
+Pass `onMarkRead` callback from App.jsx → GroupScreen → GroupFeed.
+In App.jsx, `onMarkRead` calls `fetchGroupUnreadCount()` to refresh
+the sidebar badge.
+
+---
+
+## Step 8 — Notifications for group membership changes
+
+In `GroupMembers.jsx`, when a new member joins or is approved:
+
+```javascript
+// Notify all admins of the group when someone joins
+const notifyAdminsOfJoin = async (groupId, newMemberId) => {
+  const { data: admins } = await supabase
+    .from('group_members')
+    .select('user_id')
+    .eq('group_id', groupId)
+    .eq('role', 'admin')
+    .neq('user_id', newMemberId);
+
+  if (!admins?.length) return;
+
+  await supabase.from('notifications').insert(
+    admins.map(a => ({
+      user_id:   a.user_id,
+      type:      'group_member_joined',
+      actor_id:  newMemberId,
+      target_id: groupId,
+      meta:      { group_name: groupName },
+    }))
+  );
+};
+
+// Notify admins when a member leaves
+const notifyAdminsOfLeave = async (groupId, leavingUserId) => {
+  const { data: admins } = await supabase
+    .from('group_members')
+    .select('user_id')
+    .eq('group_id', groupId)
+    .eq('role', 'admin')
+    .neq('user_id', leavingUserId);
+
+  if (!admins?.length) return;
+
+  await supabase.from('notifications').insert(
+    admins.map(a => ({
+      user_id:   a.user_id,
+      type:      'group_member_left',
+      actor_id:  leavingUserId,
+      target_id: groupId,
+      meta:      { group_name: groupName },
+    }))
+  );
+};
+```
+
+Call `notifyAdminsOfJoin` after:
+- Direct join (public group)
+- Admin approves a join request
+
+Call `notifyAdminsOfLeave` after:
+- Member clicks "Leave group"
+- Alumni clicks "Remove myself"
+
+In `NotifsScreen.jsx`, handle two new notification types:
+- `group_member_joined` → "[Name] joined [Group Name]"
+- `group_member_left`   → "[Name] left [Group Name]"
+
+---
+
+## Step 9 — Explore Groups tab update
+
+In `ExploreScreen.jsx`, update the Groups tab search to filter by
+taxonomy (using the new `tier1` column):
+
+```javascript
+const searchGroups = async (query, tier1Filter) => {
+  let q = supabase
+    .from('groups')
+    .select('id, name, slug, description, research_topic, tier1, tier2,
+      avatar_url, is_public, location')
+    .eq('is_searchable', true);
+
+  if (query) {
+    q = q.or(
+      `name.ilike.%${query}%,` +
+      `research_topic.ilike.%${query}%,` +
+      `research_details.ilike.%${query}%`
+    );
+  }
+
+  if (tier1Filter) {
+    q = q.eq('tier1', tier1Filter);
+  }
+
+  const { data } = await q.limit(10);
+  return data || [];
+};
+```
+
+Show Tier 1 filter chips above the group results (same pattern as
+the Posts tab Tier 1 filter):
+```jsx
+{TIER1_LIST.map(t1 => (
+  <button key={t1}
+    onClick={() => setGroupTier1Filter(f => f === t1 ? '' : t1)}
+    style={{...chipStyle, active: groupTier1Filter === t1}}>
+    {t1}
+  </button>
+))}
+```
+
+---
+
+## What NOT to change
+
+- Phase 1 group post logic, GroupNewPost, GroupPostCard internals
+- Phase 2 GroupProfile edit fields already built (avatar upload, cover,
+  collaborating groups, contact)
+- User profile, messages, main feed (beyond the Following feed addition)
+- Run `npm run build` when done
 
 ---
 
 ## Remind the user
 
-1. The ORCID_CLIENT_ID (public) goes in constants.js — safe to commit
-2. The ORCID_CLIENT_SECRET goes in Supabase secrets only — never in code
-3. Test everything with sandbox credentials before switching to production
-4. To switch to production: change ORCID_ENV secret to "production" and
-   update ORCID_CLIENT_ID in constants.js to the production client ID
-5. The orcid_pending table auto-expires records after 30 minutes —
-   run cleanup_orcid_pending() periodically or set up a Supabase cron job
+1. Run `migration_groups_phase2b.sql` in Supabase SQL Editor first
+2. The trigger auto-generates slugs for new groups and backfills
+   existing groups — verify slugs were created:
+   `select id, name, slug from groups;`
+3. Public profile at `/g/slug` only works when `public_profile_enabled = true`
+   in the group settings — Admin must explicitly enable it
+4. The Following feed group posts integration requires that posts were
+   explicitly reposted to public (is_reposted_public = true) — purely
+   private group posts never appear in the personal feed
+5. Test the unread badge flow: post in a group as User A, log in as
+   User B (member of same group), verify the Groups sidebar badge shows
+   a count, then open the group feed and verify the badge clears

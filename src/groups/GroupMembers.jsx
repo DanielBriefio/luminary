@@ -90,6 +90,15 @@ export default function GroupMembers({ groupId, group, user, myRole, onLeft }) {
 
   const leaveGroup = async () => {
     await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', user.id);
+    // Notify admins
+    const { data: admins } = await supabase.from('group_members').select('user_id')
+      .eq('group_id', groupId).eq('role', 'admin').neq('user_id', user.id);
+    if (admins?.length) {
+      await supabase.from('notifications').insert(admins.map(a => ({
+        user_id: a.user_id, actor_id: user.id, notif_type: 'group_member_left',
+        target_id: groupId, meta: { group_id: groupId, group_name: group?.name || '' },
+      })));
+    }
     onLeft?.();
   };
 
@@ -97,13 +106,21 @@ export default function GroupMembers({ groupId, group, user, myRole, onLeft }) {
     setActionId(req.user_id);
     await supabase.from('group_members').insert({ group_id: groupId, user_id: req.user_id, role: 'member' });
     await supabase.from('group_join_requests').update({ status: 'approved' }).eq('id', req.id);
-    const { data: grp } = await supabase.from('groups').select('name').eq('id', groupId).single();
+    const groupName = group?.name || '';
     await supabase.from('notifications').insert({
-      user_id:    req.user_id,
-      actor_id:   user.id,
+      user_id: req.user_id, actor_id: user.id,
       notif_type: 'group_request_approved',
-      meta:       { group_id: groupId, group_name: grp?.name || '' },
+      meta: { group_id: groupId, group_name: groupName },
     });
+    // Notify other admins
+    const { data: admins } = await supabase.from('group_members').select('user_id')
+      .eq('group_id', groupId).eq('role', 'admin').neq('user_id', user.id);
+    if (admins?.length) {
+      await supabase.from('notifications').insert(admins.map(a => ({
+        user_id: a.user_id, actor_id: req.user_id, notif_type: 'group_member_joined',
+        target_id: groupId, meta: { group_id: groupId, group_name: groupName },
+      })));
+    }
     setActionId(null);
     fetchMembers();
   };

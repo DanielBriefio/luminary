@@ -16,6 +16,8 @@ const NOTIF_CONFIG = {
   group_join_request:     { icon: '🔔', label: (n) => `requested to join ${n.meta?.group_name ? `"${n.meta.group_name}"` : 'your group'}` },
   group_request_approved: { icon: '✅', label: (n) => `approved your request to join ${n.meta?.group_name ? `"${n.meta.group_name}"` : 'a group'}` },
   group_alumni_granted:   { icon: '🎓', label: (n) => `moved you to alumni status in ${n.meta?.group_name ? `"${n.meta.group_name}"` : 'a group'}` },
+  group_member_joined:    { icon: '🤝', label: (n) => `joined ${n.meta?.group_name ? `"${n.meta.group_name}"` : 'your group'}` },
+  group_member_left:      { icon: '👋', label: (n) => `left ${n.meta?.group_name ? `"${n.meta.group_name}"` : 'your group'}` },
 };
 
 // Types that have a linked post we can show a snippet for
@@ -124,7 +126,7 @@ export default function NotifsScreen({ user, onViewGroup }) {
               const cfg      = NOTIF_CONFIG[n.notif_type] || { icon: '🔔', label: () => n.notif_type };
               const isUnread = !n.read;
               const postId    = POST_NOTIF_TYPES.has(n.notif_type) ? n.target_id : null;
-              const groupId   = ['group_post','group_join_request','group_request_approved','group_alumni_granted'].includes(n.notif_type) ? n.meta?.group_id : null;
+              const groupId   = ['group_post','group_join_request','group_request_approved','group_alumni_granted','group_member_joined','group_member_left'].includes(n.notif_type) ? n.meta?.group_id : null;
               const post      = postId ? postMap[postId] : null;
               const snippet   = postSnippet(post);
               const goToActor = () => { if (actor?.profile_slug) window.location.href = `/p/${actor.profile_slug}`; };

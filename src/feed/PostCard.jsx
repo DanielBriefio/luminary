@@ -13,7 +13,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 
-export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick }) {
+export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup }) {
   const { isMobile } = useWindowSize();
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
@@ -128,6 +128,17 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
   return (
     <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,overflow:"hidden",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
+
+      {/* Group source banner */}
+      {post.group_id && post.group_name && (
+        <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",background:T.v2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600}}>
+          🔬 Shared from{' '}
+          <button onClick={e=>{ e.stopPropagation(); onViewGroup?.(post.group_id); }}
+            style={{color:T.v,fontWeight:700,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",fontSize:"inherit",padding:0}}>
+            {post.group_name}
+          </button>
+        </div>
+      )}
 
       {/* Repost banner — shown when this card appears as a repost in the feed */}
       {post.isRepost&&(

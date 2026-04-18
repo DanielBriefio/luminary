@@ -311,9 +311,10 @@ export default function ExploreScreen({
   const [showMoreInProfiles, setShowMoreInProfiles] = useState(false);
 
   // Groups tab state
-  const [groupResults,   setGroupResults]   = useState([]);
-  const [groupSearching, setGroupSearching] = useState(false);
-  const [suggestedGroups,setSuggestedGroups]= useState([]);
+  const [groupResults,    setGroupResults]    = useState([]);
+  const [groupSearching,  setGroupSearching]  = useState(false);
+  const [suggestedGroups, setSuggestedGroups] = useState([]);
+  const [groupTier1Filter,setGroupTier1Filter]= useState('');
 
   const [tier1Filter, setTier1Filter] = useState('');
 
@@ -447,26 +448,21 @@ export default function ExploreScreen({
     setPaperSearching(false);
   }, []);
 
-  const searchGroups = useCallback(async (query) => {
+  const searchGroups = useCallback(async (query, tier1) => {
     setGroupSearching(true);
-    if (!query.trim()) {
-      // Suggested groups
+    const cols = 'id, name, description, research_topic, tier1, tier2, avatar_url, is_public';
+    if (!query.trim() && !tier1) {
       const { data } = await supabase
-        .from('groups')
-        .select('id, name, description, research_topic, avatar_url, is_public')
-        .eq('is_public', true)
-        .eq('is_searchable', true)
-        .order('created_at', { ascending: false })
-        .limit(6);
+        .from('groups').select(cols)
+        .eq('is_public', true).eq('is_searchable', true)
+        .order('created_at', { ascending: false }).limit(6);
       setSuggestedGroups(data || []);
       setGroupResults([]);
     } else {
-      const { data } = await supabase
-        .from('groups')
-        .select('id, name, description, research_topic, avatar_url, is_public')
-        .eq('is_searchable', true)
-        .or(`name.ilike.%${query}%,description.ilike.%${query}%,research_topic.ilike.%${query}%`)
-        .limit(10);
+      let q = supabase.from('groups').select(cols).eq('is_searchable', true);
+      if (query.trim()) q = q.or(`name.ilike.%${query}%,description.ilike.%${query}%,research_topic.ilike.%${query}%`);
+      if (tier1) q = q.eq('tier1', tier1);
+      const { data } = await q.limit(10);
       setGroupResults(data || []);
     }
     setGroupSearching(false);
@@ -479,10 +475,10 @@ export default function ExploreScreen({
       if (exploreTab === 'posts')       searchPosts(q, tier1Filter);
       if (exploreTab === 'researchers') searchResearchers(q);
       if (exploreTab === 'papers')      searchPapers(q);
-      if (exploreTab === 'groups')      searchGroups(q);
+      if (exploreTab === 'groups')      searchGroups(q, groupTier1Filter);
     }, 400);
     return () => clearTimeout(t);
-  }, [q, tier1Filter, exploreTab, searchPosts, searchResearchers, searchPapers, searchGroups]);
+  }, [q, tier1Filter, groupTier1Filter, exploreTab, searchPosts, searchResearchers, searchPapers, searchGroups]);
 
   // Run search immediately if initialQuery is provided
   useEffect(() => {
@@ -831,6 +827,24 @@ export default function ExploreScreen({
         {/* ═══ Groups tab ═════════════════════════════════════════════════ */}
         {exploreTab === 'groups' && (
           <>
+            {/* Tier 1 filter chips */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              {TIER1_LIST.map(t1 => (
+                <button key={t1}
+                  onClick={() => setGroupTier1Filter(f => f === t1 ? '' : t1)}
+                  style={{
+                    padding: '3px 10px', borderRadius: 20, cursor: 'pointer',
+                    fontSize: 11.5, fontFamily: 'inherit', fontWeight: 600,
+                    border: `1.5px solid ${groupTier1Filter === t1 ? T.v : T.bdr}`,
+                    background: groupTier1Filter === t1 ? T.v2 : T.w,
+                    color: groupTier1Filter === t1 ? T.v : T.mu,
+                    transition: 'all .15s',
+                  }}>
+                  {t1}
+                </button>
+              ))}
+            </div>
+
             {groupSearching && <Spinner />}
 
             {!groupSearching && !q.trim() && (
