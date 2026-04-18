@@ -19,6 +19,9 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
   const [editTopic,    setEditTopic]    = useState('');
   const [editTier1,    setEditTier1]    = useState('');
   const [editTier2,    setEditTier2]    = useState([]);
+  const [editInstitution, setEditInstitution] = useState('');
+  const [editCompany,     setEditCompany]     = useState('');
+  const [editCountry,     setEditCountry]     = useState('');
   const [editLocation, setEditLocation] = useState('');
   const [editEmail,    setEditEmail]    = useState('');
   const [editWebsite,  setEditWebsite]  = useState('');
@@ -80,6 +83,9 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     setEditTopic(group.research_topic || '');
     setEditTier1(group.tier1 || '');
     setEditTier2(group.tier2 || []);
+    setEditInstitution(group.institution || '');
+    setEditCompany(group.company || '');
+    setEditCountry(group.country || '');
     setEditLocation(group.location || '');
     setEditEmail(group.contact_email || '');
     setEditWebsite(group.website_url || '');
@@ -126,6 +132,9 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       research_topic:         editTopic,
       tier1:                  editTier1,
       tier2:                  editTier2,
+      institution:            editInstitution,
+      company:                editCompany,
+      country:                editCountry,
       location:               editLocation,
       contact_email:          editEmail,
       website_url:            editWebsite,
@@ -365,11 +374,17 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
             </div>
           )}
 
-          {/* Contact row */}
+          {/* Contact / affiliation row */}
           {editing ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              <input value={editInstitution} onChange={e => setEditInstitution(e.target.value)}
+                style={inputStyle} placeholder="🏛️ Institution (e.g. Harvard Medical School)"/>
+              <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
+                style={inputStyle} placeholder="🏢 Company (e.g. Pfizer Research)"/>
+              <input value={editCountry} onChange={e => setEditCountry(e.target.value)}
+                style={inputStyle} placeholder="🌍 Country (e.g. Germany)"/>
               <input value={editLocation} onChange={e => setEditLocation(e.target.value)}
-                style={inputStyle} placeholder="📍 Location (e.g. Tokyo, Japan)"/>
+                style={inputStyle} placeholder="📍 City / location (e.g. Berlin)"/>
               <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)}
                 style={inputStyle} placeholder="🌐 Website URL"/>
               <input value={editEmail} onChange={e => setEditEmail(e.target.value)}
@@ -379,7 +394,10 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
             </div>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginBottom: 8 }}>
-              {group.location && <span style={{ fontSize: 12, color: T.mu }}>📍 {group.location}</span>}
+              {group.institution && <span style={{ fontSize: 12, color: T.mu }}>🏛️ {group.institution}</span>}
+              {group.company     && <span style={{ fontSize: 12, color: T.mu }}>🏢 {group.company}</span>}
+              {group.country     && <span style={{ fontSize: 12, color: T.mu }}>🌍 {group.country}</span>}
+              {group.location    && <span style={{ fontSize: 12, color: T.mu }}>📍 {group.location}</span>}
               {group.website_url && (
                 <a href={group.website_url} target="_blank" rel="noopener noreferrer"
                   style={{ fontSize: 12, color: T.v, textDecoration: 'none', fontWeight: 600 }}>

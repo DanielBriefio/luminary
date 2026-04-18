@@ -4,25 +4,25 @@ import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import CreateGroupModal from './CreateGroupModal';
 
-function GroupBadgeCard({ membership, unreadCount, onSelect }) {
-  const group    = membership.groups;
-  const isAdmin  = membership.role === 'admin';
-  const isAlumni = membership.role === 'alumni';
+function GroupBadgeCard({ group, role, memberCount, unreadCount, onSelect, actionButton }) {
+  const isAdmin  = role === 'admin';
+  const isAlumni = role === 'alumni';
+  const hasUnread = (unreadCount || 0) > 0;
 
   return (
     <div
       onClick={() => onSelect(group.id)}
       style={{
         position: 'relative', background: T.w, cursor: 'pointer',
-        border: `1.5px solid ${unreadCount > 0 ? T.v : T.bdr}`,
+        border: `1.5px solid ${hasUnread ? T.v : T.bdr}`,
         borderRadius: 16, overflow: 'hidden', transition: 'box-shadow .15s',
-        boxShadow: unreadCount > 0 ? '0 2px 12px rgba(108,99,255,.15)' : '0 1px 4px rgba(0,0,0,.06)',
+        boxShadow: hasUnread ? '0 2px 12px rgba(108,99,255,.15)' : '0 1px 4px rgba(0,0,0,.06)',
       }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,.1)'}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = unreadCount > 0 ? '0 2px 12px rgba(108,99,255,.15)' : '0 1px 4px rgba(0,0,0,.06)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = hasUnread ? '0 2px 12px rgba(108,99,255,.15)' : '0 1px 4px rgba(0,0,0,.06)'}
     >
       {/* Unread badge */}
-      {unreadCount > 0 && (
+      {hasUnread && (
         <div style={{
           position: 'absolute', top: 10, right: 10, zIndex: 2,
           background: T.v, color: '#fff', fontSize: 10.5, fontWeight: 700,
@@ -32,13 +32,8 @@ function GroupBadgeCard({ membership, unreadCount, onSelect }) {
         </div>
       )}
 
-      {/* Cover strip */}
-      <div style={{
-        height: 6,
-        background: group.cover_url
-          ? `url(${group.cover_url}) center/cover`
-          : 'linear-gradient(90deg,#667eea,#764ba2,#f093fb)',
-      }}/>
+      {/* Gradient strip — always, no cover image */}
+      <div style={{ height: 6, background: 'linear-gradient(90deg,#667eea,#764ba2,#f093fb)' }}/>
 
       <div style={{ padding: '14px 16px 16px' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
@@ -57,21 +52,14 @@ function GroupBadgeCard({ membership, unreadCount, onSelect }) {
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Name + role/visibility badges */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {group.name}
-              </span>
+              <span style={{ fontSize: 13.5, fontWeight: 700 }}>{group.name}</span>
               {isAdmin && (
-                <span style={{
-                  fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 20,
-                  background: T.v, color: '#fff', textTransform: 'uppercase', letterSpacing: '.05em',
-                }}>Admin</span>
+                <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: T.v, color: '#fff', textTransform: 'uppercase', letterSpacing: '.05em' }}>Admin</span>
               )}
               {isAlumni && (
-                <span style={{
-                  fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 20,
-                  background: T.am2, color: T.am,
-                }}>Alumni</span>
+                <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: T.am2, color: T.am }}>Alumni</span>
               )}
               <span style={{
                 fontSize: 9.5, fontWeight: 600, padding: '1px 6px', borderRadius: 20,
@@ -101,9 +89,14 @@ function GroupBadgeCard({ membership, unreadCount, onSelect }) {
           </div>
         </div>
 
-        {/* Location */}
-        {group.location && (
-          <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>📍 {group.location}</div>
+        {/* Affiliation row */}
+        {(group.institution || group.company || group.country || group.location) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 14px', marginBottom: 7 }}>
+            {group.institution && <span style={{ fontSize: 11.5, color: T.mu }}>🏛️ {group.institution}</span>}
+            {group.company     && <span style={{ fontSize: 11.5, color: T.mu }}>🏢 {group.company}</span>}
+            {group.country     && <span style={{ fontSize: 11.5, color: T.mu }}>🌍 {group.country}</span>}
+            {group.location    && <span style={{ fontSize: 11.5, color: T.mu }}>📍 {group.location}</span>}
+          </div>
         )}
 
         {/* Research topic */}
@@ -120,12 +113,12 @@ function GroupBadgeCard({ membership, unreadCount, onSelect }) {
         {/* Stats row */}
         <div style={{ display: 'flex', gap: 14, paddingTop: 8, borderTop: `1px solid ${T.bdr}` }}>
           <div style={{ fontSize: 11.5, color: T.mu }}>
-            <strong style={{ color: T.text, fontWeight: 700 }}>{membership.memberCount || 0}</strong> members
-          </div>
-          <div style={{ fontSize: 11.5, color: T.mu }}>
-            <strong style={{ color: T.text, fontWeight: 700 }}>0</strong> publications
+            <strong style={{ color: T.text, fontWeight: 700 }}>{memberCount || 0}</strong> members
           </div>
         </div>
+
+        {/* Optional action button (Discover section) */}
+        {actionButton && <div style={{ marginTop: 10 }}>{actionButton}</div>}
       </div>
     </div>
   );
@@ -146,13 +139,13 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
     // Try with new columns first; fall back to core columns if migration hasn't run
     let { data, error } = await supabase
       .from('group_members')
-      .select(`role, last_read_at, groups(id, name, slug, avatar_url, cover_url, is_public, research_topic, tier1, tier2, location)`)
+      .select(`role, last_read_at, groups(id, name, slug, avatar_url, is_public, research_topic, tier1, tier2, institution, company, country, location)`)
       .eq('user_id', user.id)
       .in('role', ['admin', 'member', 'alumni']);
     if (error) {
       ({ data } = await supabase
         .from('group_members')
-        .select(`role, groups(id, name, avatar_url, cover_url, is_public, research_topic)`)
+        .select(`role, groups(id, name, avatar_url, is_public, research_topic)`)
         .eq('user_id', user.id)
         .in('role', ['admin', 'member', 'alumni']));
     }
@@ -192,7 +185,7 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
     const { data: myMemberships } = await supabase.from('group_members').select('group_id').eq('user_id', user.id);
     const myIds = (myMemberships || []).map(r => r.group_id);
 
-    let q = supabase.from('groups').select('id, name, slug, description, research_topic, tier1, tier2, avatar_url, is_public, location').eq('is_public', true).limit(30);
+    let q = supabase.from('groups').select('id, name, slug, description, research_topic, tier1, tier2, institution, company, country, location, avatar_url, is_public').eq('is_public', true).limit(30);
     if (myIds.length) q = q.not('id', 'in', `(${myIds.join(',')})`);
     const { data: groups } = await q;
 
@@ -263,7 +256,9 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
                 {myGroups.map(m => m.groups && (
                   <GroupBadgeCard
                     key={m.groups.id}
-                    membership={m}
+                    group={m.groups}
+                    role={m.role}
+                    memberCount={m.memberCount}
                     unreadCount={unreadCounts[m.groups.id] || 0}
                     onSelect={onGroupSelect}
                   />
@@ -295,45 +290,29 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {filteredDiscover.map(g => (
-                  <div key={g.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: 14, borderRadius: 14,
-                    border: `1px solid ${T.bdr}`, background: T.w, cursor: 'pointer',
-                  }}
-                    onClick={() => joinGroup(g)}>
-                    <div style={{
-                      width: 44, height: 44, borderRadius: 11, flexShrink: 0,
-                      background: 'linear-gradient(135deg,#667eea,#764ba2)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 16, fontWeight: 700, color: '#fff', overflow: 'hidden',
-                    }}>
-                      {g.avatar_url
-                        ? <img src={g.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                        : g.name?.charAt(0).toUpperCase()
-                      }
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 2 }}>{g.name}</div>
-                      {g.tier1 && <div style={{ fontSize: 10.5, color: T.v, fontWeight: 600, marginBottom: 2 }}>{g.tier1}</div>}
-                      {g.research_topic && <div style={{ fontSize: 11, color: T.mu, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.research_topic}</div>}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-                        <span style={{ fontSize: 10.5, color: T.mu }}>{g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}</span>
-                        {!g.is_public && <span style={{ fontSize: 10, color: T.mu }}>🔒 Closed</span>}
-                      </div>
-                    </div>
-                    <button
-                      onClick={e => { e.stopPropagation(); joinGroup(g); }}
-                      disabled={joining === g.id}
-                      style={{
-                        padding: '7px 16px', borderRadius: 20, border: `1.5px solid ${T.v}`,
-                        background: g.is_public ? T.v : T.w, color: g.is_public ? '#fff' : T.v,
-                        cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, flexShrink: 0,
-                      }}>
-                      {joining === g.id ? '…' : g.is_public ? 'Join' : 'View →'}
-                    </button>
-                  </div>
+                  <GroupBadgeCard
+                    key={g.id}
+                    group={g}
+                    role={null}
+                    memberCount={g.memberCount}
+                    onSelect={() => joinGroup(g)}
+                    actionButton={
+                      <button
+                        onClick={e => { e.stopPropagation(); joinGroup(g); }}
+                        disabled={joining === g.id}
+                        style={{
+                          width: '100%', padding: '7px', borderRadius: 9, fontSize: 12, fontWeight: 700,
+                          fontFamily: 'inherit', cursor: 'pointer',
+                          border: `1.5px solid ${T.v}`,
+                          background: g.is_public ? T.v : T.v2,
+                          color: g.is_public ? '#fff' : T.v,
+                        }}>
+                        {joining === g.id ? '…' : g.is_public ? '+ Join group' : '🔒 Request to join'}
+                      </button>
+                    }
+                  />
                 ))}
               </div>
             )}
