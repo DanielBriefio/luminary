@@ -454,12 +454,12 @@ export default function ExploreScreen({
     if (!query.trim() && !tier1) {
       const { data } = await supabase
         .from('groups').select(cols)
-        .eq('is_public', true).eq('is_searchable', true)
+        .eq('is_public', true)
         .order('created_at', { ascending: false }).limit(6);
       setSuggestedGroups(data || []);
       setGroupResults([]);
     } else {
-      let q = supabase.from('groups').select(cols).eq('is_searchable', true);
+      let q = supabase.from('groups').select(cols).eq('is_public', true);
       if (query.trim()) q = q.or(`name.ilike.%${query}%,description.ilike.%${query}%,research_topic.ilike.%${query}%`);
       if (tier1) q = q.eq('tier1', tier1);
       const { data } = await q.limit(10);

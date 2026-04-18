@@ -312,48 +312,94 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
         )}
 
         <div style={{ marginTop: 12 }}>
-          {/* Name */}
-          {editing ? (
-            <input value={editName} onChange={e => setEditName(e.target.value)}
-              style={inputStyle} placeholder="Group name"/>
-          ) : (
-            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: T.text, marginBottom: 2 }}>
-              {group.name}
-            </div>
-          )}
 
-          {/* Taxonomy badges / edit */}
           {editing ? (
-            <div style={{ marginTop: 8 }}>
-              <select value={editTier1} onChange={e => { setEditTier1(e.target.value); setEditTier2([]); }}
-                style={{ ...inputStyle, marginBottom: 6, appearance: 'none' }}>
-                <option value="">Select primary discipline…</option>
-                {TIER1_LIST.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              {editTier1 && (
-                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
-                  {getTier2(editTier1).map(t => (
-                    <button key={t} type="button"
-                      onClick={() => setEditTier2(prev =>
-                        prev.includes(t) ? prev.filter(x => x !== t) : prev.length < 3 ? [...prev, t] : prev
-                      )}
-                      style={{
-                        padding: '2px 9px', borderRadius: 20, cursor: 'pointer',
-                        fontSize: 11, fontFamily: 'inherit',
-                        border: `1.5px solid ${editTier2.includes(t) ? T.v : T.bdr}`,
-                        background: editTier2.includes(t) ? T.v2 : T.w,
-                        color: editTier2.includes(t) ? T.v : T.text,
-                      }}>
-                      {t}
-                    </button>
-                  ))}
+            /* ── Edit form ── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Group name */}
+              <div>
+                <FieldLabel>Group name</FieldLabel>
+                <input value={editName} onChange={e => setEditName(e.target.value)}
+                  style={inputStyle} placeholder="e.g. Computational Neuroscience Lab"/>
+              </div>
+
+              {/* Research area */}
+              <div>
+                <FieldLabel>Research area</FieldLabel>
+                <select value={editTier1} onChange={e => { setEditTier1(e.target.value); setEditTier2([]); }}
+                  style={{ ...inputStyle, marginBottom: 8, appearance: 'none', WebkitAppearance: 'none' }}>
+                  <option value="">Select primary discipline…</option>
+                  {TIER1_LIST.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                {editTier1 && (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {getTier2(editTier1).map(t => (
+                      <button key={t} type="button"
+                        onClick={() => setEditTier2(prev =>
+                          prev.includes(t) ? prev.filter(x => x !== t) : prev.length < 3 ? [...prev, t] : prev
+                        )}
+                        style={{
+                          padding: '3px 10px', borderRadius: 20, cursor: 'pointer',
+                          fontSize: 11.5, fontFamily: 'inherit',
+                          border: `1.5px solid ${editTier2.includes(t) ? T.v : T.bdr}`,
+                          background: editTier2.includes(t) ? T.v2 : T.w,
+                          color: editTier2.includes(t) ? T.v : T.text,
+                        }}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <FieldLabel>Research details</FieldLabel>
+                <input value={editTopic} onChange={e => setEditTopic(e.target.value)}
+                  style={inputStyle} placeholder="Specific focus, methods, goals…"/>
+              </div>
+
+              {/* Affiliation */}
+              <div>
+                <FieldLabel>Affiliation</FieldLabel>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input value={editInstitution} onChange={e => setEditInstitution(e.target.value)}
+                    style={inputStyle} placeholder="Institution (e.g. Harvard Medical School)"/>
+                  <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
+                    style={inputStyle} placeholder="Company (e.g. Pfizer Research)"/>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <input value={editLocation} onChange={e => setEditLocation(e.target.value)}
+                      style={inputStyle} placeholder="City"/>
+                    <input value={editCountry} onChange={e => setEditCountry(e.target.value)}
+                      style={inputStyle} placeholder="Country"/>
+                  </div>
                 </div>
-              )}
-              <input value={editTopic} onChange={e => setEditTopic(e.target.value)}
-                style={{ ...inputStyle }} placeholder="Research details (specific focus, methods, goals…)"/>
+              </div>
+
+              {/* Contact */}
+              <div>
+                <FieldLabel>Contact</FieldLabel>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)}
+                    style={inputStyle} placeholder="Website URL"/>
+                  <input value={editEmail} onChange={e => setEditEmail(e.target.value)}
+                    style={inputStyle} placeholder="Contact email"/>
+                </div>
+              </div>
+
+              {/* Your role */}
+              <div>
+                <FieldLabel>Your role in this group</FieldLabel>
+                <input value={editDispRole} onChange={e => setEditDispRole(e.target.value)}
+                  style={inputStyle} placeholder="e.g. PI, Lab Director, Research Lead"/>
+              </div>
+
             </div>
           ) : (
-            <div style={{ marginBottom: 8 }}>
+            /* ── View mode ── */
+            <div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: T.text, marginBottom: 6 }}>
+                {group.name}
+              </div>
+
+              {/* Taxonomy */}
               {(group.tier1 || group.tier2?.length > 0) && (
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 5 }}>
                   {group.tier1 && (
@@ -369,47 +415,28 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
                 </div>
               )}
               {group.research_topic && (
-                <div style={{ fontSize: 13, color: T.v, fontWeight: 600 }}>{group.research_topic}</div>
+                <div style={{ fontSize: 13, color: T.v, fontWeight: 600, marginBottom: 4 }}>{group.research_topic}</div>
               )}
-            </div>
-          )}
 
-          {/* Contact / affiliation row */}
-          {editing ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-              <input value={editInstitution} onChange={e => setEditInstitution(e.target.value)}
-                style={inputStyle} placeholder="🏛️ Institution (e.g. Harvard Medical School)"/>
-              <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
-                style={inputStyle} placeholder="🏢 Company (e.g. Pfizer Research)"/>
-              <input value={editCountry} onChange={e => setEditCountry(e.target.value)}
-                style={inputStyle} placeholder="🌍 Country (e.g. Germany)"/>
-              <input value={editLocation} onChange={e => setEditLocation(e.target.value)}
-                style={inputStyle} placeholder="📍 City / location (e.g. Berlin)"/>
-              <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)}
-                style={inputStyle} placeholder="🌐 Website URL"/>
-              <input value={editEmail} onChange={e => setEditEmail(e.target.value)}
-                style={inputStyle} placeholder="✉️ Contact email"/>
-              <input value={editDispRole} onChange={e => setEditDispRole(e.target.value)}
-                style={inputStyle} placeholder="Your display role (e.g. PI, Lab Director)"/>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginBottom: 8 }}>
-              {group.institution && <span style={{ fontSize: 12, color: T.mu }}>🏛️ {group.institution}</span>}
-              {group.company     && <span style={{ fontSize: 12, color: T.mu }}>🏢 {group.company}</span>}
-              {group.country     && <span style={{ fontSize: 12, color: T.mu }}>🌍 {group.country}</span>}
-              {group.location    && <span style={{ fontSize: 12, color: T.mu }}>📍 {group.location}</span>}
-              {group.website_url && (
-                <a href={group.website_url} target="_blank" rel="noopener noreferrer"
-                  style={{ fontSize: 12, color: T.v, textDecoration: 'none', fontWeight: 600 }}>
-                  🌐 Website
-                </a>
-              )}
-              {group.contact_email && (
-                <a href={`mailto:${group.contact_email}`}
-                  style={{ fontSize: 12, color: T.v, textDecoration: 'none', fontWeight: 600 }}>
-                  ✉️ {group.contact_email}
-                </a>
-              )}
+              {/* Affiliation + contact */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 16px', marginBottom: 8 }}>
+                {group.institution   && <span style={{ fontSize: 12, color: T.mu }}>🏛️ {group.institution}</span>}
+                {group.company       && <span style={{ fontSize: 12, color: T.mu }}>🏢 {group.company}</span>}
+                {group.location      && <span style={{ fontSize: 12, color: T.mu }}>📍 {group.location}</span>}
+                {group.country       && <span style={{ fontSize: 12, color: T.mu }}>🌍 {group.country}</span>}
+                {group.website_url   && (
+                  <a href={group.website_url} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: 12, color: T.v, textDecoration: 'none', fontWeight: 600 }}>
+                    🌐 Website
+                  </a>
+                )}
+                {group.contact_email && (
+                  <a href={`mailto:${group.contact_email}`}
+                    style={{ fontSize: 12, color: T.v, textDecoration: 'none', fontWeight: 600 }}>
+                    ✉️ {group.contact_email}
+                  </a>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -683,6 +710,15 @@ function SectionLabel({ children }) {
       fontSize: 10.5, fontWeight: 700, color: T.mu,
       textTransform: 'uppercase', letterSpacing: '.06em',
       marginBottom: 8,
+    }}>{children}</div>
+  );
+}
+
+function FieldLabel({ children }) {
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 700, color: T.mu,
+      marginBottom: 5, letterSpacing: '.02em',
     }}>{children}</div>
   );
 }

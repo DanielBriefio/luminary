@@ -169,11 +169,13 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
       enriched
         .filter(r => r.groups && r.role !== 'alumni')
         .map(async r => {
+          // If last_read_at is null the tracking column hasn't been set yet — show 0
+          if (!r.last_read_at) { counts[r.groups.id] = 0; return; }
           const { count } = await supabase
             .from('group_posts')
             .select('id', { count: 'exact', head: true })
             .eq('group_id', r.groups.id)
-            .gt('created_at', r.last_read_at || '1970-01-01');
+            .gt('created_at', r.last_read_at);
           counts[r.groups.id] = count || 0;
         })
     );
