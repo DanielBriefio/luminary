@@ -214,6 +214,49 @@ export default function App() {
       });
   },[session]);
 
+  // Post-auth redirect: handle ?view_profile= / ?connect= params and sessionStorage redirect
+  useEffect(() => {
+    if (!session || !profile) return;
+
+    // 1. Check URL params first (set when redirected from business card while logged in or after auth)
+    const params      = new URLSearchParams(window.location.search);
+    const viewSlug    = params.get('view_profile');
+    const connectSlug = params.get('connect');
+    const urlSlug     = viewSlug || connectSlug;
+
+    if (urlSlug) {
+      window.history.replaceState({}, '', '/');
+      if (connectSlug) sessionStorage.setItem('post_auth_action', 'follow');
+      sessionStorage.setItem('post_auth_profile', urlSlug);
+    }
+
+    // 2. Act on stored profile slug (from sessionStorage or just set above)
+    const storedSlug   = sessionStorage.getItem('post_auth_profile');
+    const storedAction = sessionStorage.getItem('post_auth_action');
+    if (!storedSlug) return;
+
+    sessionStorage.removeItem('post_auth_profile');
+    sessionStorage.removeItem('post_auth_action');
+
+    supabase.from('profiles').select('id, name').eq('profile_slug', storedSlug).single()
+      .then(({ data: target }) => {
+        if (!target) return;
+        setViewedUserId(target.id);
+        setScreen('user_profile');
+        if (storedAction === 'follow') {
+          supabase.from('follows').upsert({
+            follower_id: session.user.id,
+            target_type: 'user',
+            target_id:   target.id,
+          }, { onConflict: 'follower_id,target_type,target_id', ignoreDuplicates: true })
+            .then(() => {
+              setJoinToast(`✓ You are now following ${target.name}`);
+              setTimeout(() => setJoinToast(''), 3000);
+            });
+        }
+      });
+  }, [session, profile]); // eslint-disable-line
+
   // Offer ORCID import on first login if user has a verified ORCID but hasn't imported yet
   useEffect(()=>{
     if(!profile) return;

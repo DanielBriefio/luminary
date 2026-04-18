@@ -61,9 +61,6 @@ export default function CardPage({ slug }) {
           </svg>
         </button>
         <div style={{ flex:1 }}/>
-        <a href="/" style={{ fontSize:12.5, color:T.v, fontWeight:600, textDecoration:'none', background:T.v2, border:`1px solid rgba(108,99,255,.2)`, borderRadius:8, padding:'7px 16px', whiteSpace:'nowrap' }}>
-          Join Luminary →
-        </a>
       </div>
 
       {/* Card — full page */}

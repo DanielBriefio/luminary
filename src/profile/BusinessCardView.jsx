@@ -1,3 +1,4 @@
+import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Av from '../components/Av';
 
@@ -20,6 +21,19 @@ export function ContactRow({ icon, label, href }) {
 
 export function BusinessCardView({ profile, currentUserId }) {
   const isOwner = currentUserId && currentUserId === profile.id;
+
+  const handleConnectOnLuminary = () => {
+    if (currentUserId) {
+      // Already logged in — redirect to app with view_profile param
+      sessionStorage.setItem('post_auth_action', 'follow');
+      window.location.href = `${window.location.origin}?view_profile=${profile.profile_slug}`;
+    } else {
+      // Not logged in — store redirect target and go to auth
+      sessionStorage.setItem('post_auth_profile', profile.profile_slug);
+      sessionStorage.setItem('post_auth_action', 'follow');
+      window.location.href = `${window.location.origin}?connect=${profile.profile_slug}`;
+    }
+  };
 
   const hasContactDetails = (
     (profile.card_show_email    && profile.card_email)    ||
@@ -131,38 +145,59 @@ export function BusinessCardView({ profile, currentUserId }) {
 
       {/* Action buttons */}
       <div style={{ width:'100%', maxWidth:440, display:'flex', flexDirection:'column', gap:10, marginTop:20 }}>
-        <button onClick={downloadVCard} style={{
+
+        {/* 1. Connect on Luminary — PRIMARY */}
+        <button onClick={handleConnectOnLuminary} style={{
           width:'100%', padding:'13px', borderRadius:12, border:'none',
-          background:'linear-gradient(135deg, #667eea, #764ba2)',
+          background:'linear-gradient(135deg, #6c63ff, #764ba2)',
           color:'white', fontSize:14, fontWeight:700, fontFamily:'inherit', cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+        }}>
+          🔬 Connect on Luminary
+        </button>
+
+        {/* 2. Save to Contacts — SECONDARY */}
+        <button onClick={downloadVCard} style={{
+          width:'100%', padding:'12px', borderRadius:12,
+          border:'1.5px solid #e0e0e0', background:'#f8f8f8',
+          color:'#333', fontSize:13, fontWeight:700, fontFamily:'inherit', cursor:'pointer',
           display:'flex', alignItems:'center', justifyContent:'center', gap:8,
         }}>
           📱 Save to Contacts
         </button>
 
+        {/* 3. Connect on LinkedIn — TERTIARY, only if set */}
         {profile.card_show_linkedin && profile.card_linkedin && (
-          <a href={profile.card_linkedin.startsWith('http') ? profile.card_linkedin : `https://${profile.card_linkedin}`}
-            target="_blank" rel="noopener noreferrer" style={{
-            width:'100%', padding:'12px', borderRadius:12, border:'1.5px solid #0077b5',
-            background:'white', color:'#0077b5', fontSize:13, fontWeight:700, fontFamily:'inherit',
-            cursor:'pointer', textDecoration:'none',
-            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-          }}>
+          <a
+            href={profile.card_linkedin.startsWith('http') ? profile.card_linkedin : `https://${profile.card_linkedin}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{
+              width:'100%', padding:'10px', borderRadius:12,
+              border:'1.5px solid #c8d0d8', background:'transparent',
+              color:'#888', fontSize:12.5, fontWeight:600, fontFamily:'inherit',
+              textDecoration:'none', cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+              boxSizing:'border-box',
+            }}
+          >
             💼 Connect on LinkedIn
           </a>
         )}
 
-        <a href={`${window.location.origin}/p/${profile.profile_slug}`} style={{
-          width:'100%', padding:'12px', borderRadius:12, border:`1.5px solid ${T.v}`,
-          background:T.v2, color:T.v, fontSize:13, fontWeight:700, fontFamily:'inherit',
-          cursor:'pointer', textDecoration:'none',
-          display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-        }}>
-          🔬 View full profile
+        {/* 4. View full profile — text link */}
+        <a
+          href={`${window.location.origin}/p/${profile.profile_slug}`}
+          style={{
+            textAlign:'center', fontSize:12.5, color:'#6c63ff', fontWeight:600,
+            textDecoration:'none', padding:'6px 0', display:'block',
+          }}
+        >
+          View full profile →
         </a>
+
       </div>
 
-      <div style={{ marginTop:16, fontSize:11, color:'#bbb', textAlign:'center' }}>
+      <div style={{ marginTop:12, fontSize:11, color:'#bbb', textAlign:'center' }}>
         Scan QR · Save contact · Connect
       </div>
     </div>
