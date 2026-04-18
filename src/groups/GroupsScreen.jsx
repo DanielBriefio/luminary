@@ -143,11 +143,19 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
 
   const fetchMyGroups = useCallback(async () => {
     setLoadingMine(true);
-    const { data } = await supabase
+    // Try with new columns first; fall back to core columns if migration hasn't run
+    let { data, error } = await supabase
       .from('group_members')
       .select(`role, last_read_at, groups(id, name, slug, avatar_url, cover_url, is_public, research_topic, tier1, tier2, location)`)
       .eq('user_id', user.id)
       .in('role', ['admin', 'member', 'alumni']);
+    if (error) {
+      ({ data } = await supabase
+        .from('group_members')
+        .select(`role, groups(id, name, avatar_url, cover_url, is_public, research_topic)`)
+        .eq('user_id', user.id)
+        .in('role', ['admin', 'member', 'alumni']));
+    }
 
     const rows = data || [];
     const groupIds = rows.map(r => r.groups?.id).filter(Boolean);
