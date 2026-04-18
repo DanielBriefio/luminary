@@ -120,15 +120,15 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     setAvatarUploading(true);
     setUploadError('');
     const ext  = file.name.split('.').pop();
-    const path = `avatars/${groupId}.${ext}`;
-    const { error: uploadErr } = await supabase.storage
-      .from('group-files').upload(path, file, { upsert: true });
+    const path = `group-avatars/${groupId}.${ext}`;
+    const { data: upData, error: uploadErr } = await supabase.storage
+      .from('post-files').upload(path, file, { contentType: file.type, upsert: true });
     if (uploadErr) {
       setUploadError(`Avatar upload failed: ${uploadErr.message}`);
       setAvatarUploading(false);
       return;
     }
-    const { data } = supabase.storage.from('group-files').getPublicUrl(path);
+    const { data } = supabase.storage.from('post-files').getPublicUrl(upData.path);
     await supabase.from('groups').update({ avatar_url: data.publicUrl }).eq('id', groupId);
     setAvatarUploading(false);
     onGroupUpdate?.();
@@ -139,15 +139,15 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     setCoverUploading(true);
     setUploadError('');
     const ext  = file.name.split('.').pop();
-    const path = `covers/${groupId}.${ext}`;
-    const { error: uploadErr } = await supabase.storage
-      .from('group-files').upload(path, file, { upsert: true });
+    const path = `group-covers/${groupId}.${ext}`;
+    const { data: upData, error: uploadErr } = await supabase.storage
+      .from('post-files').upload(path, file, { contentType: file.type, upsert: true });
     if (uploadErr) {
       setUploadError(`Cover upload failed: ${uploadErr.message}`);
       setCoverUploading(false);
       return;
     }
-    const { data } = supabase.storage.from('group-files').getPublicUrl(path);
+    const { data } = supabase.storage.from('post-files').getPublicUrl(upData.path);
     await supabase.from('groups').update({ cover_url: data.publicUrl }).eq('id', groupId);
     setCoverUploading(false);
     onGroupUpdate?.();
@@ -244,11 +244,9 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
         {uploadError && (
           <div style={{
             background: T.ro2, border: `1px solid ${T.ro}`, borderRadius: 10,
-            padding: '10px 14px', marginTop: 10, fontSize: 12.5, color: T.ro, lineHeight: 1.5,
+            padding: '10px 14px', marginTop: 10, fontSize: 12.5, color: T.ro,
           }}>
             {uploadError}
-            <br/>
-            <span style={{ fontWeight: 600 }}>Make sure the <code>group-files</code> bucket exists in Supabase Storage and is set to Public.</span>
           </div>
         )}
 
