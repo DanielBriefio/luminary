@@ -6,7 +6,9 @@ import PostCard from '../feed/PostCard';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
 import FollowBtn from '../components/FollowBtn';
-import { timeAgo, buildCitationFromEpmc } from '../lib/utils';
+import { timeAgo, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
+
+const _citationCache = {};
 
 // ─── Researcher result card ───────────────────────────────────────────────────
 
@@ -61,6 +63,17 @@ function ResearcherCard({ user, currentUserId, onViewUser }) {
 
 function PaperSearchCard({ post, currentUserId, onViewPaper }) {
   const doiUrl = post.paper_doi ? `https://doi.org/${post.paper_doi}` : null;
+  const [liveCitation, setLiveCitation] = useState('');
+  useEffect(() => {
+    if (post.paper_citation || !post.paper_doi) return;
+    const doi = post.paper_doi;
+    if (_citationCache[doi]) { setLiveCitation(_citationCache[doi]); return; }
+    fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (!j) return; const c = buildCitationFromCrossRef(j.message, doi); if (c) { _citationCache[doi] = c; setLiveCitation(c); } })
+      .catch(() => {});
+  }, [post.paper_doi, post.paper_citation]); // eslint-disable-line
+  const citation = post.paper_citation || liveCitation;
   return (
     <div style={{
       background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12,
@@ -88,9 +101,9 @@ function PaperSearchCard({ post, currentUserId, onViewPaper }) {
           {post.paper_authors}
         </div>
       )}
-      {(post.paper_citation || post.paper_journal) && (
+      {(citation || post.paper_journal) && (
         <div style={{ fontSize: 12, color: T.mu, marginBottom: 10 }}>
-          {post.paper_citation || post.paper_journal}
+          {citation || post.paper_journal}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
