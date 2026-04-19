@@ -51,7 +51,8 @@ src/
   index.js                       — React entry point
   lib/
     constants.js                 — T (tokens), NAV, PUB_TYPES, EDGE_FN, EDGE_HEADERS
-    utils.js                     — timeAgo, fuzzy dedup, match scoring
+    utils.js                     — timeAgo, fuzzy dedup, match scoring, buildCitationFromEpmc, buildCitationFromCrossRef
+    referenceUtils.js            — parseRis, parseBib, buildCitationFromRef (client-side .ris/.bib parsers)
     htmlUtils.js                 — sanitiseHtml
     fileUtils.js                 — getFileCategory
     linkedInUtils.js             — parseCsv, parseLinkedInDate, formatDateRange, cleanBio, buildName
@@ -65,7 +66,7 @@ src/
     Inp.jsx                      — Labelled input
     Spinner.jsx                  — Loading spinner
     FollowBtn.jsx                — Follow/unfollow (user | paper | group)
-    PaperPreview.jsx             — Paper card preview
+    PaperPreview.jsx             — Paper card preview (reads paper_citation from DB; falls back to paper_journal)
     FilePreview.jsx              — File attachment preview
     SafeHtml.jsx                 — Sanitized HTML renderer
     RichTextEditor.jsx           — contenteditable editor with bold/italic/link toolbar
@@ -80,7 +81,7 @@ src/
     AuthScreen.jsx               — Login / sign-up (card, maxWidth 420px); handles ORCID callback
     OnboardingScreen.jsx         — First-run wizard: follow suggestions + add publications
     NewPostScreen.jsx            — Compose: text, paper, link, upload, tip
-    ExploreScreen.jsx            — Search posts + topic tag browse (2-col grid with right sidebar)
+    ExploreScreen.jsx            — Search posts + topic tag browse; Papers tab has EPMC search with pagination and "Add to library"
     NotifsScreen.jsx             — Notifications (mark-as-read); supports group_post type
     NetworkScreen.jsx            — Followers/following, suggested connections (2-col grid)
     MessagesScreen.jsx           — DM conversations + real-time threads + compose panel
@@ -92,7 +93,7 @@ src/
     PostCard.jsx                 — Post display: like, comment, edit, delete, follow
   profile/
     ProfileScreen.jsx            — Editable profile (About / Publications / Posts tabs)
-    PublicationsTab.jsx          — Publications: manual add, search, import
+    PublicationsTab.jsx          — Publications: manual add, EPMC search, .ris/.bib import, AI import, export (.bib/.ris/PDF)
     LinkedInImporter.jsx         — LinkedIn ZIP export parser
     OrcidImporter.jsx            — ORCID API importer
     PublicProfilePage.jsx        — Public profile at /p/:slug (no auth required)
@@ -107,13 +108,20 @@ src/
     PublicPostPage.jsx           — Public post at /s/:postId (no auth required; maxWidth 640px)
   paper/
     PaperDetailPage.jsx          — Paper detail at /paper/:doi (public + auth; maxWidth 740px)
+  library/
+    LibraryScreen.jsx            — Personal library: folders, paper search, DOI entry, file upload, .ris/.bib import, bookmarks
+    LibraryFolderSidebar.jsx     — Folder list sidebar; supports "Unsorted" virtual folder (showInbox/inboxCount props)
+    LibraryItemCard.jsx          — Library item: 3-dot menu (move to folder / remove), Share this paper, showInlineMove prop for Unsorted view
+    LibraryPaperSearch.jsx       — Europe PMC search panel for adding papers to library
+    LibraryRisImporter.jsx       — .ris/.bib import panel: parses file, previews, folder picker (existing or new "Import YYYY-MM-DD")
   groups/
     GroupsScreen.jsx             — Group list: My Groups + Discover; create group button
-    GroupScreen.jsx              — Group container: 200px sidebar + Feed/Members tabs
+    GroupScreen.jsx              — Group container: 200px sidebar + Feed/Members/Library tabs
     GroupFeed.jsx                — Group post feed (sticky posts first); compose trigger
     GroupNewPost.jsx             — Post composer: text, paper (EuropePMC), link; auto-tag
     GroupPostCard.jsx            — Group post: like, comment, edit, delete, sticky, repost-to-public
     GroupMembers.jsx             — Members list; admin controls: promote/demote/remove; join requests
+    GroupLibrary.jsx             — Group library: folders, paper search, DOI entry, file upload, .ris/.bib import
     CreateGroupModal.jsx         — Create group: name, description, research_topic, public/closed toggle
 ```
 
@@ -125,12 +133,12 @@ src/
 - Toggle: **For You** (all posts) / **Following** (posts by followed users + followed papers by DOI)
 - Tabs: **All** / **Papers**
 - Right sidebar: live **Paper of the Week** (most-commented paper by DOI across all posts, fetched from CrossRef) + "Founding Fellows" message
-- `posts_with_meta` view gives `like_count` and `comment_count`
+- `posts_with_meta` view gives `like_count`, `comment_count`, and `paper_citation`
 
 ### New Post (`NewPostScreen`)
 Five post types:
 - **Text** — rich text (bold, italic, links via `RichTextEditor`)
-- **Paper** — DOI lookup via CrossRef API (auto-fills title, journal, authors, abstract, year)
+- **Paper** — DOI lookup via CrossRef API (auto-fills title, journal, authors, abstract, year, citation string); EPMC search also supported; citation string stored as `paper_citation` on publish
 - **Link** — title + URL
 - **Upload** — image (10MB), video (200MB), audio (50MB), PDF (25MB), CSV (5MB) → Supabase Storage `post-files` bucket
 - **Tip** — plain text tip
@@ -145,12 +153,26 @@ All posts support:
 - Comments (lazy load, inline compose, threaded on post)
 - Edit / delete (owner only, dropdown menu)
 - Follow paper by DOI or follow post author via `FollowBtn`
-- Post type badge
+- Post type badge; paper posts show `paper_citation` string
 
 ### Explore (`ExploreScreen`)
-- Full-text search against `posts_with_meta.content` (ilike, debounced 400ms)
-- Topic tag chips: #GLP1, #CryoEM, #CRISPR, #OpenScience, #DigitalHealth, #MedicalAffairs, #RWE, #WomensHealth
-- 2-column grid: main results + 264px right sidebar (topic chips + featured papers)
+- Tabs: **Posts**, **Researchers**, **Papers**, **Groups**
+- Posts tab: full-text search with discipline filter (TIER1_LIST) and tier-2 chips
+- Papers tab — three sections:
+  - Discussed on Luminary (deduplicated by DOI)
+  - In researcher profiles
+  - From Europe PMC: shows total hit count, cursor-based "Load more" pagination (10 at a time), "Add to library" button (inserts into `library_items` with `folder_id: null` → appears in Unsorted), "Share this paper" prefills NewPostScreen with citation
+- Researchers tab: search by name/institution/title
+- Groups tab: tier-1 filter chips + search
+
+### Library (`LibraryScreen`)
+- Left panel: folder sidebar (200px) + main content area
+- **Unsorted** virtual folder: shows `library_items` where `folder_id IS NULL` (added via Explore "Add to library"); inline "Move to folder" select + Remove per item
+- Regular folders: items have a **3-dot menu** (···) with "Move to folder" (inline folder picker) and "Remove"
+- Add paper options per folder: 🔍 Search Europe PMC, 🔗 Enter DOI, 📄 Upload file, 📑 Import .ris / .bib
+- **LibraryRisImporter**: drop-zone panel, parses file client-side, previews first 5 papers, folder picker (existing folders or auto-create "Import YYYY-MM-DD"), bulk-inserts all items
+- **Share this paper** button on each item: prefills NewPostScreen via `sessionStorage.prefill_paper`
+- Right panel: Bookmarks (saved posts, with unsave and navigation)
 
 ### Network (`NetworkScreen`)
 - Tabs: **Followers** / **Following** / **Suggested**
@@ -163,11 +185,12 @@ All posts support:
 ### Groups (`src/groups/`)
 - **GroupsScreen**: My Groups list + Discover (public groups search); "Create group" opens modal
 - **CreateGroupModal**: name (required), description, research_topic, public/closed toggle; inserts to `groups` with `created_by: user.id`, then adds creator to `group_members` as `role: 'admin'`
-- **GroupScreen**: 200px sidebar (initials avatar, name, topic, member count, role badge, Feed/Members tabs, leave/delete); non-members see JoinRequestPanel (closed) or PublicJoinPanel (public)
+- **GroupScreen**: 200px sidebar (initials avatar, name, topic, member count, role badge, Feed/Members/Library tabs, leave/delete); non-members see JoinRequestPanel (closed) or PublicJoinPanel (public)
 - **GroupFeed**: fetches `group_posts_with_meta` ordered by `is_sticky DESC, created_at DESC`; compose trigger opens GroupNewPost inline
-- **GroupNewPost**: post types text/paper/link; uploads to `post-files` bucket; fire-and-forget auto-tag; notifies all group members (`notif_type: 'group_post'`)
-- **GroupPostCard**: like/comment (group tables); sticky toggle; repost to public `posts` table; owner+admin menu
+- **GroupNewPost**: post types text/paper/link; uploads to `post-files` bucket; fire-and-forget auto-tag; notifies all group members (`notif_type: 'group_post'`); stores `paper_citation`
+- **GroupPostCard**: like/comment (group tables); sticky toggle; repost to public `posts` table; owner+admin menu; shows `paper_citation`
 - **GroupMembers**: admin list + member list with promote/demote/remove; pending join requests with approve/reject
+- **GroupLibrary**: same add controls as personal library (Search PMC, DOI, Upload, .ris/.bib import); 3-dot menu per item; "Share this paper"; admin/member can add, admin can delete any item
 
 ### Notifications (`NotifsScreen`)
 - Types handled: `new_post`, `new_comment`, `paper_comment`, `new_follower`, `group_post`
@@ -183,16 +206,18 @@ Tabs: **About**, **Publications**, **Posts**
 Import menu (top-right):
 - **LinkedIn ZIP** — parses `profile.csv`, `positions.csv`, `education.csv`, `volunteer.csv`, `organizations.csv`, `honors.csv`, `languages.csv`, `skills.csv`, `patents.csv`. Fuzzy dedup with `ConflictResolverModal` for work + education conflicts.
 - **ORCID** — fetches from `pub.orcid.org/v3.0/{id}/record`, imports employment + education + works
-- **CV upload** (PDF/DOCX/TXT) — calls `extract-publications` edge function in `mode:'full_cv'`, imports bio/title/location/honors/languages/skills/work_history/education + publications
+- **AI import of full CV** (PDF/DOCX/TXT) — calls `extract-publications` edge function in `mode:'full_cv'`, imports bio/title/location/honors/languages/skills/work_history/education + publications
 
 Profile sections (stored as JSONB arrays in `profiles`):
 `work_history`, `education`, `volunteering`, `organizations`, `honors`, `languages`, `skills`, `patents`, `grants`
 
 **Publications tab** (`PublicationsTab`):
 - CRUD for `publications` table
-- CrossRef name search (auto-derives name variants: "Last First", "Last FI")
+- Europe PMC name search (auto-derives name variants: "Last First", "Last FI")
 - ORCID import (reuses `OrcidImporter`)
-- CV import (reuses `extract-publications` edge function, `mode:'full_cv'`)
+- **🤖 AI publication import** (PDF/DOCX/TXT) — calls `extract-publications` edge function in `mode:'publications'`; per-item confirm/skip
+- **📑 Import .ris / .bib** — client-side parse via `referenceUtils.js`; deduplicates against existing pubs; bulk "Import all" with preview
+- Export dropdown: **BibTeX (.bib)**, **RIS (.ris)**, **PDF** (Vancouver/NLM format, opens print dialog)
 - Conflict-aware dedup on import
 - Types: journal, conference, poster, lecture, book, review, preprint, other
 
@@ -236,7 +261,7 @@ Profile sections (stored as JSONB arrays in `profiles`):
 - Shows: avatar, name, title, institution, bio, work history, education, skills, publications
 - Tab: About / Publications
 
-## Database Schema (live — verified against Supabase 2026-04-17)
+## Database Schema (live — verified against Supabase 2026-04-19)
 
 ### `profiles`
 id (FK auth.users), name, title, institution, location, bio, orcid, twitter, website,
@@ -259,6 +284,7 @@ created_at
 ### `posts`
 id, user_id, content, post_type, visibility,
 paper_title, paper_journal, paper_doi, paper_abstract, paper_authors, paper_year,
+paper_citation (TEXT) — formatted citation string stored at post creation,
 link_title, link_url, link_source,
 image_url, file_type, file_name,
 tags (TEXT[]), tier1, tier2 (TEXT[]),
@@ -266,6 +292,7 @@ created_at
 
 ### `posts_with_meta`
 VIEW: posts + author profile fields + like_count, comment_count
+— includes paper_citation (view was recreated to include this column)
 
 ### `likes`
 id, user_id, post_id, created_at
@@ -281,7 +308,7 @@ id, follower_id, target_type (user|paper|group), target_id (TEXT), created_at
 
 ### `publications`
 id, user_id, title, authors, journal, year, doi, pub_type, venue,
-pmid, source, citations, is_open_access, full_text_url, created_at
+pmid, source, citations, is_open_access, full_text_url, citation (TEXT), created_at
 
 ### `notifications`
 id, user_id, actor_id, notif_type, target_type, target_id, meta (JSONB), read, created_at
@@ -325,6 +352,7 @@ id, group_id, user_id, message, status ('pending'|'approved'|'rejected'), create
 ### `group_posts`
 id, group_id, user_id, content (NOT NULL), post_type,
 paper_doi, paper_title, paper_journal, paper_authors, paper_abstract, paper_year,
+paper_citation (TEXT) — formatted citation string stored at post creation,
 link_url, link_title, link_description,
 image_url, file_type, file_name,
 tags (TEXT[]), tier1, tier2 (TEXT[]),
@@ -338,12 +366,28 @@ author_avatar (avatar_color), author_avatar_url,
 author_identity_tier1, author_identity_tier2,
 author_group_role, author_display_role,
 like_count, comment_count
+— includes paper_citation (view was recreated to include this column)
 
 ### `group_post_likes`
 id, post_id, user_id, created_at
 
 ### `group_post_comments`
 id, post_id, user_id, content (NOT NULL), read_at, created_at
+
+### `library_folders`
+id, user_id (nullable — null for group folders), group_id (nullable — null for personal folders),
+name, sort_order, created_at
+
+### `library_items`
+id, folder_id (nullable — NULL means Unsorted, i.e. added without a folder),
+added_by (user_id), title, authors, journal, year, doi, abstract,
+citation (TEXT), cited_by_count, is_open_access, full_text_url,
+pdf_url, pdf_name, notes,
+is_group_publication (bool — used in group library to flag group's own publications),
+added_at, created_at
+
+### `saved_posts`
+id, user_id, post_id (nullable), group_post_id (nullable), saved_at
 
 ## RLS — Groups (key policies)
 
@@ -356,12 +400,21 @@ All group RLS uses SECURITY DEFINER helper functions to avoid infinite recursion
 
 Key policy: `groups_select` allows `is_public = true OR created_by = auth.uid() OR id in (get_my_group_ids())`. The `created_by` check is critical — it allows the creator to read back the group immediately after insert, before the group_members row is added.
 
+## RLS — library_items (key policies)
+
+- `li_insert`: `added_by = auth.uid() AND (folder_id IS NULL OR folder_id IN (SELECT id FROM library_folders))`
+- `li_select`: `(folder_id IS NULL AND added_by = auth.uid()) OR folder_id IN (SELECT id FROM library_folders)`
+- `li_update`: `added_by = auth.uid() OR folder_id IN (admin group folder check)`
+- `li_delete`: `added_by = auth.uid() OR folder_id IN (admin group folder check)`
+— The null folder_id policies enable the Unsorted inbox (papers added from Explore without a folder)
+
 ## Edge Functions (Supabase)
 
 Both use the anon JWT from `EDGE_HEADERS` in constants.js.
 
 **`extract-publications`** (`EDGE_FN`)
 - `mode: 'full_cv'` — extracts profile fields + work/edu + publications from PDF/DOCX/text
+- `mode: 'publications'` — extracts publications only (used by "AI publication import" in PublicationsTab)
 - Input: `{ base64, mediaType }` for PDF, or `{ text }` for plain text/DOCX
 - Returns: `{ result: { profile, work_history, education, honors, languages, skills, publications } }`
 
@@ -370,6 +423,19 @@ Both use the anon JWT from `EDGE_HEADERS` in constants.js.
 - Input: `{ content, paperTitle, paperJournal, paperAbstract, linkTitle }`
 - Returns: `{ tags: string[] }` (tag names without `#`)
 - Enabled by `AUTO_TAG_ENABLED = true` in constants.js; always best-effort (never blocks publish)
+
+## Citation Strings
+
+Paper posts store a pre-formatted citation string (`paper_citation`) at creation time — no runtime fetching in feed cards.
+
+**Sources:**
+- DOI lookup (CrossRef) → `buildCitationFromCrossRef(w, doi)` in `utils.js`
+- EPMC search result → `buildCitationFromEpmc(r)` in `utils.js`
+- RIS/BibTeX import → `buildCitationFromRef({ journal, year, volume, issue, pages, doi })` in `referenceUtils.js`
+
+Format: `AbbrevJournal. Year Mon;Volume(Issue):Pages. doi: DOI`
+
+The `posts_with_meta` and `group_posts_with_meta` views were recreated (DROP + CREATE) to include `paper_citation` — `CREATE OR REPLACE VIEW` cannot insert a column mid-definition.
 
 ## Gamification (Decorative / In Progress)
 
@@ -409,4 +475,7 @@ Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level s
 - **groups.role** is stored as plain TEXT ('admin'|'member'|'alumni'), not a PostgreSQL enum
 - **groups.created_by** is the authoritative owner field; `owner_id` is legacy and nullable — never use `owner_id` in new code
 - **groups.is_public** is the authoritative visibility field; `is_private` is legacy — never use `is_private` in new code
+- **paper_citation** is stored at post-creation time (NewPostScreen, GroupNewPost); never fetched lazily in feed cards
+- **library_items.folder_id** is nullable — NULL means Unsorted (added from Explore); always query with `.is('folder_id', null)` for inbox, not `.eq('folder_id', null)`
 - **Responsive**: No media queries exist yet. All styles are inline JS. `useWindowSize` hook in `src/lib/useWindowSize.js` returns `{ isMobile }` (< 768px).
+- **sessionStorage.prefill_paper** — used to pass paper metadata from Library/Explore "Share this paper" into NewPostScreen; keys: `doi, title, journal, year, authors, abstract, citation`
