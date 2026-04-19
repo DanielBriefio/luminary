@@ -59,8 +59,9 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged }) 
   const addPaperToFolder = async (paperData) => {
     if (!activeFolderID) return;
     await supabase.from('library_items').insert({
-      folder_id: activeFolderID,
-      added_by:  user.id,
+      folder_id:           activeFolderID,
+      added_by:            user.id,
+      is_group_publication: isOurPublicationsFolder(),
       ...paperData,
     });
     fetchItems(activeFolderID);
@@ -208,7 +209,7 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged }) 
             key={item.id}
             item={item}
             onDelete={canDelete(item) ? deleteItem : null}
-            showGroupPublicationToggle={isOurPublicationsFolder()}
+            showGroupPublicationToggle={canAdd}
             onToggleGroupPublication={toggleGroupPublication}
             isAdmin={isAdmin}
           />

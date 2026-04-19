@@ -80,7 +80,7 @@ export default function LibraryItemCard({
           </a>
         )}
 
-        {showGroupPublicationToggle && isAdmin && (
+        {showGroupPublicationToggle && (
           <button onClick={() => onToggleGroupPublication(item)} style={{
             fontSize:11, fontWeight:600, cursor:'pointer',
             border:`1px solid ${item.is_group_publication ? T.am : T.bdr}`,
