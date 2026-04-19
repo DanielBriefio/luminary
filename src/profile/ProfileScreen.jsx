@@ -752,7 +752,7 @@ export default function ProfileScreen({ user, profile, setProfile }) {
                         🔬 Import from ORCID
                       </button>
                       <button onClick={()=>{document.getElementById('profile-cv-input').click();}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:7,border:'none',background:'none',cursor:'pointer',fontSize:13,fontWeight:600,color:'#92400e',textAlign:'left'}}>
-                        📋 Import full CV
+                        📋 AI import of full CV
                       </button>
                     </div>
                   )}

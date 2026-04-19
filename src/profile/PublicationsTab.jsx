@@ -164,6 +164,35 @@ ${sectionsHtml}
   // Give fonts a moment to load before print dialog
   setTimeout(() => w.print(), 600);
 }
+function doExportRis(pubs) {
+  const TY_MAP = {
+    journal:'JOUR', review:'JOUR', preprint:'JOUR',
+    conference:'CONF', poster:'ABST', lecture:'CONF',
+    book:'CHAP', other:'GEN',
+  };
+  const entries = pubs.map(pub => {
+    const ty = TY_MAP[pub.pub_type] || 'JOUR';
+    const doi = pub.doi?.startsWith('http')
+      ? pub.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '')
+      : (pub.doi || '');
+    const lines = [`TY  - ${ty}`];
+    if (pub.title) lines.push(`TI  - ${pub.title}`);
+    for (const au of splitAuthors(pub.authors)) lines.push(`AU  - ${au}`);
+    const venue = pub.journal || pub.venue || '';
+    if (venue) lines.push((ty === 'CONF' || ty === 'ABST') ? `BT  - ${venue}` : `JO  - ${venue}`);
+    if (pub.year)  lines.push(`PY  - ${pub.year}`);
+    if (doi)       lines.push(`DO  - ${doi}`);
+    if (pub.pmid)  lines.push(`AN  - ${pub.pmid}`);
+    lines.push('ER  - ');
+    return lines.join('\n');
+  });
+  const blob = new Blob([entries.join('\n\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'publications.ris'; a.click();
+  URL.revokeObjectURL(url);
+}
+
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
 import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
@@ -847,6 +876,11 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
                   <span style={{marginRight:8}}>📑</span>BibTeX (.bib)
                 </button>
                 <button
+                  onClick={()=>{ doExportRis(pubs); setShowExport(false); }}
+                  style={{display:'block',width:'100%',textAlign:'left',padding:'10px 16px',fontSize:12.5,fontWeight:600,fontFamily:'inherit',border:'none',background:'transparent',cursor:'pointer',borderBottom:`1px solid ${T.bdr}`,color:T.text}}>
+                  <span style={{marginRight:8}}>📄</span>RIS (.ris)
+                </button>
+                <button
                   onClick={()=>{ doExportPdf(pubs, profile?.name); setShowExport(false); }}
                   style={{display:'block',width:'100%',textAlign:'left',padding:'10px 16px',fontSize:12.5,fontWeight:600,fontFamily:'inherit',border:'none',background:'transparent',cursor:'pointer',color:T.text}}>
                   <span style={{marginRight:8}}>🖨️</span>PDF (Vancouver / NLM)
@@ -859,7 +893,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         <label style={{cursor:'pointer'}}>
           <input type="file" accept=".pdf,.docx,.txt,.md" onChange={e=>{ if(e.target.files?.[0]){setShowImport(true);handleDocUpload(e.target.files[0]);} }} style={{display:'none'}}/>
           <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'6px 14px',borderRadius:22,cursor:'pointer',fontSize:12,fontWeight:600,border:`1.5px solid ${T.bdr}`,background:'transparent',color:T.mu}}>
-            📄 Import publication list
+            🤖 AI publication import
           </span>
         </label>
         <label style={{cursor:'pointer'}}>
