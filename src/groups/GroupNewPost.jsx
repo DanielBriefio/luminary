@@ -116,9 +116,18 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
   const [doiFetched,    setDoiFetched]    = useState(false);
   const [paperMode,     setPaperMode]     = useState('search');
   const [epQuery,       setEpQuery]       = useState('');
+  const [epAuthor,      setEpAuthor]      = useState('');
+  const [epYearFrom,    setEpYearFrom]    = useState('');
+  const [epYearTo,      setEpYearTo]      = useState('');
+  const [epJournal,     setEpJournal]     = useState('');
+  const [showEpAdv,     setShowEpAdv]     = useState(false);
   const [epResults,     setEpResults]     = useState([]);
+  const [epNextCursor,  setEpNextCursor]  = useState(null);
+  const [epHasMore,     setEpHasMore]     = useState(false);
   const [epSearching,   setEpSearching]   = useState(false);
+  const [epLoadingMore, setEpLoadingMore] = useState(false);
   const [epError,       setEpError]       = useState('');
+  const [epTotal,       setEpTotal]       = useState(null);
 
   // File attachment
   const [attachType,     setAttachType]     = useState(null);
@@ -178,18 +187,54 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
     setDoiFetched(false); setEpResults([]); setError('');
   };
 
+  const buildEpQuery = () => {
+    const parts = [];
+    if (epQuery.trim())      parts.push(epQuery.trim());
+    if (epAuthor.trim())     parts.push(`AUTH:"${epAuthor.trim()}"`);
+    if (epJournal.trim())    parts.push(`JOURNAL:"${epJournal.trim()}"`);
+    if (epYearFrom.trim() || epYearTo.trim()) {
+      const from = epYearFrom.trim() || epYearTo.trim();
+      const to   = epYearTo.trim()   || epYearFrom.trim();
+      parts.push(from === to ? `(PUB_YEAR:${from})` : `(PUB_YEAR:[${from} TO ${to}])`);
+    }
+    return parts.join(' ');
+  };
+
+  const doEpFetch = async (cursor, append) => {
+    const q = buildEpQuery();
+    if (!q) return;
+    const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search`
+      + `?query=${encodeURIComponent(q)}`
+      + `&resultType=core&pageSize=10&format=json`
+      + `&cursorMark=${encodeURIComponent(cursor || '*')}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error();
+    const data = await resp.json();
+    const rows = data.resultList?.result || [];
+    const next = data.nextCursorMark;
+    if (append) setEpResults(prev => [...prev, ...rows]);
+    else { setEpResults(rows); setEpTotal(data.hitCount || 0); }
+    setEpNextCursor(next || null);
+    setEpHasMore(!!next && next !== cursor && rows.length === 10);
+    if (!rows.length && !append) setEpError('No results found. Try different keywords.');
+  };
+
   const handleEpSearch = async () => {
-    if (!epQuery.trim() || epSearching) return;
+    const q = buildEpQuery();
+    if (!q || epSearching) return;
     setEpSearching(true); setEpError(''); setEpResults([]);
-    try {
-      const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(epQuery)}&resultType=core&pageSize=10&format=json`;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error();
-      const data = await resp.json();
-      setEpResults(data.resultList?.result || []);
-      if (!data.resultList?.result?.length) setEpError('No results found. Try different keywords.');
-    } catch { setEpError('Search failed. Check your connection.'); }
+    setEpNextCursor(null); setEpHasMore(false); setEpTotal(null);
+    try { await doEpFetch('*', false); }
+    catch { setEpError('Search failed. Check your connection.'); }
     setEpSearching(false);
+  };
+
+  const loadMoreEp = async () => {
+    if (!epNextCursor || epLoadingMore) return;
+    setEpLoadingMore(true);
+    try { await doEpFetch(epNextCursor, true); }
+    catch { setEpError('Failed to load more results.'); }
+    setEpLoadingMore(false);
   };
 
   const selectEpResult = async (r) => {
@@ -329,11 +374,35 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
 
             {paperMode === 'search' && !doiFetched && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                  <input value={epQuery} onChange={e => setEpQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleEpSearch(); }} placeholder="Search by title, keyword, or author…" style={{ ...inputStyle, flex: 1, width: 'auto' }}/>
-                  <Btn variant="s" onClick={handleEpSearch} disabled={epSearching || !epQuery.trim()} style={{ whiteSpace: 'nowrap' }}>{epSearching ? '…' : 'Search →'}</Btn>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  <input value={epQuery} onChange={e => setEpQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleEpSearch(); }} placeholder="Title, keywords, topic…" style={{ ...inputStyle, flex: 1, width: 'auto' }}/>
+                  <Btn variant="s" onClick={handleEpSearch} disabled={epSearching || !buildEpQuery()} style={{ whiteSpace: 'nowrap' }}>{epSearching ? '…' : 'Search →'}</Btn>
                 </div>
+                <button onClick={() => setShowEpAdv(s => !s)} style={{ fontSize: 11.5, color: T.v, fontWeight: 600, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', padding: 0, marginBottom: showEpAdv ? 8 : 4 }}>
+                  {showEpAdv ? '▲ Hide filters' : '▼ Author, year, journal…'}
+                </button>
+                {showEpAdv && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8, padding: '9px 11px', background: 'rgba(255,255,255,.7)', borderRadius: 9, border: `1px solid ${T.bdr}` }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <label style={{ fontSize: 11.5, color: T.mu, width: 48, flexShrink: 0 }}>Author</label>
+                      <input value={epAuthor} onChange={e => setEpAuthor(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleEpSearch()} placeholder="e.g. Smith J" style={{ ...inputStyle, padding: '6px 10px', fontSize: 12.5, minWidth: 0 }}/>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <label style={{ fontSize: 11.5, color: T.mu, width: 48, flexShrink: 0 }}>Year</label>
+                      <input value={epYearFrom} onChange={e => setEpYearFrom(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleEpSearch()} placeholder="From" style={{ ...inputStyle, padding: '6px 10px', fontSize: 12.5, minWidth: 0 }}/>
+                      <span style={{ fontSize: 12, color: T.mu, flexShrink: 0 }}>–</span>
+                      <input value={epYearTo} onChange={e => setEpYearTo(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleEpSearch()} placeholder="To" style={{ ...inputStyle, padding: '6px 10px', fontSize: 12.5, minWidth: 0 }}/>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <label style={{ fontSize: 11.5, color: T.mu, width: 48, flexShrink: 0 }}>Journal</label>
+                      <input value={epJournal} onChange={e => setEpJournal(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleEpSearch()} placeholder="e.g. Nature" style={{ ...inputStyle, padding: '6px 10px', fontSize: 12.5, minWidth: 0 }}/>
+                    </div>
+                  </div>
+                )}
                 {epError && <div style={{ fontSize: 12, color: T.ro, marginBottom: 8 }}>{epError}</div>}
+                {epTotal !== null && epResults.length > 0 && (
+                  <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 8 }}>{epTotal.toLocaleString()} results · showing {epResults.length}</div>
+                )}
                 {epResults.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
                     {epResults.map((r, i) => (
@@ -347,6 +416,13 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
                         onSelect={() => selectEpResult(r)}
                       />
                     ))}
+                  </div>
+                )}
+                {epHasMore && (
+                  <div style={{ textAlign: 'center', paddingTop: 6 }}>
+                    <Btn onClick={loadMoreEp} disabled={epLoadingMore}>
+                      {epLoadingMore ? '…' : 'Show next 10'}
+                    </Btn>
                   </div>
                 )}
               </div>

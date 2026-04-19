@@ -193,12 +193,30 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
   // Add-publication panel state
   const [addMode,          setAddMode]          = useState('search'); // 'search' | 'doi' | 'manual'
   const [addSearchTerm,    setAddSearchTerm]    = useState('');
+  const [addAuthor,        setAddAuthor]        = useState('');
+  const [addYearFrom,      setAddYearFrom]      = useState('');
+  const [addYearTo,        setAddYearTo]        = useState('');
+  const [addJournal,       setAddJournal]       = useState('');
+  const [showAddAdv,       setShowAddAdv]       = useState(false);
   const [addSearchResults, setAddSearchResults] = useState([]);
+  const [addNextCursor,    setAddNextCursor]    = useState(null);
+  const [addHasMore,       setAddHasMore]       = useState(false);
+  const [addLoadingMore,   setAddLoadingMore]   = useState(false);
   const [addSearching,     setAddSearching]     = useState(false);
   const [addSearchError,   setAddSearchError]   = useState('');
+  const [addTotal,         setAddTotal]         = useState(null);
   const [addDoi,           setAddDoi]           = useState('');
   const [addDoiFetching,   setAddDoiFetching]   = useState(false);
   const [addSelected,      setAddSelected]      = useState(false);
+  // Author-search panel extra filters
+  const [epSearchYearFrom,    setEpSearchYearFrom]    = useState('');
+  const [epSearchYearTo,      setEpSearchYearTo]      = useState('');
+  const [epSearchJournal,     setEpSearchJournal]     = useState('');
+  const [showEpSearchAdv,     setShowEpSearchAdv]     = useState(false);
+  const [epSearchCursor,      setEpSearchCursor]      = useState(null);
+  const [epSearchHasMore,     setEpSearchHasMore]     = useState(false);
+  const [epSearchLoadingMore, setEpSearchLoadingMore] = useState(false);
+  const [epSearchTotal,       setEpSearchTotal]       = useState(null);
   const [showExport,   setShowExport]   = useState(false);
   const exportRef = useRef(null);
 
@@ -253,59 +271,82 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     setAddMode(initialMode === 'doi_lookup' ? 'doi' : 'search');
   }, []); // eslint-disable-line
 
+  const buildEpSearchQuery = () => {
+    const variants = nameVariants.split(',').map(v => v.trim()).filter(Boolean);
+    const parts = [];
+    if (variants.length) parts.push('(' + variants.map(v => `AUTH:"${v}"`).join(' OR ') + ')');
+    if (epSearchJournal.trim()) parts.push(`JOURNAL:"${epSearchJournal.trim()}"`);
+    if (epSearchYearFrom.trim() || epSearchYearTo.trim()) {
+      const from = epSearchYearFrom.trim() || epSearchYearTo.trim();
+      const to   = epSearchYearTo.trim()   || epSearchYearFrom.trim();
+      parts.push(from === to ? `(PUB_YEAR:${from})` : `(PUB_YEAR:[${from} TO ${to}])`);
+    }
+    return parts.join(' AND ');
+  };
+
+  const mapEpmcResult = (r, existingPmids, existingDois) => {
+    const pmid = r.pmid || '';
+    const doi  = (r.doi || '').toLowerCase();
+    if (pmid && existingPmids.has(pmid)) return null;
+    if (doi  && existingDois.has(doi))   return null;
+    const pt = (r.pubType || '').toLowerCase();
+    let pub_type = 'journal';
+    if (pt.includes('preprint') || r.source === 'PPR') pub_type = 'preprint';
+    else if (pt.includes('review')) pub_type = 'review';
+    else if (pt.includes('book'))   pub_type = 'book';
+    const ftUrls = r.fullTextUrlList?.fullTextUrl || [];
+    const fullTextUrl =
+      ftUrls.find(u => u.availability === 'Open access' && u.documentStyle === 'html')?.url ||
+      ftUrls.find(u => u.availability === 'Open access')?.url ||
+      ftUrls.find(u => u.documentStyle === 'html')?.url ||
+      ftUrls[0]?.url || '';
+    return {
+      pmid, epmc_id: r.id || '',
+      title:    (r.title || '').replace(/<[^>]+>/g, ''),
+      journal:  r.journalTitle || r.journalInfo?.journal?.title || r.bookTitle || '',
+      year:     r.pubYear || '',
+      authors:  r.authorString || '',
+      doi:      r.doi || '',
+      pub_type, venue: '',
+      citations:      r.citedByCount || 0,
+      is_open_access: r.isOpenAccess === 'Y',
+      full_text_url:  fullTextUrl,
+    };
+  };
+
+  const doEpSearchFetch = async (cursor, append) => {
+    const query = buildEpSearchQuery();
+    if (!query) return;
+    const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&resultType=core&pageSize=20&cursorMark=${encodeURIComponent(cursor || '*')}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const articles = data.resultList?.result || [];
+    const next = data.nextCursorMark;
+    const existingPmids = new Set(pubs.map(p => p.pmid).filter(Boolean));
+    const existingDois  = new Set(pubs.map(p => (p.doi || '').toLowerCase()).filter(Boolean));
+    const results = articles.map(r => mapEpmcResult(r, existingPmids, existingDois)).filter(Boolean);
+    if (append) setProposals(prev => [...prev, ...results]);
+    else { setProposals(results); setEpSearchTotal(data.hitCount || 0); }
+    setEpSearchCursor(next || null);
+    setEpSearchHasMore(!!next && next !== cursor && articles.length === 20);
+  };
+
   const searchEPMC = async () => {
-    if(!nameVariants.trim()) return;
+    if (!nameVariants.trim() || searching) return;
     setSearching(true);
-    try {
-      const variants = nameVariants.split(',').map(v=>v.trim()).filter(Boolean);
-      const query    = variants.map(v=>`AUTH:"${v}"`).join(' OR ');
-      const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&resultType=core&pageSize=100`;
-      const res = await fetch(url);
-      const data = await res.json();
-      const articles = data.resultList?.result || [];
-
-      const existingPmids = new Set(pubs.map(p=>p.pmid).filter(Boolean));
-      const existingDois  = new Set(pubs.map(p=>(p.doi||'').toLowerCase()).filter(Boolean));
-
-      const results = articles.map(r => {
-        const pmid = r.pmid || '';
-        const doi  = (r.doi  || '').toLowerCase();
-        if(pmid && existingPmids.has(pmid)) return null;
-        if(doi  && existingDois.has(doi))   return null;
-
-        const pt = (r.pubType||'').toLowerCase();
-        let pub_type = 'journal';
-        if(pt.includes('preprint'))      pub_type = 'preprint';
-        else if(pt.includes('review'))   pub_type = 'review';
-        else if(pt.includes('book'))     pub_type = 'book';
-        else if(r.source === 'PPR')      pub_type = 'preprint';
-
-        const ftUrls = r.fullTextUrlList?.fullTextUrl || [];
-        const fullTextUrl =
-          ftUrls.find(u=>u.availability==='Open access'&&u.documentStyle==='html')?.url ||
-          ftUrls.find(u=>u.availability==='Open access')?.url ||
-          ftUrls.find(u=>u.documentStyle==='html')?.url ||
-          ftUrls[0]?.url || '';
-
-        return {
-          pmid,
-          epmc_id:        r.id || '',
-          title:          (r.title||'').replace(/<[^>]+>/g,''),
-          journal:        r.journalTitle || r.journalInfo?.journal?.title || r.bookTitle || '',
-          year:           r.pubYear || '',
-          authors:        r.authorString || '',
-          doi:            r.doi || '',
-          pub_type,
-          venue:          '',
-          citations:      r.citedByCount || 0,
-          is_open_access: r.isOpenAccess === 'Y',
-          full_text_url:  fullTextUrl,
-        };
-      }).filter(Boolean);
-
-      setProposals(results);
-    } catch(e){ console.warn('[EPMC] error:', e); }
+    setProposals([]); setConfirmed(new Set()); setRejected(new Set());
+    setEpSearchCursor(null); setEpSearchHasMore(false); setEpSearchTotal(null);
+    try { await doEpSearchFetch('*', false); }
+    catch(e) { console.warn('[EPMC] error:', e); }
     setSearching(false);
+  };
+
+  const loadMoreEpSearch = async () => {
+    if (!epSearchCursor || epSearchLoadingMore) return;
+    setEpSearchLoadingMore(true);
+    try { await doEpSearchFetch(epSearchCursor, true); }
+    catch(e) { console.warn('[EPMC] load more error:', e); }
+    setEpSearchLoadingMore(false);
   };
 
   const confirmPub = async (pub) => {
@@ -532,18 +573,51 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
 
   const rejectImportPub = (idx) => setImportRejected(s=>new Set([...s,idx]));
 
+  const buildAddQuery = () => {
+    const parts = [];
+    if (addSearchTerm.trim()) parts.push(addSearchTerm.trim());
+    if (addAuthor.trim())     parts.push(`AUTH:"${addAuthor.trim()}"`);
+    if (addJournal.trim())    parts.push(`JOURNAL:"${addJournal.trim()}"`);
+    if (addYearFrom.trim() || addYearTo.trim()) {
+      const from = addYearFrom.trim() || addYearTo.trim();
+      const to   = addYearTo.trim()   || addYearFrom.trim();
+      parts.push(from === to ? `(PUB_YEAR:${from})` : `(PUB_YEAR:[${from} TO ${to}])`);
+    }
+    return parts.join(' ');
+  };
+
+  const doAddFetch = async (cursor, append) => {
+    const q = buildAddQuery();
+    if (!q) return;
+    const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(q)}&resultType=core&pageSize=10&format=json&cursorMark=${encodeURIComponent(cursor || '*')}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error();
+    const data = await resp.json();
+    const rows = data.resultList?.result || [];
+    const next = data.nextCursorMark;
+    if (append) setAddSearchResults(prev => [...prev, ...rows]);
+    else { setAddSearchResults(rows); setAddTotal(data.hitCount || 0); }
+    setAddNextCursor(next || null);
+    setAddHasMore(!!next && next !== cursor && rows.length === 10);
+    if (!rows.length && !append) setAddSearchError('No results. Try different keywords or a DOI.');
+  };
+
   const searchEPMCKeyword = async () => {
-    if (!addSearchTerm.trim() || addSearching) return;
+    const q = buildAddQuery();
+    if (!q || addSearching) return;
     setAddSearching(true); setAddSearchError(''); setAddSearchResults([]);
-    try {
-      const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(addSearchTerm)}&resultType=core&pageSize=10&format=json`;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error();
-      const data = await resp.json();
-      setAddSearchResults(data.resultList?.result || []);
-      if (!data.resultList?.result?.length) setAddSearchError('No results. Try different keywords or a DOI.');
-    } catch { setAddSearchError('Search failed. Check your connection.'); }
+    setAddNextCursor(null); setAddHasMore(false); setAddTotal(null);
+    try { await doAddFetch('*', false); }
+    catch { setAddSearchError('Search failed. Check your connection.'); }
     setAddSearching(false);
+  };
+
+  const loadMoreAdd = async () => {
+    if (!addNextCursor || addLoadingMore) return;
+    setAddLoadingMore(true);
+    try { await doAddFetch(addNextCursor, true); }
+    catch { setAddSearchError('Failed to load more results.'); }
+    setAddLoadingMore(false);
   };
 
   const lookupAddDoi = async (doi) => {
@@ -591,6 +665,8 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     setShowAdd(false);
     setAddSelected(false);
     setAddSearchTerm(''); setAddSearchResults([]); setAddSearchError('');
+    setAddAuthor(''); setAddYearFrom(''); setAddYearTo(''); setAddJournal('');
+    setShowAddAdv(false); setAddNextCursor(null); setAddHasMore(false); setAddTotal(null);
     setAddDoi(''); setAddDoiFetching(false);
     setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
   };
@@ -738,15 +814,39 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
           <div style={{fontSize:11.5,color:T.mu,marginBottom:10}}>
             Add all the name formats you've published under, comma-separated. Searches PubMed, PubMed Central, preprints, and more — with citation data.
           </div>
-          <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <div style={{display:'flex',gap:8,marginBottom:6}}>
             <input value={nameVariants} onChange={e=>setNameVariants(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&searchEPMC()}
               placeholder="Ruzicka Daniel, Ruzicka D, Ruzicka DJ"
               style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
             <Btn variant="s" onClick={searchEPMC} disabled={searching||!nameVariants.trim()} style={{whiteSpace:'nowrap'}}>
               {searching?'Searching...':'Search →'}
             </Btn>
           </div>
+          <button onClick={()=>setShowEpSearchAdv(s=>!s)} style={{fontSize:11.5,color:T.v,fontWeight:600,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',padding:0,marginBottom:showEpSearchAdv?8:10}}>
+            {showEpSearchAdv?'▲ Hide filters':'▼ Year, journal filters…'}
+          </button>
+          {showEpSearchAdv && (
+            <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12,padding:'10px 12px',background:'rgba(255,255,255,.6)',borderRadius:9,border:`1px solid rgba(108,99,255,.15)`}}>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <label style={{fontSize:11.5,color:T.mu,width:52,flexShrink:0}}>Year</label>
+                <input value={epSearchYearFrom} onChange={e=>setEpSearchYearFrom(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchEPMC()} placeholder="From (e.g. 2020)"
+                  style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',minWidth:0}}/>
+                <span style={{fontSize:12,color:T.mu,flexShrink:0}}>–</span>
+                <input value={epSearchYearTo} onChange={e=>setEpSearchYearTo(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchEPMC()} placeholder="To (e.g. 2024)"
+                  style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',minWidth:0}}/>
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <label style={{fontSize:11.5,color:T.mu,width:52,flexShrink:0}}>Journal</label>
+                <input value={epSearchJournal} onChange={e=>setEpSearchJournal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchEPMC()} placeholder="e.g. Nature"
+                  style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',minWidth:0}}/>
+              </div>
+            </div>
+          )}
           {searching&&<Spinner/>}
+          {!searching&&epSearchTotal!==null&&(
+            <div style={{fontSize:11.5,color:T.mu,marginBottom:8}}>{epSearchTotal.toLocaleString()} results · showing {proposals.length}</div>
+          )}
           {!searching&&visibleProposals.length===0&&proposals.length>0&&(
             <div style={{fontSize:12.5,color:T.mu,textAlign:'center',padding:'12px 0'}}>All proposals reviewed.</div>
           )}
@@ -777,6 +877,13 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {!searching&&epSearchHasMore&&(
+            <div style={{textAlign:'center',paddingTop:10}}>
+              <Btn onClick={loadMoreEpSearch} disabled={epSearchLoadingMore}>
+                {epSearchLoadingMore?'Loading...':'Show next 20'}
+              </Btn>
             </div>
           )}
         </div>
@@ -857,16 +964,44 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
           {/* Search PMC by keyword */}
           {addMode==='search' && !addSelected && (
             <div style={{marginBottom:12}}>
-              <div style={{display:'flex',gap:8,marginBottom:8}}>
+              <div style={{display:'flex',gap:8,marginBottom:6}}>
                 <input value={addSearchTerm} onChange={e=>setAddSearchTerm(e.target.value)}
                   onKeyDown={e=>{ if(e.key==='Enter') searchEPMCKeyword(); }}
-                  placeholder="Search by title, keyword, or author..."
+                  placeholder="Title, keywords, topic…"
                   style={{flex:1,background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none',color:T.text}}/>
-                <Btn variant="s" onClick={searchEPMCKeyword} disabled={addSearching||!addSearchTerm.trim()} style={{whiteSpace:'nowrap'}}>
+                <Btn variant="s" onClick={searchEPMCKeyword} disabled={addSearching||!buildAddQuery()} style={{whiteSpace:'nowrap'}}>
                   {addSearching?'Searching…':'Search →'}
                 </Btn>
               </div>
+              <button onClick={()=>setShowAddAdv(s=>!s)} style={{fontSize:11.5,color:T.v,fontWeight:600,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',padding:0,marginBottom:showAddAdv?8:6}}>
+                {showAddAdv?'▲ Hide filters':'▼ Author, year, journal…'}
+              </button>
+              {showAddAdv && (
+                <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:10,padding:'10px 12px',background:T.w,borderRadius:9,border:`1.5px solid ${T.bdr}`}}>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <label style={{fontSize:11.5,color:T.mu,width:52,flexShrink:0}}>Author</label>
+                    <input value={addAuthor} onChange={e=>setAddAuthor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchEPMCKeyword()} placeholder="e.g. Smith J"
+                      style={{flex:1,background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',minWidth:0}}/>
+                  </div>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <label style={{fontSize:11.5,color:T.mu,width:52,flexShrink:0}}>Year</label>
+                    <input value={addYearFrom} onChange={e=>setAddYearFrom(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchEPMCKeyword()} placeholder="From"
+                      style={{flex:1,background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',minWidth:0}}/>
+                    <span style={{fontSize:12,color:T.mu,flexShrink:0}}>–</span>
+                    <input value={addYearTo} onChange={e=>setAddYearTo(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchEPMCKeyword()} placeholder="To"
+                      style={{flex:1,background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',minWidth:0}}/>
+                  </div>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <label style={{fontSize:11.5,color:T.mu,width:52,flexShrink:0}}>Journal</label>
+                    <input value={addJournal} onChange={e=>setAddJournal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchEPMCKeyword()} placeholder="e.g. Nature"
+                      style={{flex:1,background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',minWidth:0}}/>
+                  </div>
+                </div>
+              )}
               {addSearchError && <div style={{fontSize:12,color:T.ro,marginBottom:8}}>{addSearchError}</div>}
+              {addTotal !== null && addSearchResults.length > 0 && (
+                <div style={{fontSize:11.5,color:T.mu,marginBottom:8}}>{addTotal.toLocaleString()} results · showing {addSearchResults.length}</div>
+              )}
               {addSearchResults.length>0&&(
                 <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:320,overflowY:'auto'}}>
                   {addSearchResults.map((r,i)=>{
@@ -894,6 +1029,13 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
                       </div>
                     );
                   })}
+                </div>
+              )}
+              {addHasMore && (
+                <div style={{textAlign:'center',paddingTop:6}}>
+                  <Btn onClick={loadMoreAdd} disabled={addLoadingMore}>
+                    {addLoadingMore?'Loading…':'Show next 10'}
+                  </Btn>
                 </div>
               )}
             </div>

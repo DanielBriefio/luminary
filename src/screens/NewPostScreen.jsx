@@ -112,9 +112,18 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
   const [doiFetched,setDoiFetched]       = useState(false);
   const [paperInputMode,setPaperInputMode] = useState('search');
   const [epSearchTerm,setEpSearchTerm]   = useState('');
+  const [epAuthor,     setEpAuthor]      = useState('');
+  const [epYearFrom,   setEpYearFrom]    = useState('');
+  const [epYearTo,     setEpYearTo]      = useState('');
+  const [epJournal,    setEpJournal]     = useState('');
+  const [showEpAdv,    setShowEpAdv]     = useState(false);
   const [epResults,setEpResults]         = useState([]);
+  const [epNextCursor, setEpNextCursor]  = useState(null);
+  const [epHasMore,    setEpHasMore]     = useState(false);
   const [epSearching,setEpSearching]     = useState(false);
+  const [epLoadingMore,setEpLoadingMore] = useState(false);
   const [epError,setEpError]             = useState('');
+  const [epTotal,      setEpTotal]       = useState(null);
 
   // Attachments (for text / tip posts)
   const [attachType,setAttachType]       = useState(null); // null | 'file'
@@ -187,24 +196,54 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
     setDoiFetched(false); setError('');
   };
 
-  const handleEpSearch = async () => {
-    if (!epSearchTerm.trim() || epSearching) return;
-    setEpSearching(true);
-    setEpError('');
-    setEpResults([]);
-    try {
-      const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search`
-        + `?query=${encodeURIComponent(epSearchTerm)}`
-        + `&resultType=core&pageSize=10&format=json`;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('Europe PMC search failed');
-      const data = await resp.json();
-      setEpResults(data.resultList?.result || []);
-      if (!data.resultList?.result?.length) setEpError('No results found. Try different keywords.');
-    } catch (e) {
-      setEpError('Search failed. Check your connection and try again.');
+  const buildEpQuery = () => {
+    const parts = [];
+    if (epSearchTerm.trim()) parts.push(epSearchTerm.trim());
+    if (epAuthor.trim())     parts.push(`AUTH:"${epAuthor.trim()}"`);
+    if (epJournal.trim())    parts.push(`JOURNAL:"${epJournal.trim()}"`);
+    if (epYearFrom.trim() || epYearTo.trim()) {
+      const from = epYearFrom.trim() || epYearTo.trim();
+      const to   = epYearTo.trim()   || epYearFrom.trim();
+      parts.push(from === to ? `(PUB_YEAR:${from})` : `(PUB_YEAR:[${from} TO ${to}])`);
     }
+    return parts.join(' ');
+  };
+
+  const doEpFetch = async (cursor, append) => {
+    const q = buildEpQuery();
+    if (!q) return;
+    const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search`
+      + `?query=${encodeURIComponent(q)}`
+      + `&resultType=core&pageSize=10&format=json`
+      + `&cursorMark=${encodeURIComponent(cursor || '*')}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('Search failed');
+    const data = await resp.json();
+    const rows = data.resultList?.result || [];
+    const next = data.nextCursorMark;
+    if (append) setEpResults(prev => [...prev, ...rows]);
+    else { setEpResults(rows); setEpTotal(data.hitCount || 0); }
+    setEpNextCursor(next || null);
+    setEpHasMore(!!next && next !== cursor && rows.length === 10);
+    if (!rows.length && !append) setEpError('No results found. Try different keywords.');
+  };
+
+  const handleEpSearch = async () => {
+    const q = buildEpQuery();
+    if (!q || epSearching) return;
+    setEpSearching(true); setEpError(''); setEpResults([]);
+    setEpNextCursor(null); setEpHasMore(false); setEpTotal(null);
+    try { await doEpFetch('*', false); }
+    catch { setEpError('Search failed. Check your connection and try again.'); }
     setEpSearching(false);
+  };
+
+  const loadMoreEp = async () => {
+    if (!epNextCursor || epLoadingMore) return;
+    setEpLoadingMore(true);
+    try { await doEpFetch(epNextCursor, true); }
+    catch { setEpError('Failed to load more results.'); }
+    setEpLoadingMore(false);
   };
 
   const selectEpResult = async (result) => {
@@ -409,19 +448,47 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
 
             {paperInputMode==='search' && !doiFetched && (
               <div style={{marginBottom:14}}>
-                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                <div style={{display:"flex",gap:8,marginBottom:6}}>
                   <input
                     value={epSearchTerm}
                     onChange={e=>setEpSearchTerm(e.target.value)}
                     onKeyDown={e=>{ if(e.key==='Enter') handleEpSearch(); }}
-                    placeholder="Search by title, keyword, or author..."
+                    placeholder="Title, keywords, topic…"
                     style={{flex:1,background:"rgba(255,255,255,.8)",border:`1.5px solid ${T.bdr}`,borderRadius:10,padding:"9px 14px",fontSize:13,fontFamily:"inherit",outline:"none",color:T.text}}
                   />
-                  <Btn variant="s" onClick={handleEpSearch} disabled={epSearching||!epSearchTerm.trim()} style={{whiteSpace:"nowrap"}}>
+                  <Btn variant="s" onClick={handleEpSearch} disabled={epSearching||!buildEpQuery()} style={{whiteSpace:"nowrap"}}>
                     {epSearching?'Searching...':'Search →'}
                   </Btn>
                 </div>
+                <button onClick={()=>setShowEpAdv(s=>!s)} style={{fontSize:11.5,color:T.v,fontWeight:600,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',padding:0,marginBottom:showEpAdv?8:4}}>
+                  {showEpAdv?'▲ Hide filters':'▼ Author, year, journal…'}
+                </button>
+                {showEpAdv && (
+                  <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:10,padding:'10px 12px',background:'rgba(255,255,255,.6)',borderRadius:9,border:`1px solid ${T.bdr}`}}>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <label style={{fontSize:11.5,color:T.mu,width:48,flexShrink:0}}>Author</label>
+                      <input value={epAuthor} onChange={e=>setEpAuthor(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEpSearch()} placeholder="e.g. Smith J"
+                        style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',color:T.text,minWidth:0}}/>
+                    </div>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <label style={{fontSize:11.5,color:T.mu,width:48,flexShrink:0}}>Year</label>
+                      <input value={epYearFrom} onChange={e=>setEpYearFrom(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEpSearch()} placeholder="From"
+                        style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',color:T.text,minWidth:0}}/>
+                      <span style={{fontSize:12,color:T.mu,flexShrink:0}}>–</span>
+                      <input value={epYearTo} onChange={e=>setEpYearTo(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEpSearch()} placeholder="To"
+                        style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',color:T.text,minWidth:0}}/>
+                    </div>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <label style={{fontSize:11.5,color:T.mu,width:48,flexShrink:0}}>Journal</label>
+                      <input value={epJournal} onChange={e=>setEpJournal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEpSearch()} placeholder="e.g. Nature"
+                        style={{flex:1,background:'rgba(255,255,255,.85)',border:`1.5px solid ${T.bdr}`,borderRadius:8,padding:'7px 11px',fontSize:12.5,fontFamily:'inherit',outline:'none',color:T.text,minWidth:0}}/>
+                    </div>
+                  </div>
+                )}
                 {epError && <div style={{fontSize:12,color:T.ro,marginBottom:8}}>{epError}</div>}
+                {epTotal !== null && epResults.length > 0 && (
+                  <div style={{fontSize:11.5,color:T.mu,marginBottom:8}}>{epTotal.toLocaleString()} results · showing {epResults.length}</div>
+                )}
                 {epResults.length>0 && (
                   <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:340,overflowY:"auto"}}>
                     {epResults.map((r,i)=>{
@@ -439,6 +506,13 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
                         />
                       );
                     })}
+                  </div>
+                )}
+                {epHasMore && (
+                  <div style={{textAlign:'center',paddingTop:6}}>
+                    <Btn onClick={loadMoreEp} disabled={epLoadingMore}>
+                      {epLoadingMore?'Loading...':'Show next 10'}
+                    </Btn>
                   </div>
                 )}
               </div>
