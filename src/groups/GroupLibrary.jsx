@@ -130,6 +130,23 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged }) 
     onStatsChanged?.();
   };
 
+  const uploadFile = async (file) => {
+    if (!activeFolderID) return;
+    const path = `library/${groupId}/${Date.now()}_${file.name}`;
+    const { error } = await supabase.storage.from('library-files').upload(path, file);
+    if (error) { alert('Upload failed.'); return; }
+    const { data } = supabase.storage.from('library-files').getPublicUrl(path);
+    await supabase.from('library_items').insert({
+      folder_id:            activeFolderID,
+      added_by:             user.id,
+      is_group_publication: isOurPublicationsFolder(),
+      title:                file.name.replace(/\.[^/.]+$/, ''),
+      pdf_url:              data.publicUrl,
+      pdf_name:             file.name,
+    });
+    fetchItems(activeFolderID);
+  };
+
   const isOurPublicationsFolder = () => {
     const f = folders.find(f => f.id === activeFolderID);
     return f?.name === "Our Group's Publications";
@@ -163,6 +180,19 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged }) 
             <Btn onClick={() => { setShowDOI(s => !s); setShowSearch(false); }}>
               🔗 Enter DOI
             </Btn>
+            <label style={{cursor:'pointer'}}>
+              <input type="file" accept=".pdf,.doc,.docx,.txt" style={{display:'none'}}
+                onChange={e => { if (e.target.files[0]) uploadFile(e.target.files[0]); e.target.value = ''; }}/>
+              <span style={{
+                display:'inline-flex', alignItems:'center', gap:6,
+                padding:'7px 14px', borderRadius:9,
+                border:`1px solid ${T.bdr}`, background:T.w,
+                fontSize:13, cursor:'pointer', fontWeight:500,
+                fontFamily:'inherit',
+              }}>
+                📄 Upload file
+              </span>
+            </label>
           </div>
         )}
 

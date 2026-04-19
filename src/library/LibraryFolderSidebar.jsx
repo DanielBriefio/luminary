@@ -12,6 +12,7 @@ export default function LibraryFolderSidebar({
   folders, activeFolderId, onSelectFolder,
   onCreateFolder, onDeleteFolder,
   canManageFolders,
+  showInbox = false, inboxCount = 0,
 }) {
   const [creating,      setCreating]      = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -29,6 +30,31 @@ export default function LibraryFolderSidebar({
       </div>
 
       <div style={{flex:1, overflowY:'auto'}}>
+        {showInbox && (
+          <div
+            onClick={() => onSelectFolder('__inbox__')}
+            style={{
+              display:'flex', alignItems:'center', gap:8,
+              padding:'9px 14px', cursor:'pointer',
+              background: activeFolderId === '__inbox__' ? T.v2 : 'transparent',
+              color: activeFolderId === '__inbox__' ? T.v : T.text,
+              fontWeight: activeFolderId === '__inbox__' ? 700 : 400,
+              fontSize:13,
+            }}
+          >
+            <span style={{fontSize:14, flexShrink:0}}>📥</span>
+            <span style={{flex:1}}>Inbox</span>
+            {inboxCount > 0 && (
+              <span style={{
+                fontSize:10, fontWeight:700, background:T.v, color:'#fff',
+                padding:'1px 6px', borderRadius:20, flexShrink:0,
+              }}>
+                {inboxCount}
+              </span>
+            )}
+          </div>
+        )}
+
         {folders.length === 0 && (
           <div style={{padding:'12px 14px', fontSize:12.5, color:T.mu}}>
             No folders yet.{canManageFolders ? ' Create one below.' : ''}

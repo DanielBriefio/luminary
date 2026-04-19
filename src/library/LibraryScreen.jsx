@@ -13,6 +13,7 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
   const [folders,        setFolders]        = useState([]);
   const [activeFolderID, setActiveFolderID] = useState(null);
   const [items,          setItems]          = useState([]);
+  const [inboxItems,     setInboxItems]     = useState([]);
   const [savedPosts,     setSavedPosts]     = useState([]);
   const [showSearch,     setShowSearch]     = useState(false);
   const [showDOI,        setShowDOI]        = useState(false);
@@ -20,8 +21,8 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
   const [doiLoading,     setDoiLoading]     = useState(false);
   const [loading,        setLoading]        = useState(true);
 
-  useEffect(() => { fetchFolders(); fetchBookmarks(); }, []); // eslint-disable-line
-  useEffect(() => { if (activeFolderID) fetchItems(activeFolderID); }, [activeFolderID]);
+  useEffect(() => { fetchFolders(); fetchBookmarks(); fetchInboxItems(); }, []); // eslint-disable-line
+  useEffect(() => { if (activeFolderID && activeFolderID !== '__inbox__') fetchItems(activeFolderID); }, [activeFolderID]);
 
   const fetchFolders = async () => {
     const { data } = await supabase
@@ -43,6 +44,16 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
     setItems(data || []);
   };
 
+  const fetchInboxItems = async () => {
+    const { data } = await supabase
+      .from('library_items')
+      .select('*')
+      .is('folder_id', null)
+      .eq('added_by', user.id)
+      .order('added_at', { ascending: false });
+    setInboxItems(data || []);
+  };
+
   const fetchBookmarks = async () => {
     const { data } = await supabase
       .from('saved_posts')
@@ -56,6 +67,17 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
       .eq('user_id', user.id)
       .order('saved_at', { ascending: false });
     setSavedPosts(data || []);
+  };
+
+  const moveInboxItemToFolder = async (item, folderId) => {
+    await supabase.from('library_items').update({ folder_id: folderId }).eq('id', item.id);
+    setInboxItems(prev => prev.filter(x => x.id !== item.id));
+    if (activeFolderID === folderId) fetchItems(folderId);
+  };
+
+  const deleteInboxItem = async (item) => {
+    await supabase.from('library_items').delete().eq('id', item.id);
+    setInboxItems(prev => prev.filter(x => x.id !== item.id));
   };
 
   const addPaperToFolder = async (paperData) => {
@@ -172,6 +194,8 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
             onCreateFolder={createFolder}
             onDeleteFolder={deleteFolder}
             canManageFolders={true}
+            showInbox={inboxItems.length > 0}
+            inboxCount={inboxItems.length}
           />
 
           <div style={{flex:1, overflowY:'auto', padding:16}}>
@@ -182,7 +206,30 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
               Paper Library
             </div>
 
-            {loading && <div style={{display:'flex',justifyContent:'center',padding:40}}><Spinner/></div>}
+            {activeFolderID === '__inbox__' && (
+              <>
+                <div style={{fontSize:12, color:T.mu, marginBottom:12, lineHeight:1.5}}>
+                  Papers added from Explore without a folder. Move them to a folder to organise.
+                </div>
+                {inboxItems.length === 0 ? (
+                  <div style={{textAlign:'center', color:T.mu, padding:'28px 16px', fontSize:13}}>
+                    <div style={{fontSize:24, marginBottom:8}}>📭</div>
+                    Inbox is empty.
+                  </div>
+                ) : inboxItems.map(item => (
+                  <LibraryItemCard
+                    key={item.id}
+                    item={item}
+                    onDelete={deleteInboxItem}
+                    showGroupPublicationToggle={false}
+                    folders={folders}
+                    onMoveToFolder={moveInboxItemToFolder}
+                  />
+                ))}
+              </>
+            )}
+
+            {loading && activeFolderID !== '__inbox__' && <div style={{display:'flex',justifyContent:'center',padding:40}}><Spinner/></div>}
 
             {!loading && folders.length === 0 && (
               <div style={{textAlign:'center', color:T.mu, padding:'40px 16px'}}>
@@ -196,7 +243,7 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
               </div>
             )}
 
-            {activeFolderID && (
+            {activeFolderID && activeFolderID !== '__inbox__' && (
               <>
                 <div style={{display:'flex', gap:8, marginBottom:14, flexWrap:'wrap'}}>
                   <Btn onClick={() => { setShowSearch(s => !s); setShowDOI(false); }}>

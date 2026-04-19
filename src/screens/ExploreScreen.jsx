@@ -217,13 +217,18 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
   const handleAdd = async () => {
     if (!currentUserId || adding || added) return;
     setAdding(true);
-    await supabase.from('publications').insert({
-      user_id: currentUserId,
-      title:   cleanTitle(paper.title),
-      journal: paper.journalTitle || '',
-      year:    paper.pubYear     || '',
-      doi:     paper.doi         || '',
-      authors: paper.authorString|| '',
+    await supabase.from('library_items').insert({
+      added_by:       currentUserId,
+      folder_id:      null,
+      title:          cleanTitle(paper.title),
+      authors:        paper.authorString || '',
+      journal:        paper.journalTitle || '',
+      year:           paper.pubYear      || '',
+      doi:            paper.doi          || '',
+      citation:       buildCitationFromEpmc(paper),
+      cited_by_count: paper.citedByCount || 0,
+      is_open_access: paper.isOpenAccess === 'Y',
+      full_text_url:  paper.fullTextUrlList?.fullTextUrl?.[0]?.url || '',
     });
     setAdding(false);
     setAdded(true);
@@ -271,7 +276,7 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
         )}
         {currentUserId && (
           <Btn style={{ fontSize: 11.5 }} onClick={handleAdd} disabled={added || adding}>
-            {added ? 'Added ✓' : adding ? 'Adding…' : 'Add to my publications'}
+            {added ? 'Added ✓' : adding ? 'Adding…' : 'Add to library'}
           </Btn>
         )}
       </div>
@@ -306,6 +311,9 @@ export default function ExploreScreen({
   const [paperSearching, setPaperSearching] = useState(false);
   const [showMoreDiscussed, setShowMoreDiscussed]   = useState(false);
   const [showMoreInProfiles, setShowMoreInProfiles] = useState(false);
+  const [epmcTotal,       setEpmcTotal]       = useState(null);
+  const [epmcCursor,      setEpmcCursor]      = useState(null);
+  const [epmcLoadingMore, setEpmcLoadingMore] = useState(false);
 
   // Groups tab state
   const [groupResults,    setGroupResults]    = useState([]);
@@ -389,10 +397,12 @@ export default function ExploreScreen({
     setPaperResults({ posts: [], profiles: [], epmc: [] });
     setShowMoreDiscussed(false);
     setShowMoreInProfiles(false);
+    setEpmcTotal(null);
+    setEpmcCursor(null);
 
     const cleanQ = query.trim().replace(/^#+/, '');
 
-    const [postsRes, profilesRes, epmcRes] = await Promise.all([
+    const [postsRes, profilesRes, epmcData] = await Promise.all([
       supabase
         .from('posts_with_meta')
         .select('*')
@@ -410,18 +420,25 @@ export default function ExploreScreen({
 
       fetch(
         `https://www.ebi.ac.uk/europepmc/webservices/rest/search` +
-        `?query=${encodeURIComponent(cleanQ)}&resultType=core&pageSize=10&format=json`
-      ).then(r => r.json()).then(d => d.resultList?.result || []).catch(() => []),
+        `?query=${encodeURIComponent(cleanQ)}&resultType=core&pageSize=10&format=json&cursorMark=*`
+      ).then(r => r.json()).catch(() => ({})),
     ]);
+
+    const epmcRows   = epmcData.resultList?.result || [];
+    const epmcHits   = epmcData.hitCount || 0;
+    const nextCursor = epmcData.nextCursorMark || null;
 
     const luminaryDois = new Set([
       ...(postsRes.data || []).map(p => p.paper_doi).filter(Boolean),
       ...(profilesRes.data || []).map(p => p.doi).filter(Boolean),
     ]);
 
-    const filteredEpmc = epmcRes.filter(r =>
+    const filteredEpmc = epmcRows.filter(r =>
       !r.doi || !luminaryDois.has(r.doi.toLowerCase())
     );
+
+    setEpmcTotal(epmcHits);
+    setEpmcCursor(epmcRows.length === 10 ? nextCursor : null);
 
     // Deduplicate Luminary paper posts by DOI (same logic as Posts tab)
     const paperByDoi = new Map();
@@ -444,6 +461,24 @@ export default function ExploreScreen({
     });
     setPaperSearching(false);
   }, []);
+
+  const loadMoreEpmc = async () => {
+    if (!epmcCursor || epmcLoadingMore || !q.trim()) return;
+    setEpmcLoadingMore(true);
+    try {
+      const cleanQ = q.trim().replace(/^#+/, '');
+      const data = await fetch(
+        `https://www.ebi.ac.uk/europepmc/webservices/rest/search` +
+        `?query=${encodeURIComponent(cleanQ)}&resultType=core&pageSize=10&format=json` +
+        `&cursorMark=${encodeURIComponent(epmcCursor)}`
+      ).then(r => r.json()).catch(() => ({}));
+      const rows = data.resultList?.result || [];
+      const next = data.nextCursorMark || null;
+      setPaperResults(prev => ({ ...prev, epmc: [...prev.epmc, ...rows] }));
+      setEpmcCursor(rows.length === 10 && next !== epmcCursor ? next : null);
+    } catch {}
+    setEpmcLoadingMore(false);
+  };
 
   const searchGroups = useCallback(async (query, tier1) => {
     setGroupSearching(true);
@@ -805,7 +840,11 @@ export default function ExploreScreen({
                 {/* Section 3 — From Europe PMC */}
                 {paperResults.epmc.length > 0 && (
                   <>
-                    <SectionHeader label={`🌍 From Europe PMC — not yet discussed on Luminary  (${paperResults.epmc.length})`} />
+                    <SectionHeader label={
+                      epmcTotal !== null
+                        ? `🌍 From Europe PMC — ${epmcTotal.toLocaleString()} results (showing ${paperResults.epmc.length})`
+                        : `🌍 From Europe PMC (${paperResults.epmc.length})`
+                    } />
                     {paperResults.epmc.map(paper => (
                       <EpmcCard
                         key={paper.id || paper.doi || paper.title}
@@ -814,6 +853,13 @@ export default function ExploreScreen({
                         onNavigateToPost={onNavigateToPost}
                       />
                     ))}
+                    {epmcCursor && (
+                      <div style={{textAlign:'center', paddingTop:4, paddingBottom:8}}>
+                        <Btn onClick={loadMoreEpmc} disabled={epmcLoadingMore}>
+                          {epmcLoadingMore ? <Spinner size={14}/> : 'Load more from Europe PMC'}
+                        </Btn>
+                      </div>
+                    )}
                   </>
                 )}
               </>

@@ -6,6 +6,8 @@ export default function LibraryItemCard({
   showGroupPublicationToggle,
   onToggleGroupPublication,
   isAdmin,
+  folders,
+  onMoveToFolder,
 }) {
   return (
     <div style={{
@@ -87,6 +89,21 @@ export default function LibraryItemCard({
           }}>
             {item.is_group_publication ? '★ Our publication' : '☆ Mark as ours'}
           </button>
+        )}
+
+        {folders?.length > 0 && onMoveToFolder && (
+          <select
+            defaultValue=""
+            onChange={e => { if (e.target.value) { onMoveToFolder(item, e.target.value); e.target.value = ''; } }}
+            style={{
+              fontSize:11.5, color:T.v, fontWeight:600,
+              border:`1px solid ${T.v}`, borderRadius:20, background:T.v2,
+              padding:'2px 8px', cursor:'pointer', fontFamily:'inherit',
+            }}
+          >
+            <option value="">Move to folder…</option>
+            {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
         )}
 
         {onDelete && (
