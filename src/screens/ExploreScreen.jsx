@@ -210,6 +210,7 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
       year:     paper.pubYear || '',
       authors:  paper.authorString || '',
       abstract: paper.abstractText?.slice(0, 500) || '',
+      citation: buildCitationFromEpmc(paper),
     }));
     onNavigateToPost && onNavigateToPost();
   };

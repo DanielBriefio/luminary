@@ -166,6 +166,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
       if (paper.abstract) setPaperAbstract(paper.abstract);
       if (paper.year)     setPaperYear(paper.year);
       if (paper.doi)      setPaperDoi(paper.doi);
+      if (paper.citation) setPaperCitation(paper.citation);
       // Always open filled-fields view if there's any metadata to show
       if (paper.title || paper.doi) setDoiFetched(true);
     } catch(e) {}
