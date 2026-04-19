@@ -16,12 +16,13 @@ function StatChip({ count, label }) {
 }
 
 export default function PublicGroupProfileScreen({ slug }) {
-  const [group,   setGroup]   = useState(null);
-  const [stats,   setStats]   = useState(null);
-  const [leader,  setLeader]  = useState(null);
-  const [posts,   setPosts]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [notFound,setNotFound]= useState(false);
+  const [group,        setGroup]        = useState(null);
+  const [stats,        setStats]        = useState(null);
+  const [leader,       setLeader]       = useState(null);
+  const [posts,        setPosts]        = useState([]);
+  const [publications, setPublications] = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [notFound,     setNotFound]     = useState(false);
   const qrRef = useRef(null);
 
   useEffect(() => {
@@ -64,6 +65,20 @@ export default function PublicGroupProfileScreen({ slug }) {
           .order('created_at', { ascending: false })
           .limit(6);
         if (!cancelled) setPosts(gp || []);
+      }
+
+      // Always fetch publications for the counter; list only shown if public_show_publications
+      const { data: folderRows } = await supabase
+        .from('library_folders').select('id').eq('group_id', grp.id);
+      if (!cancelled && folderRows?.length) {
+        const folderIds = folderRows.map(f => f.id);
+        const { data: pubRows } = await supabase
+          .from('library_items')
+          .select('*')
+          .in('folder_id', folderIds)
+          .eq('is_group_publication', true)
+          .order('year', { ascending: false });
+        if (!cancelled) setPublications(pubRows || []);
       }
 
       setLoading(false);
@@ -209,7 +224,7 @@ export default function PublicGroupProfileScreen({ slug }) {
               <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 <StatChip count={stats.active_member_count || 0} label="Members" />
                 <StatChip count={stats.alumni_count || 0} label="Alumni" />
-                <StatChip count={0} label="Publications" />
+                <StatChip count={publications.length} label="Publications" />
               </div>
             )}
 
@@ -234,6 +249,49 @@ export default function PublicGroupProfileScreen({ slug }) {
             </div>
           </div>
         </div>
+
+        {/* Publications */}
+        {group.public_show_publications && publications.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>
+              Publications ({publications.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {publications.map(pub => (
+                <div key={pub.id} style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4, marginBottom: 3, color: T.text }}>
+                    {pub.title}
+                  </div>
+                  {pub.authors && (
+                    <div style={{ fontSize: 11, color: T.mu, marginBottom: 4 }}>
+                      {pub.authors.slice(0, 120)}{pub.authors.length > 120 ? '…' : ''}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {pub.journal && <span style={{ fontSize: 11.5, fontWeight: 600, color: T.v }}>{pub.journal}</span>}
+                    {pub.year    && <span style={{ fontSize: 11, color: T.mu }}>· {pub.year}</span>}
+                    {pub.cited_by_count > 0 && (
+                      <span style={{ fontSize: 10, background: T.bl2, color: T.bl, padding: '1px 6px', borderRadius: 20, fontWeight: 600 }}>
+                        {pub.cited_by_count} citations
+                      </span>
+                    )}
+                    {pub.is_open_access && (
+                      <span style={{ fontSize: 10, background: T.gr2, color: T.gr, padding: '1px 6px', borderRadius: 20, fontWeight: 700 }}>
+                        Open Access
+                      </span>
+                    )}
+                    {pub.doi && (
+                      <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: T.v, fontWeight: 600, textDecoration: 'none', marginLeft: 'auto' }}>
+                        DOI ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recent posts */}
         {group.public_show_posts && posts.length > 0 && (

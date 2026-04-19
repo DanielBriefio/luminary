@@ -38,7 +38,8 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
   const [editShowLeader,    setEditShowLeader]    = useState(true);
   const [editShowLocation,  setEditShowLocation]  = useState(true);
   const [editShowContact,   setEditShowContact]   = useState(false);
-  const [editShowPosts,     setEditShowPosts]     = useState(true);
+  const [editShowPosts,          setEditShowPosts]          = useState(true);
+  const [editShowPublications,   setEditShowPublications]   = useState(true);
   const qrRef = useRef(null);
 
   // Image uploads
@@ -115,6 +116,7 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     setEditShowLocation(group.public_show_location ?? true);
     setEditShowContact(group.public_show_contact ?? false);
     setEditShowPosts(group.public_show_posts ?? true);
+    setEditShowPublications(group.public_show_publications ?? true);
     setSlugError('');
     const { data: mem } = await supabase
       .from('group_members').select('display_role')
@@ -162,7 +164,8 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       public_show_leader:     editShowLeader,
       public_show_location:   editShowLocation,
       public_show_contact:    editShowContact,
-      public_show_posts:      editShowPosts,
+      public_show_posts:         editShowPosts,
+      public_show_publications:  editShowPublications,
     }).eq('id', groupId);
     await supabase.from('group_members').update({ display_role: editDispRole })
       .eq('group_id', groupId).eq('user_id', user.id);
@@ -657,11 +660,12 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
                 <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>Show on public profile:</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', marginBottom: 12 }}>
                   {[
-                    ['editShowMembers',  editShowMembers,  setEditShowMembers,  'Member count'],
-                    ['editShowLeader',   editShowLeader,   setEditShowLeader,   'Group leader'],
-                    ['editShowLocation', editShowLocation, setEditShowLocation, 'Location'],
-                    ['editShowContact',  editShowContact,  setEditShowContact,  'Contact email'],
-                    ['editShowPosts',    editShowPosts,    setEditShowPosts,    'Public posts'],
+                    ['editShowMembers',       editShowMembers,       setEditShowMembers,       'Member count'],
+                    ['editShowLeader',        editShowLeader,        setEditShowLeader,        'Group leader'],
+                    ['editShowLocation',      editShowLocation,      setEditShowLocation,      'Location'],
+                    ['editShowContact',       editShowContact,       setEditShowContact,       'Contact email'],
+                    ['editShowPosts',         editShowPosts,         setEditShowPosts,         'Public posts'],
+                    ['editShowPublications',  editShowPublications,  setEditShowPublications,  'Publications list'],
                   ].map(([key, val, setter, label]) => (
                     <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
                       <input type="checkbox" checked={val} onChange={e => setter(e.target.checked)}
