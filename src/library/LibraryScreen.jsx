@@ -9,8 +9,7 @@ import LibraryFolderSidebar from './LibraryFolderSidebar';
 import LibraryPaperSearch   from './LibraryPaperSearch';
 import LibraryItemCard      from './LibraryItemCard';
 
-export default function LibraryScreen({ user, onSaveToggled }) {
-  const [activeTab,      setActiveTab]      = useState('papers');
+export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
   const [folders,        setFolders]        = useState([]);
   const [activeFolderID, setActiveFolderID] = useState(null);
   const [items,          setItems]          = useState([]);
@@ -21,9 +20,8 @@ export default function LibraryScreen({ user, onSaveToggled }) {
   const [doiLoading,     setDoiLoading]     = useState(false);
   const [loading,        setLoading]        = useState(true);
 
-  useEffect(() => { fetchFolders(); }, []); // eslint-disable-line
+  useEffect(() => { fetchFolders(); fetchBookmarks(); }, []); // eslint-disable-line
   useEffect(() => { if (activeFolderID) fetchItems(activeFolderID); }, [activeFolderID]);
-  useEffect(() => { if (activeTab === 'saved') fetchSavedPosts(); }, [activeTab]);
 
   const fetchFolders = async () => {
     const { data } = await supabase
@@ -45,14 +43,14 @@ export default function LibraryScreen({ user, onSaveToggled }) {
     setItems(data || []);
   };
 
-  const fetchSavedPosts = async () => {
+  const fetchBookmarks = async () => {
     const { data } = await supabase
       .from('saved_posts')
       .select(`
         id, saved_at, post_id, group_post_id,
         post:posts(id, content, paper_title, created_at,
           profiles(name, avatar_url, avatar_color)),
-        group_post:group_posts(id, content, paper_title, created_at,
+        group_post:group_posts(id, content, paper_title, group_id, created_at,
           profiles(name, avatar_url, avatar_color))
       `)
       .eq('user_id', user.id)
@@ -123,7 +121,7 @@ export default function LibraryScreen({ user, onSaveToggled }) {
     setItems(i => i.filter(x => x.id !== item.id));
   };
 
-  const uploadPDF = async (file) => {
+  const uploadFile = async (file) => {
     if (!activeFolderID) return;
     const path = `library/${user.id}/${Date.now()}_${file.name}`;
     const { error } = await supabase.storage.from('library-files').upload(path, file);
@@ -145,32 +143,28 @@ export default function LibraryScreen({ user, onSaveToggled }) {
     onSaveToggled?.();
   };
 
+  const openBookmark = (sp) => {
+    if (sp.post_id) {
+      window.open(`/s/${sp.post_id}`, '_blank', 'noopener,noreferrer');
+    } else if (sp.group_post?.group_id && onViewGroup) {
+      onViewGroup(sp.group_post.group_id);
+    }
+  };
+
   return (
-    <div style={{display:'flex', flexDirection:'column', height:'100%', background:T.s2}}>
+    <div style={{display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:T.s2}}>
 
       {/* Header */}
-      <div style={{padding:'16px 20px', background:T.w,
-        borderBottom:`1px solid ${T.bdr}`,
-        display:'flex', alignItems:'center', gap:12}}>
+      <div style={{padding:'14px 20px', background:T.w, borderBottom:`1px solid ${T.bdr}`, flexShrink:0}}>
         <div style={{fontFamily:"'DM Serif Display',serif", fontSize:20}}>Library</div>
-        <div style={{display:'flex', gap:4, marginLeft:'auto'}}>
-          {[['papers','📚 Papers'],['saved','🔖 Saved']].map(([id,label]) => (
-            <button key={id} onClick={() => setActiveTab(id)} style={{
-              padding:'5px 14px', borderRadius:20, cursor:'pointer',
-              fontSize:12.5, fontWeight:600, fontFamily:'inherit',
-              border:`1.5px solid ${activeTab===id ? T.v : T.bdr}`,
-              background: activeTab===id ? T.v2 : T.w,
-              color: activeTab===id ? T.v : T.mu,
-            }}>
-              {label}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Papers tab */}
-      {activeTab === 'papers' && (
-        <div style={{display:'flex', flex:1, overflow:'hidden'}}>
+      {/* Two-column body */}
+      <div style={{display:'flex', flex:1, overflow:'hidden'}}>
+
+        {/* ── LEFT: Paper Library ── */}
+        <div style={{display:'flex', flex:'1 1 0', overflow:'hidden', borderRight:`2px solid ${T.bdr}`}}>
+
           <LibraryFolderSidebar
             folders={folders}
             activeFolderId={activeFolderID}
@@ -181,15 +175,22 @@ export default function LibraryScreen({ user, onSaveToggled }) {
           />
 
           <div style={{flex:1, overflowY:'auto', padding:16}}>
+
+            {/* Section label */}
+            <div style={{fontSize:11, fontWeight:700, color:T.mu, textTransform:'uppercase',
+              letterSpacing:'.07em', marginBottom:14}}>
+              Paper Library
+            </div>
+
             {loading && <div style={{display:'flex',justifyContent:'center',padding:40}}><Spinner/></div>}
 
             {!loading && folders.length === 0 && (
-              <div style={{textAlign:'center', color:T.mu, padding:'48px 20px'}}>
-                <div style={{fontSize:36, marginBottom:12}}>📚</div>
-                <div style={{fontSize:15, fontFamily:"'DM Serif Display',serif", marginBottom:8}}>
+              <div style={{textAlign:'center', color:T.mu, padding:'40px 16px'}}>
+                <div style={{fontSize:32, marginBottom:10}}>📚</div>
+                <div style={{fontSize:14, fontFamily:"'DM Serif Display',serif", marginBottom:6}}>
                   Your library is empty
                 </div>
-                <div style={{fontSize:13, marginBottom:16, lineHeight:1.6}}>
+                <div style={{fontSize:12.5, lineHeight:1.6}}>
                   Create a folder to get started, then add papers from Europe PMC or by DOI.
                 </div>
               </div>
@@ -197,7 +198,7 @@ export default function LibraryScreen({ user, onSaveToggled }) {
 
             {activeFolderID && (
               <>
-                <div style={{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}>
+                <div style={{display:'flex', gap:8, marginBottom:14, flexWrap:'wrap'}}>
                   <Btn onClick={() => { setShowSearch(s => !s); setShowDOI(false); }}>
                     🔍 Search Europe PMC
                   </Btn>
@@ -206,7 +207,7 @@ export default function LibraryScreen({ user, onSaveToggled }) {
                   </Btn>
                   <label style={{cursor:'pointer'}}>
                     <input type="file" accept=".pdf,.doc,.docx,.txt" style={{display:'none'}}
-                      onChange={e => e.target.files[0] && uploadPDF(e.target.files[0])}/>
+                      onChange={e => e.target.files[0] && uploadFile(e.target.files[0])}/>
                     <span style={{
                       display:'inline-flex', alignItems:'center', gap:6,
                       padding:'7px 14px', borderRadius:9,
@@ -219,14 +220,14 @@ export default function LibraryScreen({ user, onSaveToggled }) {
                 </div>
 
                 {showSearch && (
-                  <div style={{marginBottom:16, padding:14, background:T.w,
+                  <div style={{marginBottom:14, padding:14, background:T.w,
                     borderRadius:12, border:`1px solid ${T.bdr}`}}>
                     <LibraryPaperSearch onSelect={addPaperToFolder}/>
                   </div>
                 )}
 
                 {showDOI && (
-                  <div style={{marginBottom:16, padding:14, background:T.w,
+                  <div style={{marginBottom:14, padding:14, background:T.w,
                     borderRadius:12, border:`1px solid ${T.bdr}`,
                     display:'flex', gap:8, alignItems:'center'}}>
                     <input value={doiInput}
@@ -244,8 +245,8 @@ export default function LibraryScreen({ user, onSaveToggled }) {
                 )}
 
                 {items.length === 0 && !showSearch && !showDOI && (
-                  <div style={{textAlign:'center', color:T.mu, padding:'32px 20px', fontSize:13}}>
-                    <div style={{fontSize:28, marginBottom:8}}>📭</div>
+                  <div style={{textAlign:'center', color:T.mu, padding:'28px 16px', fontSize:13}}>
+                    <div style={{fontSize:24, marginBottom:8}}>📭</div>
                     This folder is empty. Add papers above.
                   </div>
                 )}
@@ -262,60 +263,104 @@ export default function LibraryScreen({ user, onSaveToggled }) {
             )}
           </div>
         </div>
-      )}
 
-      {/* Saved posts tab */}
-      {activeTab === 'saved' && (
-        <div style={{flex:1, overflowY:'auto', padding:16}}>
-          {savedPosts.length === 0 && (
-            <div style={{textAlign:'center', color:T.mu, padding:'48px 20px'}}>
-              <div style={{fontSize:36, marginBottom:12}}>🔖</div>
-              <div style={{fontSize:15, fontFamily:"'DM Serif Display',serif", marginBottom:8}}>
-                No saved posts yet
+        {/* ── RIGHT: Bookmarks ── */}
+        <div style={{width:320, flexShrink:0, display:'flex', flexDirection:'column',
+          background:T.w, overflow:'hidden'}}>
+
+          <div style={{padding:'16px 16px 10px', borderBottom:`1px solid ${T.bdr}`, flexShrink:0,
+            display:'flex', alignItems:'center', gap:8}}>
+            <svg width="15" height="15" viewBox="0 0 24 24"
+              fill={T.v} stroke={T.v} strokeWidth="1.8">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span style={{fontSize:11, fontWeight:700, color:T.mu, textTransform:'uppercase',
+              letterSpacing:'.07em'}}>
+              Bookmarks
+            </span>
+            {savedPosts.length > 0 && (
+              <span style={{marginLeft:'auto', fontSize:10.5, color:T.mu}}>{savedPosts.length}</span>
+            )}
+          </div>
+
+          <div style={{flex:1, overflowY:'auto', padding:10}}>
+            {savedPosts.length === 0 && (
+              <div style={{textAlign:'center', color:T.mu, padding:'40px 16px'}}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                  stroke={T.bdr} strokeWidth="1.5" style={{marginBottom:10}}>
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                </svg>
+                <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>No bookmarks yet</div>
+                <div style={{fontSize:12, lineHeight:1.6}}>
+                  Click the bookmark icon on any post to save it here.
+                </div>
               </div>
-              <div style={{fontSize:13, lineHeight:1.6}}>
-                Tap the bookmark icon on any post to save it here.
-              </div>
-            </div>
-          )}
-          {savedPosts.map(sp => {
-            const post = sp.post || sp.group_post;
-            if (!post) return null;
-            const text = (post.content || '').replace(/<[^>]+>/g,'').slice(0, 200);
-            return (
-              <div key={sp.id} style={{
-                padding:'12px 14px', borderRadius:12,
-                border:`1px solid ${T.bdr}`, background:T.w,
-                marginBottom:8, display:'flex', gap:10, alignItems:'flex-start',
-              }}>
-                <Av size={36}
-                  color={post.profiles?.avatar_color}
-                  name={post.profiles?.name}
-                  url={post.profiles?.avatar_url || ''}/>
-                <div style={{flex:1, minWidth:0}}>
-                  <div style={{fontSize:12.5, fontWeight:700, marginBottom:2}}>
-                    {post.profiles?.name}
+            )}
+
+            {savedPosts.map(sp => {
+              const p = sp.post || sp.group_post;
+              if (!p) return null;
+              const isGroup = !!sp.group_post_id;
+              const text = (p.content || '').replace(/<[^>]+>/g,'').slice(0, 160);
+              const canOpen = sp.post_id || (sp.group_post?.group_id && onViewGroup);
+              return (
+                <div key={sp.id}
+                  onClick={() => canOpen && openBookmark(sp)}
+                  style={{
+                    padding:'10px 12px', borderRadius:10,
+                    border:`1px solid ${T.bdr}`, marginBottom:8,
+                    cursor: canOpen ? 'pointer' : 'default',
+                    background: T.w,
+                    transition:'background .12s',
+                  }}
+                  onMouseEnter={e => { if (canOpen) e.currentTarget.style.background = T.s2; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = T.w; }}
+                >
+                  <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+                    <Av size={26}
+                      color={p.profiles?.avatar_color}
+                      name={p.profiles?.name}
+                      url={p.profiles?.avatar_url || ''}/>
+                    <div style={{flex:1, minWidth:0}}>
+                      <div style={{fontSize:12, fontWeight:700,
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                        {p.profiles?.name}
+                      </div>
+                    </div>
+                    {isGroup && (
+                      <span style={{fontSize:9.5, fontWeight:700, color:T.v,
+                        background:T.v2, padding:'1px 6px', borderRadius:20, flexShrink:0}}>
+                        Group
+                      </span>
+                    )}
+                    <button
+                      onClick={e => { e.stopPropagation(); unsavePost(sp); }}
+                      style={{fontSize:11, color:T.mu, border:'none', background:'transparent',
+                        cursor:'pointer', flexShrink:0, opacity:.5, lineHeight:1}}
+                      title="Remove bookmark"
+                    >
+                      ✕
+                    </button>
                   </div>
-                  <div style={{fontSize:13, lineHeight:1.55, color:T.text, marginBottom:4}}>
-                    {post.paper_title || text || '(no text)'}
-                    {text.length === 200 ? '…' : ''}
+                  <div style={{fontSize:12.5, lineHeight:1.5, color:T.text, marginBottom:4}}>
+                    {p.paper_title || text || '(no text)'}
+                    {!p.paper_title && text.length === 160 ? '…' : ''}
                   </div>
-                  <div style={{fontSize:11.5, color:T.mu}}>
-                    Saved {timeAgo(sp.saved_at)}
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                    <span style={{fontSize:11, color:T.mu}}>{timeAgo(sp.saved_at)}</span>
+                    {canOpen && (
+                      <span style={{fontSize:11, color:T.v, fontWeight:600}}>
+                        {isGroup ? 'Open group →' : 'Read post →'}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <button onClick={() => unsavePost(sp)} style={{
-                  fontSize:12, color:T.mu, border:'none',
-                  background:'transparent', cursor:'pointer',
-                  flexShrink:0, lineHeight:1,
-                }} title="Unsave">
-                  ✕
-                </button>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      )}
+
+      </div>
     </div>
   );
 }
