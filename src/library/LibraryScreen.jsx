@@ -205,7 +205,7 @@ export default function LibraryScreen({ user, onSaveToggled }) {
                     🔗 Enter DOI
                   </Btn>
                   <label style={{cursor:'pointer'}}>
-                    <input type="file" accept=".pdf" style={{display:'none'}}
+                    <input type="file" accept=".pdf,.doc,.docx,.txt" style={{display:'none'}}
                       onChange={e => e.target.files[0] && uploadPDF(e.target.files[0])}/>
                     <span style={{
                       display:'inline-flex', alignItems:'center', gap:6,
@@ -213,7 +213,7 @@ export default function LibraryScreen({ user, onSaveToggled }) {
                       border:`1px solid ${T.bdr}`, background:T.w,
                       fontSize:13, cursor:'pointer', fontWeight:500,
                     }}>
-                      📄 Upload PDF
+                      📄 Upload file
                     </span>
                   </label>
                 </div>
