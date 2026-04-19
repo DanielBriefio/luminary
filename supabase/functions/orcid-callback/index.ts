@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 serve(async (req) => {
   const url    = new URL(req.url);
   const code   = url.searchParams.get("code");
-  const appUrl = Deno.env.get("APP_URL") || "https://luminary.to";
+  const appUrl = (Deno.env.get("APP_URL") || "https://luminary.to").trim();
 
   const isProduction = Deno.env.get("ORCID_ENV") === "production";
   const orcidBase    = isProduction
