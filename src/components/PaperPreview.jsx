@@ -1,13 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { T } from '../lib/constants';
 import FollowBtn from './FollowBtn';
-import { buildCitationFromCrossRef } from '../lib/utils';
-
-const citationCache = {};
 
 export default function PaperPreview({ post, currentUserId, onViewPaper }) {
   const [expanded, setExpanded] = useState(false);
-  const [liveCitation, setLiveCitation] = useState('');
 
   const doiUrl = post.paper_doi
     ? (post.paper_doi.startsWith('http') ? post.paper_doi : `https://doi.org/${post.paper_doi}`)
@@ -16,22 +12,6 @@ export default function PaperPreview({ post, currentUserId, onViewPaper }) {
   const cleanAbstract = post.paper_abstract
     ? post.paper_abstract.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim()
     : '';
-
-  const citation = post.paper_citation || liveCitation;
-
-  useEffect(() => {
-    if (post.paper_citation || !post.paper_doi) return;
-    const doi = post.paper_doi;
-    if (citationCache[doi]) { setLiveCitation(citationCache[doi]); return; }
-    fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(j => {
-        if (!j) return;
-        const c = buildCitationFromCrossRef(j.message, doi);
-        if (c) { citationCache[doi] = c; setLiveCitation(c); }
-      })
-      .catch(() => {});
-  }, [post.paper_doi, post.paper_citation]); // eslint-disable-line
 
   return (
     <div style={{background:T.v2,border:`1px solid rgba(108,99,255,.2)`,borderRadius:12,overflow:"hidden",marginBottom:10}}>
@@ -43,9 +23,9 @@ export default function PaperPreview({ post, currentUserId, onViewPaper }) {
           : <div style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,marginBottom:5,overflowWrap:"break-word"}}>{post.paper_title}</div>
         }
         {post.paper_authors&&<div style={{fontSize:11,color:T.mu,marginBottom:4}}>{post.paper_authors}</div>}
-        {(citation || post.paper_journal) && (
+        {(post.paper_citation || post.paper_journal) && (
           <div style={{fontSize:11.5,color:T.mu,marginBottom:10,lineHeight:1.5}}>
-            {citation || post.paper_journal}
+            {post.paper_citation || post.paper_journal}
           </div>
         )}
         <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
