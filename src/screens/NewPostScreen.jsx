@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T, AUTO_TAG_ENABLED } from '../lib/constants';
+import { T, AUTO_TAG_ENABLED, EDGE_HEADERS } from '../lib/constants';
+
+const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
 import { getFileCategory } from '../lib/fileUtils';
 import { getCachedTagsByDoi } from '../lib/utils';
 import Btn from '../components/Btn';
@@ -23,10 +25,13 @@ async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, p
     }
   }
   try {
-    const { data, error } = await supabase.functions.invoke('auto-tag', {
-      body: { content, paperTitle, paperAbstract, paperJournal },
+    const res = await fetch(AUTO_TAG_URL, {
+      method: 'POST',
+      headers: EDGE_HEADERS,
+      body: JSON.stringify({ content, paperTitle, paperAbstract, paperJournal }),
     });
-    if (error) { console.warn('Auto-tag error:', error); return; }
+    if (!res.ok) { console.warn('Auto-tag HTTP error:', res.status); return; }
+    const data = await res.json();
     if (!data || data.confidence === 'low') { console.log('Auto-tag skipped: low confidence'); return; }
     if (data.tier1 || data.tags?.length) {
       await supabase.from('posts').update({ tier1: data.tier1 || '', tier2: data.tier2 || [], tags: data.tags || [] }).eq('id', postId);
