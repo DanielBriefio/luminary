@@ -110,7 +110,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     const params = new URLSearchParams({
       client_id:     ORCID_CLIENT_ID,
       response_type: 'code',
-      scope:         '/authenticate /read-limited',
+      scope:         '/authenticate',
       redirect_uri:  ORCID_REDIRECT_URI,
       state:         'signup',
     });
