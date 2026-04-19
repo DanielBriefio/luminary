@@ -868,10 +868,9 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
                       {pub.citations>0&&<span style={{fontSize:10,color:T.mu}}>{pub.citations} citations</span>}
                     </div>
                     <div style={{fontSize:12.5,fontWeight:700,lineHeight:1.4,marginBottom:2}}>{pub.title}</div>
-                    <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:2}}>
-                      {pub.journal&&<span style={{fontSize:11.5,fontWeight:600,color:T.v}}>{pub.journal}</span>}
-                      {pub.year&&<span style={{fontSize:11,color:T.mu}}>{pub.year}</span>}
-                    </div>
+                    {(pub.citation || pub.journal) && (
+                      <div style={{fontSize:11,color:T.mu,marginBottom:2}}>{pub.citation || [pub.journal, pub.year].filter(Boolean).join(' · ')}</div>
+                    )}
                     {pub.authors&&<div style={{fontSize:10.5,color:T.mu}}>{pub.authors}</div>}
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0}}>
@@ -1021,7 +1020,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
                           {authors.length>80?authors.slice(0,80)+'…':authors}
                         </div>
                         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-                          <span style={{fontSize:11,color:T.mu}}>{[journal,year].filter(Boolean).join(' · ')}</span>
+                          <span style={{fontSize:11,color:T.mu}}>{buildCitationFromEpmc(r) || [journal,year].filter(Boolean).join(' · ')}</span>
                           {oa&&<span style={{fontSize:10,fontWeight:700,color:T.gr,background:T.gr2,borderRadius:20,padding:'1px 7px'}}>Open Access</span>}
                           {cited>0&&<span style={{fontSize:10,fontWeight:700,color:T.bl,background:T.bl2,borderRadius:20,padding:'1px 7px'}}>{cited} citations</span>}
                           <button onClick={()=>selectAddResult(r)}

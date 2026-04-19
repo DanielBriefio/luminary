@@ -193,11 +193,8 @@ export default function LibraryPaperSearch({ onSelect, buttonLabel }) {
             {r.authorString?.slice(0,100)}{r.authorString?.length>100?'…':''}
           </div>
           <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:8, alignItems:'center'}}>
-            {r.journalTitle && (
-              <span style={{fontSize:11.5, fontWeight:600, color:T.v}}>{r.journalTitle}</span>
-            )}
-            {r.pubYear && (
-              <span style={{fontSize:11.5, color:T.mu}}>· {r.pubYear}</span>
+            {(buildCitationFromEpmc(r) || r.journalTitle) && (
+              <span style={{fontSize:11.5, color:T.mu}}>{buildCitationFromEpmc(r) || r.journalTitle}</span>
             )}
             {r.citedByCount > 0 && (
               <span style={{fontSize:10.5, background:T.bl2, color:T.bl,

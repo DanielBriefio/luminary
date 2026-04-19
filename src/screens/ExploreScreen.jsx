@@ -6,7 +6,7 @@ import PostCard from '../feed/PostCard';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
 import FollowBtn from '../components/FollowBtn';
-import { timeAgo } from '../lib/utils';
+import { timeAgo, buildCitationFromEpmc } from '../lib/utils';
 
 // ─── Researcher result card ───────────────────────────────────────────────────
 
@@ -88,9 +88,9 @@ function PaperSearchCard({ post, currentUserId, onViewPaper }) {
           {post.paper_authors}
         </div>
       )}
-      {(post.paper_journal || post.paper_year) && (
-        <div style={{ fontSize: 12, color: T.v, fontWeight: 600, marginBottom: 10 }}>
-          {[post.paper_journal, post.paper_year].filter(Boolean).join(' · ')}
+      {(post.paper_citation || post.paper_journal) && (
+        <div style={{ fontSize: 12, color: T.mu, marginBottom: 10 }}>
+          {post.paper_citation || post.paper_journal}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -243,11 +243,8 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
           : paper.authorString}
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        {paper.journalTitle && (
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: T.v }}>{paper.journalTitle}</span>
-        )}
-        {paper.pubYear && (
-          <span style={{ fontSize: 11.5, color: T.mu }}>· {paper.pubYear}</span>
+        {(buildCitationFromEpmc(paper) || paper.journalTitle) && (
+          <span style={{ fontSize: 11.5, color: T.mu }}>{buildCitationFromEpmc(paper) || paper.journalTitle}</span>
         )}
         {paper.citedByCount > 0 && (
           <span style={{

@@ -67,7 +67,7 @@ async function fetchDoiMetadata(doi) {
   } catch { return null; }
 }
 
-function EpResultCard({ title, authors, journal, year, cited, oa, onSelect }) {
+function EpResultCard({ title, authors, citation, journal, year, cited, oa, onSelect }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -86,7 +86,7 @@ function EpResultCard({ title, authors, journal, year, cited, oa, onSelect }) {
         {authors.length>80 ? authors.slice(0,80)+'…' : authors}
       </div>
       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-        <span style={{fontSize:11,color:T.mu}}>{[journal,year].filter(Boolean).join(' · ')}</span>
+        <span style={{fontSize:11,color:T.mu}}>{citation || [journal,year].filter(Boolean).join(' · ')}</span>
         {oa && <span style={{fontSize:10,fontWeight:700,color:T.gr,background:T.gr2,border:`1px solid ${T.gr}`,borderRadius:20,padding:"1px 7px"}}>Open Access</span>}
         {cited>0 && <span style={{fontSize:10,fontWeight:700,color:T.bl,background:T.bl2,border:`1px solid ${T.bl}`,borderRadius:20,padding:"1px 7px"}}>{cited} citations</span>}
         <button onClick={onSelect} style={{marginLeft:"auto",padding:"4px 12px",borderRadius:20,border:`1.5px solid ${T.v}`,background:T.v,color:"#fff",fontSize:11.5,fontWeight:700,fontFamily:"inherit",cursor:"pointer",flexShrink:0}}>
@@ -507,6 +507,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
                       return (
                         <EpResultCard key={r.pmid||r.doi||i}
                           title={title} authors={authors} journal={journal} year={year}
+                          citation={buildCitationFromEpmc(r)}
                           cited={cited} oa={oa}
                           onSelect={()=>selectEpResult(r)}
                         />
