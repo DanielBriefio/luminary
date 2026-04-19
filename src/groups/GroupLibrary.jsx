@@ -6,6 +6,7 @@ import Spinner from '../components/Spinner';
 import LibraryFolderSidebar from '../library/LibraryFolderSidebar';
 import LibraryPaperSearch   from '../library/LibraryPaperSearch';
 import LibraryItemCard      from '../library/LibraryItemCard';
+import LibraryRisImporter   from '../library/LibraryRisImporter';
 
 export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, onNavigateToPost }) {
   const [folders,        setFolders]        = useState([]);
@@ -13,6 +14,7 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
   const [items,          setItems]          = useState([]);
   const [showSearch,     setShowSearch]     = useState(false);
   const [showDOI,        setShowDOI]        = useState(false);
+  const [showRisImport,  setShowRisImport]  = useState(false);
   const [doiInput,       setDoiInput]       = useState('');
   const [doiLoading,     setDoiLoading]     = useState(false);
   const [loading,        setLoading]        = useState(true);
@@ -194,11 +196,14 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
       <div style={{flex:1, overflowY:'auto', padding:16}}>
         {activeFolderID && canAdd && (
           <div style={{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}>
-            <Btn onClick={() => { setShowSearch(s => !s); setShowDOI(false); }}>
+            <Btn onClick={() => { setShowSearch(s => !s); setShowDOI(false); setShowRisImport(false); }}>
               🔍 Search Europe PMC
             </Btn>
-            <Btn onClick={() => { setShowDOI(s => !s); setShowSearch(false); }}>
+            <Btn onClick={() => { setShowDOI(s => !s); setShowSearch(false); setShowRisImport(false); }}>
               🔗 Enter DOI
+            </Btn>
+            <Btn onClick={() => { setShowRisImport(s => !s); setShowSearch(false); setShowDOI(false); }}>
+              📑 Import .ris / .bib
             </Btn>
             <label style={{cursor:'pointer'}}>
               <input type="file" accept=".pdf,.doc,.docx,.txt" style={{display:'none'}}
@@ -241,7 +246,21 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
           </div>
         )}
 
-        {activeFolderID && items.length === 0 && !showSearch && !showDOI && (
+        {showRisImport && (
+          <LibraryRisImporter
+            userId={user.id}
+            groupId={groupId}
+            folders={folders}
+            onDone={(folderId, isNew) => {
+              setShowRisImport(false);
+              if (isNew) fetchFolders();
+              else fetchItems(folderId);
+            }}
+            onClose={() => setShowRisImport(false)}
+          />
+        )}
+
+        {activeFolderID && items.length === 0 && !showSearch && !showDOI && !showRisImport && (
           <div style={{textAlign:'center', color:T.mu, padding:'32px 20px', fontSize:13}}>
             <div style={{fontSize:28, marginBottom:8}}>📭</div>
             {canAdd ? 'This folder is empty. Add papers above.' : 'No papers in this folder yet.'}

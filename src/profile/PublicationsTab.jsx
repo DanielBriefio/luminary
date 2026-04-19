@@ -167,6 +167,7 @@ ${sectionsHtml}
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
 import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
+import { parseRis, parseBib, buildCitationFromRef } from '../lib/referenceUtils';
 import { typeIcon, typeLabel } from '../lib/pubUtils';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
@@ -217,6 +218,10 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
   const [epSearchHasMore,     setEpSearchHasMore]     = useState(false);
   const [epSearchLoadingMore, setEpSearchLoadingMore] = useState(false);
   const [epSearchTotal,       setEpSearchTotal]       = useState(null);
+  const [showRisImport, setShowRisImport] = useState(false);
+  const [risProposals,  setRisProposals]  = useState([]);
+  const [risFileName,   setRisFileName]   = useState('');
+  const [risSaving,     setRisSaving]     = useState(false);
   const [showExport,   setShowExport]   = useState(false);
   const exportRef = useRef(null);
 
@@ -574,6 +579,55 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
 
   const rejectImportPub = (idx) => setImportRejected(s=>new Set([...s,idx]));
 
+  const handleRisFile = (file) => {
+    if (!file) return;
+    setRisFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result;
+        const parsed = file.name.toLowerCase().endsWith('.bib') ? parseBib(text) : parseRis(text);
+        const existingDois   = new Set(pubs.map(p => (p.doi||'').toLowerCase()).filter(Boolean));
+        const existingTitles = new Set(pubs.map(p => normForMatch(p.title).slice(0, 40)));
+        const filtered = parsed.filter(p => {
+          if (!p.title?.trim()) return false;
+          if (p.doi && existingDois.has(p.doi.toLowerCase())) return false;
+          if (existingTitles.has(normForMatch(p.title).slice(0, 40))) return false;
+          return true;
+        });
+        setRisProposals(filtered);
+        setShowRisImport(true);
+      } catch {
+        alert('Failed to parse file. Check that it is a valid .ris or .bib file.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const importAllRis = async () => {
+    if (!risProposals.length || risSaving) return;
+    setRisSaving(true);
+    const { data } = await supabase.from('publications').insert(
+      risProposals.map(p => ({
+        user_id:  user.id,
+        title:    p.title    || '',
+        authors:  p.authors  || '',
+        journal:  p.journal  || '',
+        year:     p.year     || '',
+        doi:      p.doi      || '',
+        pub_type: p.pub_type || 'journal',
+        venue:    '',
+        pmid:     '',
+        source:   'ris_bib',
+        citation: buildCitationFromRef(p),
+      }))
+    ).select();
+    if (data) setPubs(prev => [...data, ...prev].sort((a, b) => (b.year||'').localeCompare(a.year||'')));
+    setRisSaving(false);
+    setShowRisImport(false);
+    setRisProposals([]);
+  };
+
   const buildAddQuery = () => {
     const parts = [];
     if (addSearchTerm.trim()) parts.push(addSearchTerm.trim());
@@ -808,6 +862,12 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
             📄 Import publication list
           </span>
         </label>
+        <label style={{cursor:'pointer'}}>
+          <input type="file" accept=".ris,.bib" onChange={e=>{ if(e.target.files?.[0]) handleRisFile(e.target.files[0]); e.target.value=''; }} style={{display:'none'}}/>
+          <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'6px 14px',borderRadius:22,cursor:'pointer',fontSize:12,fontWeight:600,border:`1.5px solid ${T.bdr}`,background:'transparent',color:T.mu}}>
+            📑 Import .ris / .bib
+          </span>
+        </label>
         <Btn variant="v" onClick={()=>{ if(showAdd) closeAddPanel(); else setShowAdd(true); }} style={{fontSize:12}}>+ Add publication</Btn>
       </div>
 
@@ -937,6 +997,44 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
                     </div>
                   );
                 })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {showRisImport&&(
+        <div style={{background:T.s2,borderRadius:12,padding:16,marginBottom:20,border:`1px solid ${T.bdr}`}}>
+          <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:700,flex:1}}>📑 Import from {risFileName}</div>
+            <button onClick={()=>{setShowRisImport(false);setRisProposals([]);}} style={{fontSize:12,color:T.mu,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit'}}>Close</button>
+          </div>
+          {risProposals.length === 0 ? (
+            <div style={{fontSize:12.5,color:T.mu,textAlign:'center',padding:'12px 0'}}>
+              No new papers found — all entries already exist in your publications.
+            </div>
+          ) : (
+            <>
+              <div style={{fontSize:12,color:T.mu,marginBottom:12}}>
+                {risProposals.length} new paper{risProposals.length!==1?'s':''} found (duplicates excluded).
+              </div>
+              <div style={{maxHeight:220,overflowY:'auto',marginBottom:14,display:'flex',flexDirection:'column',gap:5}}>
+                {risProposals.slice(0,8).map((p,i)=>(
+                  <div key={i} style={{background:T.w,borderRadius:8,padding:'8px 11px',fontSize:12,border:`1px solid ${T.bdr}`}}>
+                    <div style={{fontWeight:700,lineHeight:1.4}}>{p.title}</div>
+                    <div style={{color:T.mu}}>{[p.journal,p.year].filter(Boolean).join(' · ')}</div>
+                    {p.authors&&<div style={{color:T.mu,fontSize:11,marginTop:1}}>{p.authors.slice(0,80)}{p.authors.length>80?'…':''}</div>}
+                  </div>
+                ))}
+                {risProposals.length>8&&(
+                  <div style={{fontSize:11,color:T.mu,padding:'4px 4px'}}>+{risProposals.length-8} more papers</div>
+                )}
+              </div>
+              <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+                <Btn onClick={()=>{setShowRisImport(false);setRisProposals([]);}}>Cancel</Btn>
+                <Btn variant="s" onClick={importAllRis} disabled={risSaving} style={{background:T.gr,borderColor:T.gr}}>
+                  {risSaving?<Spinner size={13}/>:`Import all ${risProposals.length} →`}
+                </Btn>
               </div>
             </>
           )}

@@ -8,6 +8,7 @@ import Av from '../components/Av';
 import LibraryFolderSidebar from './LibraryFolderSidebar';
 import LibraryPaperSearch   from './LibraryPaperSearch';
 import LibraryItemCard      from './LibraryItemCard';
+import LibraryRisImporter   from './LibraryRisImporter';
 
 export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavigateToPost }) {
   const [folders,        setFolders]        = useState([]);
@@ -17,6 +18,7 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
   const [savedPosts,     setSavedPosts]     = useState([]);
   const [showSearch,     setShowSearch]     = useState(false);
   const [showDOI,        setShowDOI]        = useState(false);
+  const [showRisImport,  setShowRisImport]  = useState(false);
   const [doiInput,       setDoiInput]       = useState('');
   const [doiLoading,     setDoiLoading]     = useState(false);
   const [loading,        setLoading]        = useState(true);
@@ -24,14 +26,15 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
   useEffect(() => { fetchFolders(); fetchBookmarks(); fetchInboxItems(); }, []); // eslint-disable-line
   useEffect(() => { if (activeFolderID && activeFolderID !== '__inbox__') fetchItems(activeFolderID); }, [activeFolderID]);
 
-  const fetchFolders = async () => {
+  const fetchFolders = async (overrideActiveId) => {
     const { data } = await supabase
       .from('library_folders')
       .select('*')
       .eq('user_id', user.id)
       .order('sort_order');
     setFolders(data || []);
-    if (data?.length) setActiveFolderID(data[0].id);
+    if (overrideActiveId) setActiveFolderID(overrideActiveId);
+    else if (data?.length) setActiveFolderID(data[0].id);
     setLoading(false);
   };
 
@@ -268,11 +271,14 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
             {activeFolderID && activeFolderID !== '__inbox__' && (
               <>
                 <div style={{display:'flex', gap:8, marginBottom:14, flexWrap:'wrap'}}>
-                  <Btn onClick={() => { setShowSearch(s => !s); setShowDOI(false); }}>
+                  <Btn onClick={() => { setShowSearch(s => !s); setShowDOI(false); setShowRisImport(false); }}>
                     🔍 Search Europe PMC
                   </Btn>
-                  <Btn onClick={() => { setShowDOI(s => !s); setShowSearch(false); }}>
+                  <Btn onClick={() => { setShowDOI(s => !s); setShowSearch(false); setShowRisImport(false); }}>
                     🔗 Enter DOI
+                  </Btn>
+                  <Btn onClick={() => { setShowRisImport(s => !s); setShowSearch(false); setShowDOI(false); }}>
+                    📑 Import .ris / .bib
                   </Btn>
                   <label style={{cursor:'pointer'}}>
                     <input type="file" accept=".pdf,.doc,.docx,.txt" style={{display:'none'}}
@@ -313,7 +319,20 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
                   </div>
                 )}
 
-                {items.length === 0 && !showSearch && !showDOI && (
+                {showRisImport && (
+                  <LibraryRisImporter
+                    userId={user.id}
+                    folders={folders}
+                    onDone={async (folderId, isNew) => {
+                      setShowRisImport(false);
+                      if (isNew) await fetchFolders(folderId);
+                      else { setActiveFolderID(folderId); fetchItems(folderId); }
+                    }}
+                    onClose={() => setShowRisImport(false)}
+                  />
+                )}
+
+                {items.length === 0 && !showSearch && !showDOI && !showRisImport && (
                   <div style={{textAlign:'center', color:T.mu, padding:'28px 16px', fontSize:13}}>
                     <div style={{fontSize:24, marginBottom:8}}>📭</div>
                     This folder is empty. Add papers above.
