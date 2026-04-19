@@ -22,10 +22,11 @@ export default function PaperPreview({ post, currentUserId, onViewPaper }) {
           : <div style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,marginBottom:5,overflowWrap:"break-word"}}>{post.paper_title}</div>
         }
         {post.paper_authors&&<div style={{fontSize:11,color:T.mu,marginBottom:4}}>{post.paper_authors}</div>}
-        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
-          {post.paper_journal&&<span style={{fontSize:11.5,fontWeight:600,color:T.v}}>{post.paper_journal}</span>}
-          {post.paper_year&&<span style={{fontSize:11,color:T.mu}}>· {post.paper_year}</span>}
-        </div>
+        {(post.paper_citation || post.paper_journal) && (
+          <div style={{fontSize:11.5,color:T.mu,marginBottom:10,lineHeight:1.5}}>
+            {post.paper_citation || post.paper_journal}
+          </div>
+        )}
         <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
           {doiUrl&&(
             <a href={doiUrl} target="_blank" rel="noopener noreferrer"

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { T } from '../lib/constants';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
+import { buildCitationFromEpmc } from '../lib/utils';
 
 const PAGE_SIZE = 10;
 
@@ -104,6 +105,7 @@ export default function LibraryPaperSearch({ onSelect, buttonLabel }) {
     cited_by_count: r.citedByCount || 0,
     is_open_access: r.isOpenAccess === 'Y',
     full_text_url:  r.fullTextUrlList?.fullTextUrl?.[0]?.url || '',
+    citation:       buildCitationFromEpmc(r),
   });
 
   const inputStyle = {

@@ -111,6 +111,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
       paper_abstract: post.paper_abstract,
       paper_authors:  post.paper_authors,
       paper_year:     post.paper_year,
+      paper_citation: post.paper_citation || '',
       link_url:       post.link_url,
       link_title:     post.link_title,
       image_url:      post.image_url,

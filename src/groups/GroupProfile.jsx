@@ -749,11 +749,8 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {pub.journal && (
-                      <span style={{ fontSize: 11, fontWeight: 600, color: T.v }}>{pub.journal}</span>
-                    )}
-                    {pub.year && (
-                      <span style={{ fontSize: 11, color: T.mu }}>· {pub.year}</span>
+                    {(pub.citation || pub.journal) && (
+                      <span style={{ fontSize: 11, color: T.mu }}>{pub.citation || [pub.journal, pub.year].filter(Boolean).join(' · ')}</span>
                     )}
                     {pub.cited_by_count > 0 && (
                       <span style={{ fontSize: 10, background: T.bl2, color: T.bl, padding: '1px 6px', borderRadius: 20, fontWeight: 600 }}>

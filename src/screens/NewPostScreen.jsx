@@ -4,7 +4,7 @@ import { T, AUTO_TAG_ENABLED, EDGE_HEADERS } from '../lib/constants';
 
 const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
 import { getFileCategory } from '../lib/fileUtils';
-import { getCachedTagsByDoi } from '../lib/utils';
+import { getCachedTagsByDoi, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
 import Btn from '../components/Btn';
 import Inp from '../components/Inp';
 import RichTextEditor from '../components/RichTextEditor';
@@ -62,7 +62,8 @@ async function fetchDoiMetadata(doi) {
     const authors = (w.author||[]).slice(0,5).map(a=>`${a.given||''} ${a.family||''}`.trim()).join(', ') + ((w.author||[]).length>5?' et al.':'');
     const abstract= w.abstract || '';
     const doiUrl  = `https://doi.org/${clean}`;
-    return { title, journal, year, authors, abstract, doi: clean, doiUrl };
+    const citation = buildCitationFromCrossRef(w, clean);
+    return { title, journal, year, authors, abstract, doi: clean, doiUrl, citation };
   } catch { return null; }
 }
 
@@ -108,6 +109,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
   const [paperAbstract,setPaperAbstract] = useState('');
   const [paperAuthors,setPaperAuthors]   = useState('');
   const [paperYear,setPaperYear]         = useState('');
+  const [paperCitation,setPaperCitation] = useState('');
   const [doiFetching,setDoiFetching]     = useState(false);
   const [doiFetched,setDoiFetched]       = useState(false);
   const [paperInputMode,setPaperInputMode] = useState('search');
@@ -179,11 +181,12 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
     setDoiFetching(false);
     if(meta) {
       if(!paperTitle)   setPaperTitle(meta.title);
-      if(!paperJournal) setPaperJournal([meta.journal, meta.year].filter(Boolean).join(' · '));
+      if(!paperJournal) setPaperJournal(meta.journal || '');
       if(!paperAuthors) setPaperAuthors(meta.authors);
       setPaperAbstract(meta.abstract);
       setPaperYear(meta.year);
       setPaperDoi(meta.doi);
+      setPaperCitation(meta.citation || '');
       setDoiFetched(true);
     } else {
       setError('Could not find this DOI in CrossRef. Check it and fill in details manually.');
@@ -192,7 +195,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
 
   const resetDoi = () => {
     setPaperDoi(''); setPaperTitle(''); setPaperJournal('');
-    setPaperAuthors(''); setPaperAbstract(''); setPaperYear('');
+    setPaperAuthors(''); setPaperAbstract(''); setPaperYear(''); setPaperCitation('');
     setDoiFetched(false); setError('');
   };
 
@@ -257,16 +260,18 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
     if (doi) {
       setPaperDoi(doi);
       setPaperTitle(title);
-      setPaperJournal([journal, year].filter(Boolean).join(' · '));
+      setPaperJournal(journal);
       setPaperAuthors(authors);
       setPaperAbstract(abstract);
       setPaperYear(year);
+      setPaperCitation(buildCitationFromEpmc(result));
       setDoiFetched(false);
       await handleDoiLookup(doi);
     } else {
       setPaperTitle(title);
-      setPaperJournal([journal, year].filter(Boolean).join(' · '));
+      setPaperJournal(journal);
       setPaperAuthors(authors);
+      setPaperCitation(buildCitationFromEpmc(result));
       setPaperAbstract(abstract);
       setPaperYear(year);
       setDoiFetched(true);
@@ -357,13 +362,14 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
       paper_doi:     paperDoi.trim(),
       paper_abstract:paperAbstract.trim(),
       paper_authors: paperAuthors.trim(),
-      paper_year:    paperYear.trim(),
-      image_url:     fileUrl,
-      file_type:     uploadCategory,
-      file_name:     uploadFile?.name || '',
-      tags:          manualTags.slice(0, 10),
-      tier1:         '',
-      tier2:         [],
+      paper_year:     paperYear.trim(),
+      paper_citation: paperCitation.trim(),
+      image_url:      fileUrl,
+      file_type:      uploadCategory,
+      file_name:      uploadFile?.name || '',
+      tags:           manualTags.slice(0, 10),
+      tier1:          '',
+      tier2:          [],
       visibility,
     }).select('id').single();
     setLoading(false);

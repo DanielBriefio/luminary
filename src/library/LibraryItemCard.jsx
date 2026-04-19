@@ -33,11 +33,8 @@ export default function LibraryItemCard({
       )}
 
       <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:8}}>
-        {item.journal && (
-          <span style={{fontSize:12, fontWeight:600, color:T.v}}>{item.journal}</span>
-        )}
-        {item.year && (
-          <span style={{fontSize:12, color:T.mu}}>· {item.year}</span>
+        {(item.citation || item.journal) && (
+          <span style={{fontSize:12, color:T.mu}}>{item.citation || [item.journal, item.year].filter(Boolean).join(' · ')}</span>
         )}
         {item.cited_by_count > 0 && (
           <span style={{fontSize:10.5, background:T.bl2, color:T.bl,

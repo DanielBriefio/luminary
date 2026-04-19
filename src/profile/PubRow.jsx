@@ -109,7 +109,7 @@ export default function PubRow({ pub, setPubs }) {
         </div>
         {pub.authors&&<div style={{fontSize:11.5,color:T.mu,marginBottom:4}}>{pub.authors}</div>}
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-          {(pub.journal||pub.venue)&&<span style={{fontSize:11.5,fontWeight:600,color:T.v}}>{pub.journal||pub.venue}</span>}
+          {(pub.citation||pub.journal||pub.venue)&&<span style={{fontSize:11.5,color:T.mu}}>{pub.citation||pub.journal||pub.venue}</span>}
           {pub.citations>0&&<span style={{fontSize:10.5,color:T.mu,background:T.s2,borderRadius:10,padding:'1px 7px'}}>{pub.citations} cited</span>}
           {pub.full_text_url&&<a href={pub.full_text_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'#059669',textDecoration:'none',background:'#d1fae5',padding:'2px 8px',borderRadius:10}}>Full Text ↗</a>}
           {pub.doi&&<a href={pub.doi.startsWith('http')?pub.doi:`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:T.v,textDecoration:'none',background:T.v2,padding:'2px 8px',borderRadius:10}}>DOI ↗</a>}

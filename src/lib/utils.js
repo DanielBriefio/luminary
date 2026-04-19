@@ -1,3 +1,41 @@
+const MONTH_ABBREVS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+export function buildCitationFromEpmc(r) {
+  if (!r) return '';
+  const ji     = r.journalInfo || {};
+  const abbrev = ji.journal?.medlineAbbreviation || ji.journal?.isoabbreviation || r.journalTitle || '';
+  const dateStr = ji.dateOfPublication || (r.pubYear ? String(r.pubYear) : '');
+  const volume  = ji.volume || '';
+  const issue   = ji.issue  || '';
+  const pages   = r.pageInfo || '';
+  const doi     = r.doi || '';
+  let cite = abbrev ? abbrev + '.' : '';
+  if (dateStr) cite += ' ' + dateStr;
+  if (volume)  { cite += ';' + volume; if (issue) cite += '(' + issue + ')'; }
+  if (pages)   cite += ':' + pages;
+  if (doi)     cite += '. doi: ' + doi;
+  return cite.trim();
+}
+
+export function buildCitationFromCrossRef(w, doi) {
+  if (!w) return '';
+  const journal = w['short-container-title']?.[0] || w['container-title']?.[0] || '';
+  const dp = w.published?.['date-parts']?.[0]
+    || w['published-print']?.['date-parts']?.[0]
+    || w['published-online']?.['date-parts']?.[0] || [];
+  const year   = dp[0] ? String(dp[0]) : '';
+  const month  = dp[1] ? MONTH_ABBREVS[dp[1] - 1] : '';
+  const volume = w.volume || '';
+  const issue  = w.issue  || '';
+  const pages  = w.page   || '';
+  let cite = journal ? journal + '.' : '';
+  if (year)   { cite += ' ' + year; if (month) cite += ' ' + month; }
+  if (volume) { cite += ';' + volume; if (issue) cite += '(' + issue + ')'; }
+  if (pages)  cite += ':' + pages;
+  if (doi)    cite += '. doi: ' + doi;
+  return cite.trim();
+}
+
 export function timeAgo(ts) {
   const s=Math.floor((Date.now()-new Date(ts))/1000);
   if(s<60)return'just now';if(s<3600)return`${Math.floor(s/60)}m ago`;

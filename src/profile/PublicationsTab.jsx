@@ -166,7 +166,7 @@ ${sectionsHtml}
 }
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
-import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
+import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
 import { typeIcon, typeLabel } from '../lib/pubUtils';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
@@ -187,7 +187,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
   const [importProposals, setImportProposals] = useState([]);
   const [importConfirmed, setImportConfirmed] = useState(new Set());
   const [importRejected,  setImportRejected]  = useState(new Set());
-  const [newPub,    setNewPub]    = useState({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
+  const [newPub,    setNewPub]    = useState({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:'',citation:''});
   const [saving,    setSaving]    = useState(false);
   const [nameVariants, setNameVariants] = useState('');
   // Add-publication panel state
@@ -311,6 +311,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       citations:      r.citedByCount || 0,
       is_open_access: r.isOpenAccess === 'Y',
       full_text_url:  fullTextUrl,
+      citation:       buildCitationFromEpmc(r),
     };
   };
 
@@ -356,7 +357,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       doi:pub.doi, authors:pub.authors, pmid:pub.pmid||'',
       pub_type:pub.pub_type||'journal', venue:pub.venue||'', source:'europepmc',
       citations:pub.citations||0, is_open_access:pub.is_open_access||false,
-      full_text_url:pub.full_text_url||'',
+      full_text_url:pub.full_text_url||'', citation:pub.citation||'',
     }).select().single();
     if(data) setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
   };
@@ -636,6 +637,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         year:    w.published?.['date-parts']?.[0]?.[0]?.toString() || p.year,
         authors: authors || p.authors,
         doi:     clean,
+        citation: buildCitationFromCrossRef(w, clean),
       }));
       setAddSelected(true);
     } catch { setAddSearchError('DOI not found in CrossRef. Try a different DOI or fill in manually.'); }
@@ -655,6 +657,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       doi:     r.doi||'',
       pub_type,
       venue:   '',
+      citation: buildCitationFromEpmc(r),
     });
     setAddSelected(true);
     setAddSearchResults([]);
@@ -668,7 +671,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     setAddAuthor(''); setAddYearFrom(''); setAddYearTo(''); setAddJournal('');
     setShowAddAdv(false); setAddNextCursor(null); setAddHasMore(false); setAddTotal(null);
     setAddDoi(''); setAddDoiFetching(false);
-    setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''});
+    setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:'',citation:''});
   };
 
   const addManual = async () => {
