@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import GroupPostCard from './GroupPostCard';
 import GroupNewPost from './GroupNewPost';
 
-export default function GroupFeed({ groupId, groupName, user, profile, myRole, onViewPaper, onMarkRead }) {
+export default function GroupFeed({ groupId, groupName, user, profile, myRole, onViewPaper, onMarkRead, savedGroupPostIds = new Set(), onSaveToggled }) {
   const [posts,      setPosts]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [showCompose,setShowCompose]= useState(false);
@@ -114,6 +114,8 @@ export default function GroupFeed({ groupId, groupName, user, profile, myRole, o
               myRole={myRole}
               onRefresh={fetchPosts}
               onViewPaper={onViewPaper}
+              isSaved={savedGroupPostIds.has(p.id)}
+              onSaveToggled={onSaveToggled}
             />
           ))}
         </div>

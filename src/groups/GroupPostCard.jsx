@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
@@ -32,11 +32,13 @@ function GranularTags({ tags }) {
   );
 }
 
-export default function GroupPostCard({ post, currentUserId, currentProfile, groupName, myRole, onRefresh, onViewPaper }) {
+export default function GroupPostCard({ post, currentUserId, currentProfile, groupName, myRole, onRefresh, onViewPaper, isSaved = false, onSaveToggled }) {
   const { isMobile } = useWindowSize();
   const [liked,         setLiked]         = useState(post.user_liked || false);
   const [likeCount,     setLikeCount]     = useState(parseInt(post.like_count) || 0);
   const [saving,        setSaving]        = useState(false);
+  const [saved,         setSaved]         = useState(isSaved);
+  useEffect(() => { setSaved(isSaved); }, [isSaved]);
   const [menuOpen,      setMenuOpen]      = useState(false);
   const [editing,       setEditing]       = useState(false);
   const [editText,      setEditText]      = useState(post.content || '');
@@ -157,6 +159,17 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
     await supabase.from('group_post_comments').delete().eq('id', id);
     setComments(c => c.filter(x => x.id !== id));
     setCommCount(n => Math.max(0, n - 1));
+  };
+
+  const toggleSave = async () => {
+    const next = !saved;
+    setSaved(next);
+    if (next) {
+      await supabase.from('saved_posts').insert({ user_id: currentUserId, group_post_id: post.id });
+    } else {
+      await supabase.from('saved_posts').delete().eq('user_id', currentUserId).eq('group_post_id', post.id);
+    }
+    onSaveToggled?.();
   };
 
   const saveTagEdits = async () => {
@@ -336,7 +349,14 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
             </svg>
             {(!isMobile || commCount > 0) && <span>{commCount}</span>}
           </button>
-          <div style={{ marginLeft: 'auto' }}>
+          <button onClick={toggleSave} title={saved ? 'Unsave' : 'Save post'}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '6px 8px' : '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: saved ? T.v : T.mu, marginLeft: 'auto' }}>
+            <svg width={isMobile ? 14 : 16} height={isMobile ? 14 : 16} viewBox="0 0 24 24"
+              fill={saved ? T.v : 'none'} stroke={saved ? T.v : T.mu} strokeWidth="1.8">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+          <div>
             {reposted ? (
               <span style={{ fontSize: 11, color: T.gr, fontWeight: 600 }}>✓ Shared publicly</span>
             ) : repostConfirm ? (

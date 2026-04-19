@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
@@ -35,7 +35,7 @@ function GranularTags({ tags, onTagClick }) {
   );
 }
 
-export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup }) {
+export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup, isSaved = false, onSaveToggled }) {
   const { isMobile } = useWindowSize();
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
@@ -43,6 +43,8 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   const [repostCount,setRepostCount] = useState(parseInt(post.repost_count)||0);
   const [reposting,setReposting]     = useState(false);
   const [saving,setSaving]           = useState(false);
+  const [saved,setSaved]             = useState(isSaved);
+  useEffect(() => { setSaved(isSaved); }, [isSaved]);
   const [menuOpen,setMenuOpen]       = useState(false);
   const [editing,setEditing]       = useState(false);
   const [editText,setEditText]     = useState(post.content||'');
@@ -147,6 +149,17 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
     await supabase.from('comments').delete().eq('id', id);
     setComments(c => c.filter(x => x.id !== id));
     setCommCount(n => Math.max(0, n - 1));
+  };
+
+  const toggleSave = async () => {
+    const next = !saved;
+    setSaved(next);
+    if (next) {
+      await supabase.from('saved_posts').insert({ user_id: currentUserId, post_id: post.id });
+    } else {
+      await supabase.from('saved_posts').delete().eq('user_id', currentUserId).eq('post_id', post.id);
+    }
+    onSaveToggled?.();
   };
 
   const saveTagEdits = async () => {
@@ -335,7 +348,14 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             </svg>
             {(!isMobile || repostCount > 0) && <span>{repostCount}</span>}
           </button>
-          <button onClick={()=>setShowShare(true)} style={{display:'flex', alignItems:'center', gap:4, padding:isMobile?'6px 8px':'8px 10px', border:'none', background:'transparent', cursor:'pointer', color:T.mu, fontFamily:'inherit', fontSize:isMobile?12:13, marginLeft:'auto'}}>
+          <button onClick={toggleSave} title={saved ? 'Unsave' : 'Save post'}
+            style={{display:'flex', alignItems:'center', justifyContent:'center', padding:isMobile?'6px 8px':'8px 10px', border:'none', background:'transparent', cursor:'pointer', color:saved?T.v:T.mu, marginLeft:'auto'}}>
+            <svg width={isMobile?14:16} height={isMobile?14:16} viewBox="0 0 24 24"
+              fill={saved ? T.v : 'none'} stroke={saved ? T.v : T.mu} strokeWidth="1.8">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+          <button onClick={()=>setShowShare(true)} style={{display:'flex', alignItems:'center', gap:4, padding:isMobile?'6px 8px':'8px 10px', border:'none', background:'transparent', cursor:'pointer', color:T.mu, fontFamily:'inherit', fontSize:isMobile?12:13}}>
             <svg width={isMobile?15:16} height={isMobile?15:16} viewBox="0 0 24 24" fill="none" stroke={T.mu} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
               <polyline points="16 6 12 2 8 6"/>

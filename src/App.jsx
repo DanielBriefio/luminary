@@ -25,6 +25,7 @@ import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
 import PublicGroupProfileScreen from './groups/PublicGroupProfileScreen';
+import LibraryScreen from './library/LibraryScreen';
 
 import OrcidImporter from './profile/OrcidImporter';
 
@@ -92,6 +93,8 @@ export default function App() {
   const [groupInviteToken,   setGroupInviteToken]   = useState('');
   const [joinToast,          setJoinToast]          = useState('');
   const [showDrawer,         setShowDrawer]         = useState(false);
+  const [savedPostIds,       setSavedPostIds]       = useState(new Set());
+  const [savedGroupPostIds,  setSavedGroupPostIds]  = useState(new Set());
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -192,6 +195,19 @@ export default function App() {
     const interval = setInterval(fetchGroupUnreadCount, 60000);
     return () => clearInterval(interval);
   }, [session, fetchGroupUnreadCount]);
+
+  // Saved post IDs — fetched once on login, refreshed after save/unsave
+  const fetchSavedIds = useCallback(async () => {
+    if (!session?.user) return;
+    const { data } = await supabase
+      .from('saved_posts')
+      .select('post_id, group_post_id')
+      .eq('user_id', session.user.id);
+    setSavedPostIds(new Set((data||[]).map(r=>r.post_id).filter(Boolean)));
+    setSavedGroupPostIds(new Set((data||[]).map(r=>r.group_post_id).filter(Boolean)));
+  }, [session]);
+
+  useEffect(() => { fetchSavedIds(); }, [fetchSavedIds]);
 
   // Invite codes
   useEffect(()=>{
@@ -361,12 +377,13 @@ export default function App() {
 
   const user=session.user;
   const screens={
-    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
+    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds}/>,
     explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
+    library:      <LibraryScreen user={user} onSaveToggled={fetchSavedIds}/>,
     groups: activeGroupId
-      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount}/>
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedGroupPostIds={savedGroupPostIds} onSaveToggled={fetchSavedIds}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
@@ -669,7 +686,7 @@ export default function App() {
               <div style={{flex:1, overflowY:'auto', padding:'12px 0'}}>
                 {[
                   {id:'network',       label:'My Network', icon:'🌐'},
-                  {id:'library',       label:'Library',    icon:'📚', badge:'Coming soon', disabled:true},
+                  {id:'library',       label:'Library',    icon:'📚'},
                   {id:'messages',      label:'Messages',   icon:'💬', count:unreadMessages},
                   {id:'notifications', label:'Alerts',     icon:'🔔', count:unreadNotifs},
                 ].map(item=>(

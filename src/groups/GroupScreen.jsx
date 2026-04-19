@@ -5,6 +5,7 @@ import Spinner from '../components/Spinner';
 import GroupFeed from './GroupFeed';
 import GroupMembers from './GroupMembers';
 import GroupProfile from './GroupProfile';
+import GroupLibrary from './GroupLibrary';
 
 // Shown when a non-member tries to view a closed group
 function JoinRequestPanel({ group, user, onBack, onJoined }) {
@@ -134,7 +135,7 @@ function GroupAvatar({ group, size = 48 }) {
   );
 }
 
-export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup, onMarkRead }) {
+export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup, onMarkRead, savedGroupPostIds = new Set(), onSaveToggled }) {
   const [group,      setGroup]      = useState(null);
   const [myRole,     setMyRole]     = useState(null);
   const [activeTab,  setActiveTab]  = useState('feed');
@@ -197,6 +198,7 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
     ...(!isAlumni ? [{ id: 'feed',    icon: '📋', label: 'Feed' }] : []),
     { id: 'members', icon: '👥', label: 'Members' },
     { id: 'profile', icon: '🏛️', label: 'Profile' },
+    { id: 'library', icon: '📚', label: 'Library' },
   ];
 
   const activeMemberCount = stats?.active_member_count || 0;
@@ -304,6 +306,8 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
             myRole={myRole}
             onViewPaper={onViewPaper}
             onMarkRead={onMarkRead}
+            savedGroupPostIds={savedGroupPostIds}
+            onSaveToggled={onSaveToggled}
           />
         )}
         {activeTab === 'members' && (
@@ -324,6 +328,14 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
             onGroupUpdate={fetchGroup}
             onViewGroup={onViewGroup}
             onSwitchTab={setActiveTab}
+          />
+        )}
+        {activeTab === 'library' && (
+          <GroupLibrary
+            groupId={groupId}
+            user={user}
+            myRole={myRole}
+            onStatsChanged={fetchGroup}
           />
         )}
       </div>
