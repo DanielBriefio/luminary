@@ -2,11 +2,9 @@ export const AUTO_TAG_ENABLED = true;
 
 // ── ORCID OAuth ────────────────────────────────────────────────────────────────
 // Client ID is public (like an API key). Secret stays in Supabase secrets only.
-// Switch to 'https://orcid.org' and the production client ID for production.
-export const ORCID_CLIENT_ID    = '0009-0000-2734-0492'; // replace before testing
-export const ORCID_AUTHORIZE_URL = 'https://sandbox.orcid.org/oauth/authorize'; // sandbox
-// Production: export const ORCID_AUTHORIZE_URL = 'https://orcid.org/oauth/authorize';
-export const ORCID_REDIRECT_URI = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/orcid-callback';
+export const ORCID_CLIENT_ID     = 'APP-1BL4ASN7GRKJSFA0';
+export const ORCID_AUTHORIZE_URL = 'https://orcid.org/oauth/authorize';
+export const ORCID_REDIRECT_URI  = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/orcid-callback';
 
 export const T = {
   bg:"#f2f3fb",w:"#fff",s2:"#f7f8fe",s3:"#eef0fc",bdr:"#e3e5f5",
