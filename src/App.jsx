@@ -91,6 +91,7 @@ export default function App() {
   const [orcidAuthError,     setOrcidAuthError]     = useState('');
   const [groupInviteToken,   setGroupInviteToken]   = useState('');
   const [joinToast,          setJoinToast]          = useState('');
+  const [showDrawer,         setShowDrawer]         = useState(false);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -483,10 +484,20 @@ export default function App() {
             <div style={{padding:"16px 14px 14px",borderBottom:`1px solid ${T.bdr}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div style={{fontFamily:"'DM Serif Display',serif",fontSize:21}}>Lumi<span style={{color:T.v}}>nary</span></div>
               {profile?.profile_slug && (
-                <button onClick={()=>setShowCardQR(true)} title="Share my card"
+                <button onClick={()=>setShowCardQR(true)} title="Share my contact card"
                   style={{width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:7,color:T.mu}}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm9-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm9 0h2v2h-2zm0 4h2v2h-2zm4-4h2v2h-2zm0 4h2v2h-2zm-2 2h2v-2h-2zm-2-6h2v2h-2z"/>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <rect x="5" y="5" width="3" height="3" fill="currentColor" stroke="none"/>
+                    <rect x="16" y="5" width="3" height="3" fill="currentColor" stroke="none"/>
+                    <rect x="5" y="16" width="3" height="3" fill="currentColor" stroke="none"/>
+                    <line x1="14" y1="14" x2="17" y2="14"/>
+                    <line x1="17" y1="14" x2="17" y2="17"/>
+                    <line x1="14" y1="17" x2="14" y2="21"/>
+                    <line x1="17" y1="17" x2="21" y2="17"/>
+                    <line x1="21" y1="14" x2="21" y2="21"/>
                   </svg>
                 </button>
               )}
@@ -564,60 +575,157 @@ export default function App() {
           </div>
         )}
 
-        {/* Main content */}
-        <div style={{
-          flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:T.bg,
-          // On mobile, reserve space for the fixed bottom nav
-          paddingBottom: isMobile ? 60 : 0,
-        }}>
-          {/* Mobile header — logo + inbox icon + sign out */}
-          {isMobile && (
-            <div style={{
-              display:"flex", alignItems:"center", justifyContent:"space-between",
-              padding:"10px 16px", background:T.w, borderBottom:`1px solid ${T.bdr}`,
+        {/* Mobile fixed top bar */}
+        {isMobile && (
+          <div style={{
+            position:'fixed', top:0, left:0, right:0,
+            height:52, background:T.w,
+            borderBottom:`1px solid ${T.bdr}`,
+            display:'flex', alignItems:'center',
+            padding:'0 12px', zIndex:100, gap:8,
+          }}>
+            <button onClick={()=>setShowDrawer(true)} style={{
+              width:36, height:36, border:'none',
+              background:'transparent', cursor:'pointer',
+              display:'flex', flexDirection:'column',
+              alignItems:'center', justifyContent:'center', gap:5,
               flexShrink:0,
             }}>
-              <div style={{fontFamily:"'DM Serif Display',serif",fontSize:19}}>
-                Lumi<span style={{color:T.v}}>nary</span>
+              {[0,1,2].map(i=>(
+                <div key={i} style={{width:20, height:2, background:T.text, borderRadius:2}}/>
+              ))}
+            </button>
+            <div style={{flex:1, textAlign:'center', fontFamily:"'DM Serif Display',serif", fontSize:20, fontWeight:400}}>
+              Lumi<span style={{color:T.v}}>nary</span>
+            </div>
+            <button onClick={()=>{setUnreadNotifs(0);setScreen('notifications');}} style={{
+              position:'relative', width:36, height:36,
+              border:'none', background:'transparent', cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke={screen==='notifications'?T.v:T.mu} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              {unreadNotifs>0 && (
+                <span style={{position:'absolute', top:6, right:5, width:8, height:8, borderRadius:'50%', background:T.ro}}/>
+              )}
+            </button>
+            <button onClick={()=>setScreen('messages')} style={{
+              position:'relative', width:36, height:36,
+              border:'none', background:'transparent', cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke={screen==='messages'?T.v:T.mu} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              {unreadMessages>0 && (
+                <span style={{position:'absolute', top:6, right:5, width:8, height:8, borderRadius:'50%', background:T.ro}}/>
+              )}
+            </button>
+            {profile?.profile_slug && (
+              <button onClick={()=>setShowCardQR(true)} title="Share my contact card" style={{
+                width:36, height:36, border:'none', background:'transparent',
+                cursor:'pointer', display:'flex', alignItems:'center',
+                justifyContent:'center', color:T.mu, flexShrink:0,
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.mu} strokeWidth="1.8">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/>
+                  <rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/>
+                  <rect x="5" y="5" width="3" height="3" fill={T.mu} stroke="none"/>
+                  <rect x="16" y="5" width="3" height="3" fill={T.mu} stroke="none"/>
+                  <rect x="5" y="16" width="3" height="3" fill={T.mu} stroke="none"/>
+                  <line x1="14" y1="14" x2="17" y2="14"/>
+                  <line x1="17" y1="14" x2="17" y2="17"/>
+                  <line x1="14" y1="17" x2="14" y2="21"/>
+                  <line x1="17" y1="17" x2="21" y2="17"/>
+                  <line x1="21" y1="14" x2="21" y2="21"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Hamburger drawer */}
+        {showDrawer && isMobile && (
+          <>
+            <div onClick={()=>setShowDrawer(false)} style={{position:'fixed', inset:0, background:'rgba(0,0,0,.4)', zIndex:200}}/>
+            <div style={{
+              position:'fixed', top:0, left:0, bottom:0,
+              width:280, background:T.w, zIndex:201,
+              display:'flex', flexDirection:'column',
+              boxShadow:'4px 0 24px rgba(0,0,0,.15)',
+            }}>
+              <div style={{padding:'48px 20px 20px', borderBottom:`1px solid ${T.bdr}`, display:'flex', alignItems:'center', gap:12}}>
+                <Av size={44} color={profile?.avatar_color} name={profile?.name} url={profile?.avatar_url||''}/>
+                <div>
+                  <div style={{fontSize:14, fontWeight:700}}>{profile?.name}</div>
+                  <div style={{fontSize:12, color:T.mu}}>{profile?.title}</div>
+                </div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                {/* Inbox icon with unread count */}
-                <button onClick={()=>setScreen('messages')} title="Messages"
-                  style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",height:36,border:"none",
-                    background:screen==='messages'?T.v2:(unreadMessages>0?T.ro2:"transparent"),
-                    borderRadius:9,cursor:"pointer",color:screen==='messages'?T.v:(unreadMessages>0?T.ro:T.mu)}}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2"/>
-                    <polyline points="2,4 12,13 22,4"/>
-                  </svg>
-                  {unreadMessages>0 && (
-                    <span style={{fontSize:12,fontWeight:700,lineHeight:1}}>
-                      {unreadMessages>99?"99+":unreadMessages}
-                    </span>
-                  )}
-                </button>
-                {/* Card QR button — mobile */}
-                {profile?.profile_slug && (
-                  <button onClick={()=>setShowCardQR(true)} title="Share my card"
-                    style={{width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",border:"none",background:"transparent",cursor:"pointer",borderRadius:9,color:T.mu}}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm9-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm9 0h2v2h-2zm0 4h2v2h-2zm4-4h2v2h-2zm0 4h2v2h-2zm-2 2h2v-2h-2zm-2-6h2v2h-2z"/>
-                    </svg>
+              <div style={{flex:1, overflowY:'auto', padding:'12px 0'}}>
+                {[
+                  {id:'network',       label:'My Network', icon:'🌐'},
+                  {id:'library',       label:'Library',    icon:'📚', badge:'Coming soon', disabled:true},
+                  {id:'messages',      label:'Messages',   icon:'💬', count:unreadMessages},
+                  {id:'notifications', label:'Alerts',     icon:'🔔', count:unreadNotifs},
+                ].map(item=>(
+                  <button key={item.id}
+                    onClick={()=>{
+                      if(item.disabled) return;
+                      if(item.id==='notifications') setUnreadNotifs(0);
+                      setScreen(item.id);
+                      setShowDrawer(false);
+                    }}
+                    style={{
+                      width:'100%', padding:'13px 20px',
+                      border:'none', background:'transparent',
+                      cursor:item.disabled?'default':'pointer',
+                      display:'flex', alignItems:'center', gap:14,
+                      fontFamily:'inherit', opacity:item.disabled?0.4:1,
+                    }}>
+                    <span style={{fontSize:18, width:24}}>{item.icon}</span>
+                    <span style={{fontSize:14, fontWeight:500, flex:1, textAlign:'left', color:T.text}}>{item.label}</span>
+                    {item.badge && (
+                      <span style={{fontSize:10, background:T.am2, color:T.am, padding:'2px 7px', borderRadius:20, fontWeight:600}}>{item.badge}</span>
+                    )}
+                    {item.count>0 && (
+                      <span style={{fontSize:10, background:T.v, color:'#fff', padding:'2px 7px', borderRadius:20, fontWeight:700}}>{item.count}</span>
+                    )}
                   </button>
-                )}
-                <button onClick={signOut} title="Sign out"
-                  style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:9}}>
-                  ↩
+                ))}
+              </div>
+              <div style={{padding:'12px 0', borderTop:`1px solid ${T.bdr}`}}>
+                <button onClick={()=>{setShowDrawer(false); setShowSettings(true);}}
+                  style={{width:'100%', padding:'13px 20px', border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', gap:14, fontFamily:'inherit'}}>
+                  <span style={{fontSize:18, width:24}}>⚙️</span>
+                  <span style={{fontSize:14, fontWeight:500, color:T.text}}>Settings</span>
+                </button>
+                <button onClick={()=>supabase.auth.signOut()}
+                  style={{width:'100%', padding:'13px 20px', border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', gap:14, fontFamily:'inherit'}}>
+                  <span style={{fontSize:18, width:24}}>👋</span>
+                  <span style={{fontSize:14, fontWeight:500, color:T.ro}}>Sign out</span>
                 </button>
               </div>
             </div>
-          )}
+          </>
+        )}
+
+        {/* Main content */}
+        <div style={{
+          flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:T.bg,
+          paddingBottom: isMobile ? 60 : 0,
+          paddingTop: isMobile ? 52 : 0,
+        }}>
           {screens[screen]||screens.feed}
         </div>
 
         {/* Bottom nav — mobile only */}
         {isMobile && (
-          <BottomNav screen={screen} setScreen={(s)=>{ if(s==='notifs') setUnreadNotifs(0); setScreen(s); }} unreadNotifs={unreadNotifs}/>
+          <BottomNav screen={screen} setScreen={(s)=>{ if(s==='groups') setActiveGroupId(null); setScreen(s); }} groupUnreadCount={groupUnreadCount}/>
         )}
       </div>
     </>

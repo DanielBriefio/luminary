@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T } from '../lib/constants';
+import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import { useWindowSize } from '../lib/useWindowSize';
 import Av from '../components/Av';
-import Bdg from '../components/Bdg';
+import Btn from '../components/Btn';
 import FollowBtn from '../components/FollowBtn';
 import SafeHtml from '../components/SafeHtml';
 import FilePreview from '../components/FilePreview';
@@ -12,6 +12,28 @@ import PaperPreview from '../components/PaperPreview';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
+
+function GranularTags({ tags, onTagClick }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? tags : tags.slice(0, 3);
+  const hidden  = tags.length - 3;
+  return (
+    <div style={{display:'flex', gap:4, flexWrap:'wrap', marginTop:3}}>
+      {visible.map(tag => (
+        <span key={tag} onClick={() => onTagClick && onTagClick(tag)}
+          style={{fontSize:10, color:T.mu, padding:'1px 7px', borderRadius:20, background:T.s2, border:`1px solid ${T.bdr}`, cursor:'pointer'}}>
+          #{tag}
+        </span>
+      ))}
+      {!expanded && hidden > 0 && (
+        <span onClick={() => setExpanded(true)}
+          style={{fontSize:10, color:T.v, padding:'1px 7px', borderRadius:20, background:T.v2, border:`1px solid rgba(108,99,255,.15)`, cursor:'pointer', fontWeight:600}}>
+          +{hidden} more
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup }) {
   const { isMobile } = useWindowSize();
@@ -38,9 +60,12 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   const [commCount, setCommCount]  = useState(parseInt(post.comment_count)||0);
   const commInputRef = useRef(null);
 
+  const [editingTags, setEditingTags] = useState(false);
+  const [editTier1,   setEditTier1]   = useState(post.tier1 || '');
+  const [editTier2,   setEditTier2]   = useState(post.tier2 || []);
+  const [editTags,    setEditTags]    = useState(post.tags  || []);
+
   const isOwner = currentUserId && currentUserId === post.user_id;
-  const typeColor={text:"v",paper:"v",photo:"t",audio:"r",link:"a",tip:"g"};
-  const typeLabel={text:"Post",paper:"Paper",photo:"Photo",audio:"Audio",link:"Link",tip:"Tip"};
 
   const goToProfile = (userId, slug) => {
     if (onViewUser && userId) { onViewUser(userId); return; }
@@ -124,6 +149,12 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
     setCommCount(n => Math.max(0, n - 1));
   };
 
+  const saveTagEdits = async () => {
+    await supabase.from('posts').update({ tier1: editTier1, tier2: editTier2, tags: editTags }).eq('id', post.id);
+    setEditingTags(false);
+    onRefresh && onRefresh();
+  };
+
   if (deleted) return null;
 
   return (
@@ -152,7 +183,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
         </div>
       )}
 
-      <div style={{padding:16,position:"relative"}}>
+      <div style={{padding: isMobile ? '10px 12px' : 16, position:"relative"}}>
 
         <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
           <div onClick={()=>goToProfile(post.user_id,post.author_slug)} style={{cursor:"pointer",flexShrink:0}}>
@@ -161,7 +192,6 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           <div style={{flex:1}}>
             <div style={{fontWeight:700,fontSize:12.5,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
               <span onClick={()=>goToProfile(post.user_id,post.author_slug)} style={{cursor:"pointer",color:T.v}}>{post.author_name||"Researcher"}</span>
-              <Bdg color={typeColor[post.post_type]||"v"}>{typeLabel[post.post_type]||"Post"}</Bdg>
               {post.author_identity_tier2&&(
                 <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.2)`}}>
                   {post.author_identity_tier2}
@@ -192,6 +222,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
                     {!confirmDelete?(
                       <>
                         <button onClick={()=>{setEditing(true);setMenuOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.text,textAlign:"left"}}>✏️ Edit post</button>
+                        <button onClick={()=>{setEditingTags(true);setMenuOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.text,textAlign:"left"}}>🏷️ Edit tags</button>
                         <div style={{height:1,background:T.bdr,margin:"0 10px"}}/>
                         <button onClick={()=>setConfirmDelete(true)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.ro,textAlign:"left"}}>🗑️ Delete post</button>
                       </>
@@ -233,72 +264,85 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
         {post.image_url&&<FilePreview url={post.image_url} fileType={post.file_type||'image'} fileName={post.file_name}/>}
         {post.post_type==='paper'&&post.paper_title&&!hidePaperDetails&&<PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper}/>}
 
-        {/* ── Taxonomy tags ── */}
-        {(post.tier1 || post.tier2?.length > 0 || post.tags?.length > 0) && (
-          <div style={{marginTop:10,paddingTop:8,borderTop:`1px solid ${T.bdr}`}}>
-            {post.tier1 && (
-              <span style={{
-                fontSize:10.5, fontWeight:600,
-                padding:'2px 9px', borderRadius:20,
-                background:'#f1f0ff', color:'#5b52cc',
-                border:'1px solid rgba(108,99,255,.15)',
-                display:'inline-block', marginBottom:5,
-              }}>
-                {post.tier1}
-              </span>
-            )}
+        {/* Taxonomy tags — hidden on mobile */}
+        {!isMobile && (post.tier2?.length > 0 || post.tags?.length > 0) && !editingTags && (
+          <div style={{marginTop:8, paddingTop:6, borderTop:`1px solid ${T.bdr}`}}>
             {post.tier2?.length > 0 && (
-              <div style={{display:'flex', gap:5, flexWrap:'wrap', marginBottom:5}}>
+              <div style={{display:'flex', gap:4, flexWrap:'wrap', marginBottom:4}}>
                 {post.tier2.map(t => (
-                  <span key={t}
-                    onClick={() => onTagClick && onTagClick(t)}
-                    style={{
-                      fontSize:11.5, fontWeight:600,
-                      padding:'3px 10px', borderRadius:20,
-                      background:T.v2, color:T.v,
-                      border:`1px solid rgba(108,99,255,.2)`,
-                      cursor: onTagClick ? 'pointer' : 'default',
-                    }}>
+                  <span key={t} onClick={() => onTagClick && onTagClick(t)}
+                    style={{fontSize:10.5, fontWeight:600, padding:'1px 8px', borderRadius:20, background:T.v2, color:T.v, border:`1px solid rgba(108,99,255,.15)`, cursor:'pointer'}}>
                     {t}
                   </span>
                 ))}
               </div>
             )}
-            {post.tags?.length > 0 && (
-              <div style={{display:'flex', gap:5, flexWrap:'wrap'}}>
-                {post.tags.map(tag => (
-                  <span key={tag}
-                    onClick={() => onTagClick && onTagClick(tag)}
-                    style={{
-                      fontSize:11, color:T.mu,
-                      padding:'2px 8px', borderRadius:20,
-                      background:T.s2, border:`1px solid ${T.bdr}`,
-                      cursor: onTagClick ? 'pointer' : 'default',
-                    }}>
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
+            {post.tags?.length > 0 && <GranularTags tags={post.tags} onTagClick={onTagClick}/>}
           </div>
         )}
 
-        <div style={{display:"flex",alignItems:"center",gap:isMobile?4:8,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.bdr}`}}>
-          <button onClick={toggleLike} style={{fontSize:12,color:liked?T.ro:T.mu,cursor:"pointer",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,background:liked?T.ro2:"transparent",border:"none",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>
-            {liked?"❤️":"🤍"} {likeCount}
+        {/* Inline tag editor */}
+        {editingTags && (
+          <div style={{background:T.s2, borderRadius:10, padding:12, marginTop:8}}>
+            <div style={{fontSize:12, fontWeight:600, marginBottom:6, color:T.mu}}>
+              Discipline: {editTier1 || 'Not set'}
+            </div>
+            <select value={editTier1} onChange={e=>{setEditTier1(e.target.value); setEditTier2([]);}}
+              style={{width:'100%', padding:'6px 10px', borderRadius:8, border:`1.5px solid ${T.bdr}`, background:T.w, fontSize:12, fontFamily:'inherit', marginBottom:8, color:T.text}}>
+              <option value="">Select discipline…</option>
+              {TIER1_LIST.map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+            {editTier1 && (
+              <div style={{display:'flex', gap:5, flexWrap:'wrap', marginBottom:8}}>
+                {getTier2(editTier1).map(t=>(
+                  <button key={t} onClick={()=>setEditTier2(prev=>prev.includes(t)?prev.filter(x=>x!==t):prev.length<3?[...prev,t]:prev)}
+                    style={{padding:'2px 9px', borderRadius:20, cursor:'pointer', fontSize:11.5, fontFamily:'inherit', border:`1.5px solid ${editTier2.includes(t)?T.v:T.bdr}`, background:editTier2.includes(t)?T.v2:T.w, color:editTier2.includes(t)?T.v:T.text}}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{fontSize:11.5, color:T.mu, marginBottom:4}}>Specific tags (comma separated):</div>
+            <input value={editTags.join(', ')} onChange={e=>setEditTags(e.target.value.split(',').map(t=>t.trim()).filter(Boolean))}
+              placeholder="e.g. p53_mutation, CRISPR_cas9"
+              style={{width:'100%', padding:'6px 10px', borderRadius:8, border:`1.5px solid ${T.bdr}`, background:T.w, fontSize:12, fontFamily:'inherit', marginBottom:8, color:T.text, boxSizing:'border-box'}}/>
+            <div style={{display:'flex', gap:8}}>
+              <Btn onClick={()=>setEditingTags(false)}>Cancel</Btn>
+              <Btn variant="s" onClick={saveTagEdits}>Save</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Action bar */}
+        <div style={{display:'flex', alignItems:'center', gap:isMobile?4:8, marginTop:isMobile?6:10, paddingTop:isMobile?8:10, borderTop:`1px solid ${T.bdr}`}}>
+          <button onClick={toggleLike} style={{display:'flex', alignItems:'center', gap:4, padding:isMobile?'6px 8px':'8px 10px', border:'none', background:'transparent', cursor:'pointer', color:liked?T.ro:T.mu, fontFamily:'inherit', fontSize:isMobile?12:13}}>
+            <svg width={isMobile?15:16} height={isMobile?15:16} viewBox="0 0 24 24" fill={liked?T.ro:'none'} stroke={liked?T.ro:T.mu} strokeWidth="1.8">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            {(!isMobile || likeCount > 0) && <span>{likeCount}</span>}
           </button>
-          <button onClick={toggleComments}
-            style={{fontSize:12,color:showComments?T.v:T.mu,cursor:"pointer",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:showComments?T.v2:"transparent",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>
-            💬 {commCount}
+          <button onClick={toggleComments} style={{display:'flex', alignItems:'center', gap:4, padding:isMobile?'6px 8px':'8px 10px', border:'none', background:'transparent', cursor:'pointer', color:T.mu, fontFamily:'inherit', fontSize:isMobile?12:13}}>
+            <svg width={isMobile?15:16} height={isMobile?15:16} viewBox="0 0 24 24" fill="none" stroke={T.mu} strokeWidth="1.8">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            {(!isMobile || commCount > 0) && <span>{commCount}</span>}
           </button>
           <button onClick={toggleRepost} title={reposted?"Undo repost":"Repost to your followers"}
-            style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:reposted?T.gr:T.mu,cursor:currentUserId?"pointer":"default",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:reposted?T.gr2:"transparent",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            style={{display:'flex', alignItems:'center', gap:4, padding:isMobile?'6px 8px':'8px 10px', border:'none', background:'transparent', cursor:currentUserId?'pointer':'default', color:reposted?T.gr:T.mu, fontFamily:'inherit', fontSize:isMobile?12:13}}>
+            <svg width={isMobile?15:16} height={isMobile?15:16} viewBox="0 0 24 24" fill="none" stroke={reposted?T.gr:T.mu} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+              <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
             </svg>
-            {repostCount}
+            {(!isMobile || repostCount > 0) && <span>{repostCount}</span>}
           </button>
-          <button onClick={()=>setShowShare(true)} style={{fontSize:12,color:T.mu,cursor:"pointer",padding:isMobile?"8px 10px":"3px 9px",borderRadius:20,fontWeight:600,border:"none",background:"transparent",fontFamily:"inherit",minHeight:isMobile?36:undefined}}>↗ Share</button>
+          <button onClick={()=>setShowShare(true)} style={{display:'flex', alignItems:'center', gap:4, padding:isMobile?'6px 8px':'8px 10px', border:'none', background:'transparent', cursor:'pointer', color:T.mu, fontFamily:'inherit', fontSize:isMobile?12:13, marginLeft:'auto'}}>
+            <svg width={isMobile?15:16} height={isMobile?15:16} viewBox="0 0 24 24" fill="none" stroke={T.mu} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+              <polyline points="16 6 12 2 8 6"/>
+              <line x1="12" y1="2" x2="12" y2="15"/>
+            </svg>
+            {!isMobile && <span>Share</span>}
+          </button>
         </div>
       </div>
 
