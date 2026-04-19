@@ -9,6 +9,7 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
   const [stats,         setStats]         = useState(null);
   const [leader,        setLeader]        = useState(null);
   const [collaborators, setCollaborators] = useState([]);
+  const [publications,  setPublications]  = useState([]);
   const [loading,       setLoading]       = useState(true);
 
   // Edit mode
@@ -72,6 +73,23 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       } else {
         setCollaborators([]);
       }
+
+      // Fetch group publications (tagged items across all folders)
+      const { data: folderRows } = await supabase
+        .from('library_folders').select('id').eq('group_id', groupId);
+      if (folderRows?.length) {
+        const folderIds = folderRows.map(f => f.id);
+        const { data: pubRows } = await supabase
+          .from('library_items')
+          .select('*')
+          .in('folder_id', folderIds)
+          .eq('is_group_publication', true)
+          .order('year', { ascending: false });
+        setPublications(pubRows || []);
+      } else {
+        setPublications([]);
+      }
+
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -481,12 +499,12 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
           <SectionLabel>Stats</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {[
-              [stats?.active_member_count || 0, 'Members', 'members'],
-              [stats?.alumni_count || 0,        'Alumni',  'members'],
-              [0,                                'Publications', null],
+              [stats?.active_member_count || 0, 'Members',      'members'],
+              [stats?.alumni_count || 0,         'Alumni',       'members'],
+              [publications.length,              'Publications', 'library'],
             ].map(([count, label, tab]) => (
               <div key={label}
-                onClick={() => tab && onSwitchTab?.('members')}
+                onClick={() => tab && onSwitchTab?.(tab)}
                 style={{
                   background: T.s2, borderRadius: 10, padding: '10px 16px', textAlign: 'center',
                   cursor: tab ? 'pointer' : 'default',
@@ -689,15 +707,71 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
           </div>
         )}
 
-        {/* Publications placeholder */}
+        {/* Group publications */}
         <div style={{ marginBottom: 32 }}>
-          <SectionLabel>Recent publications</SectionLabel>
-          <div style={{
-            background: T.s2, borderRadius: 12, padding: '16px', textAlign: 'center',
-            color: T.mu, fontSize: 12.5, lineHeight: 1.6,
-          }}>
-            Publications will appear here once added to the Group Library.
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              Publications ({publications.length})
+            </div>
+            {publications.length > 0 && (
+              <button onClick={() => onSwitchTab?.('library')} style={{
+                fontSize: 11, color: T.v, fontWeight: 600, border: 'none',
+                background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+              }}>
+                View in Library →
+              </button>
+            )}
           </div>
+          {publications.length === 0 ? (
+            <div style={{
+              background: T.s2, borderRadius: 12, padding: '16px', textAlign: 'center',
+              color: T.mu, fontSize: 12.5, lineHeight: 1.6,
+            }}>
+              No publications yet. Tag papers as "Mark as ours" in the Library to show them here.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {publications.map(pub => (
+                <div key={pub.id} style={{
+                  background: T.s2, borderRadius: 10, padding: '11px 14px',
+                  border: `1px solid ${T.bdr}`,
+                }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.4, marginBottom: 3, color: T.text }}>
+                    {pub.title}
+                  </div>
+                  {pub.authors && (
+                    <div style={{ fontSize: 11, color: T.mu, marginBottom: 3 }}>
+                      {pub.authors.slice(0, 100)}{pub.authors.length > 100 ? '…' : ''}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {pub.journal && (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: T.v }}>{pub.journal}</span>
+                    )}
+                    {pub.year && (
+                      <span style={{ fontSize: 11, color: T.mu }}>· {pub.year}</span>
+                    )}
+                    {pub.cited_by_count > 0 && (
+                      <span style={{ fontSize: 10, background: T.bl2, color: T.bl, padding: '1px 6px', borderRadius: 20, fontWeight: 600 }}>
+                        {pub.cited_by_count} citations
+                      </span>
+                    )}
+                    {pub.is_open_access && (
+                      <span style={{ fontSize: 10, background: T.gr2, color: T.gr, padding: '1px 6px', borderRadius: 20, fontWeight: 700 }}>
+                        Open Access
+                      </span>
+                    )}
+                    {pub.doi && (
+                      <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: T.v, fontWeight: 600, textDecoration: 'none', marginLeft: 'auto' }}>
+                        DOI ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
