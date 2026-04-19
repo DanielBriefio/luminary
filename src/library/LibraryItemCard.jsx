@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { T } from '../lib/constants';
 
 export default function LibraryItemCard({
@@ -9,7 +10,13 @@ export default function LibraryItemCard({
   folders,
   onMoveToFolder,
   onSharePaper,
+  showInlineMove = false,
 }) {
+  const [menuOpen,      setMenuOpen]      = useState(false);
+  const [showMovePicker, setShowMovePicker] = useState(false);
+
+  const hasMenu = !showInlineMove && (onDelete || (folders?.length > 0 && onMoveToFolder));
+
   return (
     <div style={{
       padding:'14px 16px', borderRadius:12,
@@ -101,7 +108,8 @@ export default function LibraryItemCard({
           </button>
         )}
 
-        {folders?.length > 0 && onMoveToFolder && (
+        {/* Unsorted view: inline move select + remove */}
+        {showInlineMove && folders?.length > 0 && onMoveToFolder && (
           <select
             defaultValue=""
             onChange={e => { if (e.target.value) { onMoveToFolder(item, e.target.value); e.target.value = ''; } }}
@@ -115,8 +123,7 @@ export default function LibraryItemCard({
             {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         )}
-
-        {onDelete && (
+        {showInlineMove && onDelete && (
           <button onClick={() => onDelete(item)} style={{
             marginLeft:'auto', fontSize:11.5, color:T.ro,
             border:'none', background:'transparent',
@@ -125,7 +132,100 @@ export default function LibraryItemCard({
             Remove
           </button>
         )}
+
+        {/* Regular folder view: 3-dot menu */}
+        {hasMenu && (
+          <div style={{marginLeft:'auto', position:'relative'}}>
+            {menuOpen && (
+              <div
+                style={{position:'fixed', inset:0, zIndex:9}}
+                onClick={() => setMenuOpen(false)}
+              />
+            )}
+            <button
+              onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); setShowMovePicker(false); }}
+              style={{
+                fontSize:18, color:T.mu, lineHeight:1,
+                border:'none', background:'transparent',
+                cursor:'pointer', padding:'0 4px', letterSpacing:1,
+              }}
+              title="More options"
+            >
+              ···
+            </button>
+            {menuOpen && (
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                  position:'absolute', right:0, top:'calc(100% + 4px)',
+                  background:T.w, border:`1px solid ${T.bdr}`,
+                  borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.12)',
+                  zIndex:10, minWidth:160, overflow:'hidden',
+                }}
+              >
+                {folders?.length > 0 && onMoveToFolder && (
+                  <button
+                    onClick={() => { setShowMovePicker(true); setMenuOpen(false); }}
+                    style={{
+                      display:'block', width:'100%', textAlign:'left',
+                      padding:'9px 14px', fontSize:13, fontFamily:'inherit',
+                      border:'none', background:'transparent', cursor:'pointer',
+                      color:T.text,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = T.s2}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    Move to folder
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    onClick={() => { onDelete(item); setMenuOpen(false); }}
+                    style={{
+                      display:'block', width:'100%', textAlign:'left',
+                      padding:'9px 14px', fontSize:13, fontFamily:'inherit',
+                      border:'none', background:'transparent', cursor:'pointer',
+                      color:T.ro,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = T.ro2}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Move picker — shown after clicking "Move to folder" from 3-dot menu */}
+      {showMovePicker && (
+        <div style={{marginTop:10, display:'flex', gap:8, alignItems:'center'}}>
+          <select
+            autoFocus
+            defaultValue=""
+            onChange={e => { if (e.target.value) { onMoveToFolder(item, e.target.value); setShowMovePicker(false); } }}
+            style={{
+              flex:1, padding:'6px 10px', borderRadius:8,
+              border:`1.5px solid ${T.v}`, fontSize:13,
+              fontFamily:'inherit', outline:'none', color:T.text, background:T.w,
+            }}
+          >
+            <option value="">Select folder…</option>
+            {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+          <button
+            onClick={() => setShowMovePicker(false)}
+            style={{
+              fontSize:12, color:T.mu, border:'none',
+              background:'transparent', cursor:'pointer', fontFamily:'inherit',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   );
 }

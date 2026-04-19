@@ -147,6 +147,12 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
     fetchItems(activeFolderID);
   };
 
+  const moveItemToFolder = async (item, folderId) => {
+    if (folderId === activeFolderID) return;
+    await supabase.from('library_items').update({ folder_id: folderId }).eq('id', item.id);
+    setItems(prev => prev.filter(x => x.id !== item.id));
+  };
+
   const sharePaper = (item) => {
     if (!onNavigateToPost) return;
     sessionStorage.setItem('prefill_paper', JSON.stringify({
@@ -257,6 +263,8 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
             onToggleGroupPublication={toggleGroupPublication}
             isAdmin={isAdmin}
             onSharePaper={onNavigateToPost ? sharePaper : null}
+            folders={folders.filter(f => f.id !== activeFolderID)}
+            onMoveToFolder={canAdd ? moveItemToFolder : null}
           />
         ))}
       </div>

@@ -89,6 +89,12 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
     if (activeFolderID === folderId) fetchItems(folderId);
   };
 
+  const moveItemToFolder = async (item, folderId) => {
+    if (folderId === activeFolderID) return;
+    await supabase.from('library_items').update({ folder_id: folderId }).eq('id', item.id);
+    setItems(prev => prev.filter(x => x.id !== item.id));
+  };
+
   const deleteInboxItem = async (item) => {
     await supabase.from('library_items').delete().eq('id', item.id);
     setInboxItems(prev => prev.filter(x => x.id !== item.id));
@@ -239,6 +245,7 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
                     folders={folders}
                     onMoveToFolder={moveInboxItemToFolder}
                     onSharePaper={onNavigateToPost ? sharePaper : null}
+                    showInlineMove={true}
                   />
                 ))}
               </>
@@ -320,6 +327,8 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
                     onDelete={deleteItem}
                     showGroupPublicationToggle={false}
                     onSharePaper={onNavigateToPost ? sharePaper : null}
+                    folders={folders.filter(f => f.id !== activeFolderID)}
+                    onMoveToFolder={moveItemToFolder}
                   />
                 ))}
               </>
