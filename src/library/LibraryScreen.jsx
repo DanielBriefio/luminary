@@ -9,7 +9,7 @@ import LibraryFolderSidebar from './LibraryFolderSidebar';
 import LibraryPaperSearch   from './LibraryPaperSearch';
 import LibraryItemCard      from './LibraryItemCard';
 
-export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
+export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavigateToPost }) {
   const [folders,        setFolders]        = useState([]);
   const [activeFolderID, setActiveFolderID] = useState(null);
   const [items,          setItems]          = useState([]);
@@ -67,6 +67,20 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
       .eq('user_id', user.id)
       .order('saved_at', { ascending: false });
     setSavedPosts(data || []);
+  };
+
+  const sharePaper = (item) => {
+    if (!onNavigateToPost) return;
+    sessionStorage.setItem('prefill_paper', JSON.stringify({
+      doi:      item.doi      || '',
+      title:    item.title    || '',
+      journal:  item.journal  || '',
+      year:     item.year     || '',
+      authors:  item.authors  || '',
+      abstract: item.abstract || '',
+      citation: item.citation || '',
+    }));
+    onNavigateToPost();
   };
 
   const moveInboxItemToFolder = async (item, folderId) => {
@@ -214,7 +228,7 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
                 {inboxItems.length === 0 ? (
                   <div style={{textAlign:'center', color:T.mu, padding:'28px 16px', fontSize:13}}>
                     <div style={{fontSize:24, marginBottom:8}}>📭</div>
-                    Inbox is empty.
+                    No unsorted papers.
                   </div>
                 ) : inboxItems.map(item => (
                   <LibraryItemCard
@@ -224,6 +238,7 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
                     showGroupPublicationToggle={false}
                     folders={folders}
                     onMoveToFolder={moveInboxItemToFolder}
+                    onSharePaper={onNavigateToPost ? sharePaper : null}
                   />
                 ))}
               </>
@@ -304,6 +319,7 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup }) {
                     item={item}
                     onDelete={deleteItem}
                     showGroupPublicationToggle={false}
+                    onSharePaper={onNavigateToPost ? sharePaper : null}
                   />
                 ))}
               </>

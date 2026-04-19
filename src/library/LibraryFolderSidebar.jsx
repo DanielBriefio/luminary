@@ -42,8 +42,8 @@ export default function LibraryFolderSidebar({
               fontSize:13,
             }}
           >
-            <span style={{fontSize:14, flexShrink:0}}>📥</span>
-            <span style={{flex:1}}>Inbox</span>
+            <span style={{fontSize:14, flexShrink:0}}>📋</span>
+            <span style={{flex:1}}>Unsorted</span>
             {inboxCount > 0 && (
               <span style={{
                 fontSize:10, fontWeight:700, background:T.v, color:'#fff',

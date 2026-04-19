@@ -7,7 +7,7 @@ import LibraryFolderSidebar from '../library/LibraryFolderSidebar';
 import LibraryPaperSearch   from '../library/LibraryPaperSearch';
 import LibraryItemCard      from '../library/LibraryItemCard';
 
-export default function GroupLibrary({ groupId, user, myRole, onStatsChanged }) {
+export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, onNavigateToPost }) {
   const [folders,        setFolders]        = useState([]);
   const [activeFolderID, setActiveFolderID] = useState(null);
   const [items,          setItems]          = useState([]);
@@ -147,6 +147,20 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged }) 
     fetchItems(activeFolderID);
   };
 
+  const sharePaper = (item) => {
+    if (!onNavigateToPost) return;
+    sessionStorage.setItem('prefill_paper', JSON.stringify({
+      doi:      item.doi      || '',
+      title:    item.title    || '',
+      journal:  item.journal  || '',
+      year:     item.year     || '',
+      authors:  item.authors  || '',
+      abstract: item.abstract || '',
+      citation: item.citation || '',
+    }));
+    onNavigateToPost();
+  };
+
   const isOurPublicationsFolder = () => {
     const f = folders.find(f => f.id === activeFolderID);
     return f?.name === "Our Group's Publications";
@@ -242,6 +256,7 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged }) 
             showGroupPublicationToggle={canAdd}
             onToggleGroupPublication={toggleGroupPublication}
             isAdmin={isAdmin}
+            onSharePaper={onNavigateToPost ? sharePaper : null}
           />
         ))}
       </div>

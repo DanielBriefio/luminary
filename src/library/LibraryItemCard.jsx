@@ -8,6 +8,7 @@ export default function LibraryItemCard({
   isAdmin,
   folders,
   onMoveToFolder,
+  onSharePaper,
 }) {
   return (
     <div style={{
@@ -60,6 +61,15 @@ export default function LibraryItemCard({
       )}
 
       <div style={{display:'flex', gap:10, flexWrap:'wrap', alignItems:'center'}}>
+        {onSharePaper && (item.doi || item.title) && (
+          <button onClick={() => onSharePaper(item)} style={{
+            fontSize:11.5, color:T.v, fontWeight:700, cursor:'pointer',
+            border:`1.5px solid ${T.v}`, background:T.v2,
+            padding:'3px 10px', borderRadius:20, fontFamily:'inherit',
+          }}>
+            Share this paper
+          </button>
+        )}
         {item.doi && (
           <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noopener noreferrer"
             style={{fontSize:11.5, color:T.v, fontWeight:600, textDecoration:'none'}}>

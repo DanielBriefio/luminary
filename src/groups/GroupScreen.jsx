@@ -135,7 +135,7 @@ function GroupAvatar({ group, size = 48 }) {
   );
 }
 
-export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup, onMarkRead, savedGroupPostIds = new Set(), onSaveToggled }) {
+export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup, onMarkRead, savedGroupPostIds = new Set(), onSaveToggled, onNavigateToPost }) {
   const [group,      setGroup]      = useState(null);
   const [myRole,     setMyRole]     = useState(null);
   const [activeTab,  setActiveTab]  = useState('feed');
@@ -336,6 +336,7 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
             user={user}
             myRole={myRole}
             onStatsChanged={fetchGroup}
+            onNavigateToPost={onNavigateToPost}
           />
         )}
       </div>
