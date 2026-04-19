@@ -2,11 +2,38 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T, AUTO_TAG_ENABLED } from '../lib/constants';
 import { getFileCategory } from '../lib/fileUtils';
+import { getCachedTagsByDoi } from '../lib/utils';
 import Btn from '../components/Btn';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0YmxxeWxob3N3Y2t2d3dzcGNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDUzOTQsImV4cCI6MjA5MTEyMTM5NH0.lHcaMtZ6a781g8RTVkddupNc7qV1Ll1lvBdtdsaIgOs';
+async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, paperAbstract, paperJournal }) {
+  if (postType !== 'paper') {
+    const textContent = (content || '').replace(/<[^>]+>/g, '').trim();
+    if (textContent.length < 100) { console.log('Auto-tag skipped: content too short'); return; }
+  }
+  if (postType === 'paper' && paperDoi) {
+    const cached = await getCachedTagsByDoi(paperDoi, supabase);
+    if (cached) {
+      await supabase.from('group_posts').update({ tier1: cached.tier1, tier2: cached.tier2, tags: cached.tags }).eq('id', postId);
+      console.log('Auto-tag: used cached tags from DOI');
+      return;
+    }
+  }
+  try {
+    const { data, error } = await supabase.functions.invoke('auto-tag', {
+      body: { content, paperTitle, paperAbstract, paperJournal },
+    });
+    if (error) { console.warn('Auto-tag error:', error); return; }
+    if (!data || data.confidence === 'low') { console.log('Auto-tag skipped: low confidence'); return; }
+    if (data.tier1 || data.tags?.length) {
+      await supabase.from('group_posts').update({ tier1: data.tier1 || '', tier2: data.tier2 || [], tags: data.tags || [] }).eq('id', postId);
+      console.log(`Auto-tag saved: confidence=${data.confidence}`);
+    }
+  } catch(e) {
+    console.warn('Auto-tag failed silently:', e.message);
+  }
+}
 
 async function fetchDoiMeta(doi) {
   const clean = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, '').trim();
@@ -224,24 +251,6 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
 
     const manualTags = tags.split(/[\s,]+/).filter(t => t.trim()).map(t => t.startsWith('#') ? t : `#${t}`);
 
-    // Auto-tag (synchronous, best-effort)
-    let autoTags = [], autoTier1 = '', autoTier2 = [];
-    if (AUTO_TAG_ENABLED) {
-      try {
-        const res = await fetch('https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}` },
-          body: JSON.stringify({ content: plain, paperTitle: paperTitle.trim(), paperJournal: paperJournal.trim(), paperAbstract: paperAbstract.trim() }),
-        });
-        const d = await res.json();
-        if (d?.tags?.length) autoTags = d.tags.map(t => `#${t}`).filter(t => !manualTags.includes(t));
-        if (d?.tier1) autoTier1 = d.tier1;
-        if (d?.tier2?.length) autoTier2 = d.tier2;
-      } catch {}
-    }
-
-    const allTags = [...manualTags, ...autoTags].slice(0, 10);
-
     const { data: post, error: pe } = await supabase.from('group_posts').insert({
       group_id:      groupId,
       user_id:       user.id,
@@ -256,13 +265,25 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
       image_url:     fileUrl,
       file_type:     uploadCategory,
       file_name:     uploadFile?.name || '',
-      tags:          allTags,
-      tier1:         autoTier1,
-      tier2:         autoTier2,
-    }).select().single();
+      tags:          manualTags.slice(0, 10),
+      tier1:         '',
+      tier2:         [],
+    }).select('id').single();
 
     setLoading(false);
     if (pe) { setError(pe.message); return; }
+
+    if (AUTO_TAG_ENABLED && post?.id) {
+      smartAutoTag({
+        postId:        post.id,
+        postType:      resolvedType,
+        content,
+        paperDoi:      paperDoi.trim(),
+        paperTitle:    paperTitle.trim(),
+        paperAbstract: paperAbstract.trim(),
+        paperJournal:  paperJournal.trim(),
+      }).catch(console.warn);
+    }
 
     notifyGroupMembers(groupId, groupName, user.id, post.id).catch(() => {});
     onPostCreated();

@@ -119,3 +119,39 @@ export function deduplicatePubs(incoming, existing) {
   }
   return result;
 }
+
+export async function getCachedTagsByDoi(doi, supabase) {
+  if (!doi?.trim()) return null;
+  const cleanDoi = doi.trim().toLowerCase();
+
+  const { data: post } = await supabase
+    .from('posts')
+    .select('tier1, tier2, tags')
+    .eq('paper_doi', cleanDoi)
+    .not('tier1', 'is', null)
+    .neq('tier1', '')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (post?.tier1) {
+    console.log(`Auto-tag cache hit for DOI: ${cleanDoi}`);
+    return { tier1: post.tier1, tier2: post.tier2 || [], tags: post.tags || [] };
+  }
+
+  const { data: pub } = await supabase
+    .from('publications')
+    .select('tier1, tier2, tags')
+    .eq('doi', cleanDoi)
+    .not('tier1', 'is', null)
+    .neq('tier1', '')
+    .limit(1)
+    .single();
+
+  if (pub?.tier1) {
+    console.log(`Auto-tag cache hit in publications for DOI: ${cleanDoi}`);
+    return { tier1: pub.tier1, tier2: pub.tier2 || [], tags: pub.tags || [] };
+  }
+
+  return null;
+}

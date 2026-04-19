@@ -2,11 +2,46 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T, AUTO_TAG_ENABLED } from '../lib/constants';
 import { getFileCategory } from '../lib/fileUtils';
+import { getCachedTagsByDoi } from '../lib/utils';
 import Btn from '../components/Btn';
 import Inp from '../components/Inp';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import { useWindowSize } from '../lib/useWindowSize';
+
+async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, paperAbstract, paperJournal, userId }) {
+  if (postType !== 'paper') {
+    const textContent = (content || '').replace(/<[^>]+>/g, '').trim();
+    if (textContent.length < 100) { console.log('Auto-tag skipped: content too short'); return; }
+  }
+  if (postType === 'paper' && paperDoi) {
+    const cached = await getCachedTagsByDoi(paperDoi, supabase);
+    if (cached) {
+      await supabase.from('posts').update({ tier1: cached.tier1, tier2: cached.tier2, tags: cached.tags }).eq('id', postId);
+      console.log('Auto-tag: used cached tags from DOI');
+      return;
+    }
+  }
+  try {
+    const { data, error } = await supabase.functions.invoke('auto-tag', {
+      body: { content, paperTitle, paperAbstract, paperJournal },
+    });
+    if (error) { console.warn('Auto-tag error:', error); return; }
+    if (!data || data.confidence === 'low') { console.log('Auto-tag skipped: low confidence'); return; }
+    if (data.tier1 || data.tags?.length) {
+      await supabase.from('posts').update({ tier1: data.tier1 || '', tier2: data.tier2 || [], tags: data.tags || [] }).eq('id', postId);
+      console.log(`Auto-tag saved: confidence=${data.confidence}`);
+      if (postType === 'paper' && paperDoi && data.tier1 && userId) {
+        supabase.from('publications')
+          .update({ tier1: data.tier1, tier2: data.tier2 || [], tags: data.tags || [] })
+          .eq('user_id', userId).eq('doi', paperDoi.toLowerCase())
+          .then(() => {});
+      }
+    }
+  } catch(e) {
+    console.warn('Auto-tag failed silently:', e.message);
+  }
+}
 
 async function fetchDoiMetadata(doi) {
   const clean = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
@@ -269,42 +304,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
 
     const manualTags = tags.split(/[\s,]+/).filter(t=>t.trim()).map(t=>t.startsWith('#')?t:`#${t}`);
 
-    let autoTags = [];
-    let autoTier1 = '';
-    let autoTier2 = [];
-    if (AUTO_TAG_ENABLED) {
-      try {
-        const tagRes = await fetch(
-          'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0YmxxeWxob3N3Y2t2d3dzcGNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDUzOTQsImV4cCI6MjA5MTEyMTM5NH0.lHcaMtZ6a781g8RTVkddupNc7qV1Ll1lvBdtdsaIgOs`,
-            },
-            body: JSON.stringify({
-              content:       plainContent,
-              paperTitle:    paperTitle.trim(),
-              paperJournal:  paperJournal.trim(),
-              paperAbstract: paperAbstract.trim(),
-            }),
-          }
-        );
-        const tagData = await tagRes.json();
-        if (tagData?.tags?.length) {
-          const aiFormatted = tagData.tags.map(t => `#${t}`);
-          autoTags = aiFormatted.filter(t => !manualTags.includes(t));
-        }
-        if (tagData?.tier1) autoTier1 = tagData.tier1;
-        if (tagData?.tier2?.length) autoTier2 = tagData.tier2;
-      } catch(e) {
-        // Auto-tagging is best-effort — never blocks publishing
-      }
-    }
-
-    const allTags = [...manualTags, ...autoTags].slice(0, 10);
-
-    const { error } = await supabase.from('posts').insert({
+    const { data: newPost, error } = await supabase.from('posts').insert({
       user_id:       user.id,
       content:       content.trim(),
       post_type:     resolvedPostType,
@@ -317,13 +317,26 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
       image_url:     fileUrl,
       file_type:     uploadCategory,
       file_name:     uploadFile?.name || '',
-      tags:          allTags,
-      tier1:         autoTier1,
-      tier2:         autoTier2,
+      tags:          manualTags.slice(0, 10),
+      tier1:         '',
+      tier2:         [],
       visibility,
-    });
+    }).select('id').single();
     setLoading(false);
     if(error) { setError(error.message); return; }
+
+    if (AUTO_TAG_ENABLED && newPost?.id) {
+      smartAutoTag({
+        postId:        newPost.id,
+        postType:      resolvedPostType,
+        content,
+        paperDoi:      paperDoi.trim(),
+        paperTitle:    paperTitle.trim(),
+        paperAbstract: paperAbstract.trim(),
+        paperJournal:  paperJournal.trim(),
+        userId:        user.id,
+      }).catch(console.warn);
+    }
     setSuccess(true);
     setContent(''); resetDoi(); clearAttachment(); setTags('');
     setTimeout(() => { setSuccess(false); onPostCreated && onPostCreated(); }, 2000);
