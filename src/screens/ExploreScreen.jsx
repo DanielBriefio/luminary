@@ -217,7 +217,7 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
   const handleAdd = async () => {
     if (!currentUserId || adding || added) return;
     setAdding(true);
-    await supabase.from('library_items').insert({
+    const { error } = await supabase.from('library_items').insert({
       added_by:       currentUserId,
       folder_id:      null,
       title:          cleanTitle(paper.title),
@@ -231,6 +231,7 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
       full_text_url:  paper.fullTextUrlList?.fullTextUrl?.[0]?.url || '',
     });
     setAdding(false);
+    if (error) { console.error('library_items insert error:', error); alert('Failed to add to library: ' + error.message); return; }
     setAdded(true);
   };
 
