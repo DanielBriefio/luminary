@@ -1,537 +1,975 @@
-# Task: Feed discussion improvements
+# Task: Deep Dive posts + Profile completion meter
 
 ## Context
 
 Read CLAUDE.md and PRODUCT_STATE.md first.
 
-Luminary is built around scientific discussion, but the feed currently
-hides conversations — comment counts are the only signal. This task
-makes discussions visible and invites participation directly on the
-post card.
+This task covers two features:
 
-Changes apply to `src/feed/PostCard.jsx` and where relevant to
-`src/groups/GroupPostCard.jsx`. No database changes needed.
+**Part A — Deep Dive posts**
+A toggle in the post composer that upgrades a regular post into a
+richer, structured "Deep Dive" with enhanced formatting tools,
+inline DOI citations, and distinct visual treatment in the feed.
 
----
-
-## Overview of changes
-
-1. Truncate paper abstract to 1 line with Expand/Collapse
-2. Show top comment inline below the action bar
-3. Commenter avatars on the post card
-4. Quick reply box with taxonomy-aware rotating prompts
-5. "X researchers from your field are discussing this" relevance hook
+**Part B — Research Identity Score (profile completion meter)**
+A five-stage milestone tracker on the profile page that measures
+professional credibility and discoverability — not just fields filled.
+Import actions (LinkedIn, ORCID, CV) automatically complete relevant
+milestones.
 
 ---
 
-## Shared setup — fetch top comment and commenters
+# PART A — Deep Dive posts
 
-PostCard already lazy-loads comments when expanded. Add a lightweight
-fetch on mount that gets only the top comment and commenter avatars
-— NOT the full comment thread (that stays lazy):
+## A1 — SQL migration
 
-```javascript
-const [topComment,       setTopComment]       = useState(null);
-const [commenterAvatars, setCommenterAvatars] = useState([]);
-const [showReplyBox,     setShowReplyBox]     = useState(false);
-const [replyText,        setReplyText]        = useState('');
-const [promptIndex,      setPromptIndex]      = useState(
-  () => Math.floor(Math.random() * 10) // random starting prompt
-);
+Create `migration_deepdive.sql`:
 
-useEffect(() => {
-  if (!post.comment_count || post.comment_count === 0) return;
-
-  // Fetch the single most-liked comment (or most recent if no likes)
-  supabase
-    .from('comments')
-    .select(`
-      id, content, created_at,
-      profiles(name, avatar_url, avatar_color)
-    `)
-    .eq('post_id', post.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
-    .then(({ data }) => { if (data) setTopComment(data); });
-
-  // Fetch avatars of up to 3 unique commenters
-  supabase
-    .from('comments')
-    .select('user_id, profiles(name, avatar_url, avatar_color)')
-    .eq('post_id', post.id)
-    .order('created_at', { ascending: true })
-    .limit(10)
-    .then(({ data }) => {
-      if (!data) return;
-      // Deduplicate by user_id — keep first occurrence
-      const seen = new Set();
-      const unique = data.filter(c => {
-        if (seen.has(c.user_id)) return false;
-        seen.add(c.user_id);
-        return true;
-      });
-      setCommenterAvatars(unique.slice(0, 3));
-    });
-}, [post.id, post.comment_count]);
+```sql
+alter table posts
+  add column if not exists is_deep_dive boolean default false;
 ```
 
+Run in Supabase SQL Editor.
+
 ---
 
-## Change 1 — Truncate paper abstract
+## A2 — Deep Dive toggle in NewPostScreen
 
-For paper posts, the abstract currently shows in full which pushes
-everything down. Truncate to 1 line by default with Expand/Collapse.
-
-Find where `post.paper_abstract` (or similar) is rendered on paper posts.
+In `src/screens/NewPostScreen.jsx`, add a toggle at the bottom of
+the text post composer (only visible for text/regular posts,
+not paper posts):
 
 ```javascript
-const [abstractExpanded, setAbstractExpanded] = useState(false);
+const [isDeepDive, setIsDeepDive] = useState(false);
 ```
 
 ```jsx
-{post.post_type === 'paper' && post.paper_abstract && (
-  <div style={{marginBottom: 8}}>
-    <div style={{
-      fontSize: 12.5, color: T.mu, lineHeight: 1.55,
-      overflow: abstractExpanded ? 'visible' : 'hidden',
-      display: abstractExpanded ? 'block' : '-webkit-box',
-      WebkitLineClamp: abstractExpanded ? 'none' : 1,
-      WebkitBoxOrient: 'vertical',
-    }}>
-      {post.paper_abstract}
-    </div>
-    <button
-      onClick={() => setAbstractExpanded(e => !e)}
+{/* Deep Dive toggle — shown only for text posts */}
+{postType === 'text' && (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '10px 0', borderTop: `1px solid ${T.bdr}`,
+    marginTop: 8,
+  }}>
+    {/* Toggle pill */}
+    <div
+      onClick={() => setIsDeepDive(d => !d)}
       style={{
-        fontSize: 11.5, color: T.v, fontWeight: 600,
-        border: 'none', background: 'transparent',
-        cursor: 'pointer', fontFamily: 'inherit',
-        padding: '2px 0', marginTop: 2,
+        width: 40, height: 22, borderRadius: 11,
+        background: isDeepDive ? T.v : T.s3,
+        position: 'relative', cursor: 'pointer',
+        transition: 'background .2s', flexShrink: 0,
       }}
     >
-      {abstractExpanded ? '↑ Collapse' : '↓ Read abstract'}
-    </button>
-  </div>
-)}
-```
-
----
-
-## Change 2 — Inline top comment preview
-
-Show the most recent comment directly on the card, below the action
-bar. Only shown when `post.comment_count > 0` and `topComment` is loaded.
-Clicking it opens the full comment thread (same as clicking the comment
-count currently does).
-
-```jsx
-{topComment && !showReplyBox && (
-  <div
-    onClick={() => {/* open full comment thread */}}
-    style={{
-      marginTop: 10,
-      padding: '9px 12px',
-      background: T.s2,
-      borderRadius: 10,
-      border: `1px solid ${T.bdr}`,
-      cursor: 'pointer',
-      display: 'flex', gap: 8, alignItems: 'flex-start',
-    }}
-  >
-    <Av
-      size={24}
-      color={topComment.profiles?.avatar_color}
-      name={topComment.profiles?.name}
-      url={topComment.profiles?.avatar_url || ''}
-    />
-    <div style={{flex: 1, minWidth: 0}}>
-      <span style={{fontSize: 12, fontWeight: 700, marginRight: 5}}>
-        {topComment.profiles?.name}
-      </span>
-      <span style={{
-        fontSize: 12.5, color: T.text, lineHeight: 1.45,
-        overflow: 'hidden', display: '-webkit-box',
-        WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-      }}>
-        {topComment.content?.replace(/<[^>]+>/g, '')}
-      </span>
-    </div>
-    {post.comment_count > 1 && (
-      <span style={{
-        fontSize: 11, color: T.mu, flexShrink: 0,
-        alignSelf: 'center',
-      }}>
-        +{post.comment_count - 1} more
-      </span>
-    )}
-  </div>
-)}
-```
-
----
-
-## Change 3 — Commenter avatars
-
-Show stacked avatars of people who have commented, in the action bar
-area next to the comment count. Only shown when `comment_count > 0`.
-
-Replace or augment the existing comment count button:
-
-```jsx
-{/* Comment button with stacked avatars */}
-<button onClick={openComments} style={{
-  display: 'flex', alignItems: 'center', gap: 5,
-  border: 'none', background: 'transparent',
-  cursor: 'pointer', padding: isMobile ? '6px 6px' : '8px 8px',
-}}>
-  {/* Stacked avatars — only on desktop */}
-  {!isMobile && commenterAvatars.length > 0 && (
-    <div style={{display: 'flex', marginRight: 2}}>
-      {commenterAvatars.map((c, i) => (
-        <div key={c.user_id} style={{
-          marginLeft: i === 0 ? 0 : -8,
-          zIndex: commenterAvatars.length - i,
-          position: 'relative',
-          borderRadius: '50%',
-          border: `1.5px solid ${T.w}`,
-        }}>
-          <Av
-            size={20}
-            color={c.profiles?.avatar_color}
-            name={c.profiles?.name}
-            url={c.profiles?.avatar_url || ''}
-          />
-        </div>
-      ))}
-    </div>
-  )}
-
-  {/* Comment icon */}
-  <svg width={isMobile ? 15 : 16} height={isMobile ? 15 : 16}
-    viewBox="0 0 24 24" fill="none"
-    stroke={T.mu} strokeWidth="1.8">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-  </svg>
-
-  {/* Count — hidden on mobile when 0 */}
-  {(!isMobile || post.comment_count > 0) && (
-    <span style={{fontSize: isMobile ? 12 : 13, color: T.mu}}>
-      {post.comment_count}
-    </span>
-  )}
-</button>
-```
-
----
-
-## Change 4 — Quick reply box with rotating prompts
-
-Show a reply box below the action bar (and below the top comment
-preview if present). The box has the user's avatar, a text input,
-and a rotating prompt as placeholder text.
-
-### Prompt definitions
-
-Define prompts by taxonomy tier1. Add this constant near the top
-of PostCard.jsx or import from lib/constants.js:
-
-```javascript
-const DISCUSSION_PROMPTS = {
-  'Clinical Medicine': [
-    "How does this change your clinical approach?",
-    "Have you seen similar outcomes in your practice?",
-    "What patient population would benefit most?",
-    "Does this align with current guidelines?",
-    "What are the real-world implementation challenges?",
-  ],
-  'Basic Life Sciences': [
-    "What mechanism do you think is driving this?",
-    "Have you replicated anything similar in your lab?",
-    "What's the next experiment you'd run?",
-    "Does this challenge any existing models?",
-    "What are the key limitations of this approach?",
-  ],
-  'Pharmacology & Therapeutics': [
-    "What are the translational implications?",
-    "How does this compare to current standard of care?",
-    "What safety signals would you watch for?",
-    "Is the therapeutic window realistic?",
-    "What biomarker would you use to stratify patients?",
-  ],
-  'Pharmaceutical & Biotech Industry': [
-    "What are the market access implications?",
-    "How does this fit into the treatment algorithm?",
-    "What evidence gaps remain before approval?",
-    "How would you position this vs existing options?",
-    "What payer objections do you anticipate?",
-  ],
-  'Public Health & Epidemiology': [
-    "How generalisable are these findings?",
-    "What are the policy implications?",
-    "Which populations are underrepresented here?",
-    "What confounders concern you most?",
-    "How would you design the follow-up study?",
-  ],
-  'Bioengineering & Informatics': [
-    "What's the scalability challenge here?",
-    "How robust is this to real-world data noise?",
-    "What validation dataset would you use?",
-    "Is the compute cost realistic for clinical deployment?",
-    "What's your benchmark for success?",
-  ],
-  'Medical Devices & Diagnostics Industry': [
-    "What's the regulatory path for this?",
-    "How does the clinical workflow integration look?",
-    "What's the training requirement for end users?",
-    "How does this perform in low-resource settings?",
-    "What's the reimbursement case?",
-  ],
-  'Medical Education & Research Methods': [
-    "How would you teach this concept differently?",
-    "What's the evidence base for this approach?",
-    "How do you assess competency here?",
-    "What bias concerns do you have with this design?",
-    "How reproducible are these results?",
-  ],
-  default: [
-    "What's your take on this?",
-    "How does this apply to your work?",
-    "What would you add to this?",
-    "What questions does this raise for you?",
-    "Have you encountered this in your field?",
-  ],
-};
-
-const ZERO_COMMENT_PROMPTS = [
-  "Be the first to share your perspective",
-  "What does this mean for your field?",
-  "Start the discussion — what's your take?",
-  "Have a question about this? Ask it here",
-  "Share your experience with this topic",
-];
-
-function getPrompts(tier1) {
-  return DISCUSSION_PROMPTS[tier1] || DISCUSSION_PROMPTS.default;
-}
-```
-
-### Reply box UI
-
-Show the reply box trigger (small, below the top comment) when not
-already open. On click, expand to a full reply input:
-
-```jsx
-{/* Reply box trigger — collapsed state */}
-{!showReplyBox && (
-  <button
-    onClick={() => setShowReplyBox(true)}
-    style={{
-      width: '100%', marginTop: 8,
-      display: 'flex', alignItems: 'center', gap: 8,
-      border: `1px solid ${T.bdr}`, borderRadius: 24,
-      padding: '7px 12px', background: T.s2,
-      cursor: 'pointer', fontFamily: 'inherit',
-      textAlign: 'left',
-    }}
-  >
-    <Av size={22} color={profile?.avatar_color}
-      name={profile?.name} url={profile?.avatar_url || ''}/>
-    <span style={{
-      fontSize: 12.5, color: T.mu, flex: 1,
-      overflow: 'hidden', textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-    }}>
-      {post.comment_count === 0
-        ? ZERO_COMMENT_PROMPTS[promptIndex % ZERO_COMMENT_PROMPTS.length]
-        : getPrompts(post.tier1)[promptIndex % getPrompts(post.tier1).length]
-      }
-    </span>
-  </button>
-)}
-
-{/* Reply box — expanded state */}
-{showReplyBox && (
-  <div style={{
-    marginTop: 8, display: 'flex', gap: 8, alignItems: 'flex-start',
-  }}>
-    <Av size={28} color={profile?.avatar_color}
-      name={profile?.name} url={profile?.avatar_url || ''}/>
-    <div style={{flex: 1}}>
-      <textarea
-        autoFocus
-        value={replyText}
-        onChange={e => setReplyText(e.target.value)}
-        placeholder={
-          post.comment_count === 0
-            ? ZERO_COMMENT_PROMPTS[promptIndex % ZERO_COMMENT_PROMPTS.length]
-            : getPrompts(post.tier1)[promptIndex % getPrompts(post.tier1).length]
-        }
-        rows={2}
-        style={{
-          width: '100%', fontSize: 13, lineHeight: 1.5,
-          padding: '8px 12px', borderRadius: 12,
-          border: `1.5px solid ${T.v}`, outline: 'none',
-          fontFamily: 'inherit', resize: 'none',
-          background: T.w,
-        }}
-        onKeyDown={e => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            submitQuickReply();
-          }
-          if (e.key === 'Escape') {
-            setShowReplyBox(false);
-            setReplyText('');
-          }
-        }}
-      />
       <div style={{
-        display: 'flex', justifyContent: 'flex-end',
-        gap: 6, marginTop: 5,
-      }}>
-        <Btn onClick={() => {
-          setShowReplyBox(false);
-          setReplyText('');
-        }}>
-          Cancel
-        </Btn>
-        <Btn variant="s"
-          onClick={submitQuickReply}
-          disabled={!replyText.trim()}>
-          Reply
-        </Btn>
+        position: 'absolute', top: 3,
+        left: isDeepDive ? 21 : 3,
+        width: 16, height: 16, borderRadius: '50%',
+        background: 'white',
+        boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+        transition: 'left .2s',
+      }}/>
+    </div>
+    <div>
+      <div style={{fontSize: 13, fontWeight: 600, color: T.text}}>
+        Create a Deep Dive
+      </div>
+      <div style={{fontSize: 11.5, color: T.mu}}>
+        Structured post with sections, citations and richer formatting
       </div>
     </div>
   </div>
 )}
 ```
 
-### Submit quick reply
-
+Save `is_deep_dive` when publishing:
 ```javascript
-const submitQuickReply = async () => {
-  if (!replyText.trim() || !user) return;
-  const text = replyText.trim();
-  setReplyText('');
-  setShowReplyBox(false);
-
-  // Optimistic: increment comment count locally
-  // (parent feed will refresh on next load)
-
-  await supabase.from('comments').insert({
-    post_id:  post.id,
-    user_id:  user.id,
-    content:  text,
-  });
-
-  // Refresh top comment
-  const { data } = await supabase
-    .from('comments')
-    .select('id, content, created_at, profiles(name, avatar_url, avatar_color)')
-    .eq('post_id', post.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single();
-  if (data) setTopComment(data);
-
-  // Rotate to a different prompt for next time
-  setPromptIndex(i => i + 1);
-};
+await supabase.from('posts').update({
+  // ... existing fields
+  is_deep_dive: isDeepDive,
+}).eq('id', newPostId);
 ```
 
 ---
 
-## Change 5 — "X researchers from your field are discussing this"
+## A3 — Enhanced RichTextEditor for Deep Dive mode
 
-Show a personalised relevance hook when the post's taxonomy matches
-the viewer's professional identity or interests.
+In `src/components/RichTextEditor.jsx`, when `isDeepDive` is true,
+show an expanded toolbar with additional formatting buttons.
 
-This uses `post.tier1` (the post's discipline) and `post.tier2`
-(specialities) compared against the current user's `profile.identity_tier1`,
-`profile.identity_tier2`, and `profile.topic_interests`.
+Pass `isDeepDive` as a prop to RichTextEditor.
 
-Add this hook between the post content and the action bar,
-only when there is a taxonomy match AND `comment_count > 0`:
+### Additional toolbar buttons (only in Deep Dive mode)
+
+Add these buttons to the toolbar after the existing bold/italic/link:
+
+```jsx
+{isDeepDive && (
+  <>
+    {/* Divider */}
+    <div style={{width:1, height:18, background:T.bdr, margin:'0 4px'}}/>
+
+    {/* H2 heading */}
+    <TBtn
+      title="Section heading"
+      onClick={() => execCmd('formatBlock', 'H2')}
+    >
+      H2
+    </TBtn>
+
+    {/* H3 sub-heading */}
+    <TBtn
+      title="Sub-heading"
+      onClick={() => execCmd('formatBlock', 'H3')}
+    >
+      H3
+    </TBtn>
+
+    {/* Blockquote / pull quote */}
+    <TBtn
+      title="Pull quote"
+      onClick={() => execCmd('formatBlock', 'BLOCKQUOTE')}
+    >
+      ❝
+    </TBtn>
+
+    {/* Horizontal divider */}
+    <TBtn
+      title="Section divider"
+      onClick={insertDivider}
+    >
+      ─
+    </TBtn>
+
+    {/* Numbered list */}
+    <TBtn
+      title="Numbered list"
+      onClick={() => execCmd('insertOrderedList')}
+    >
+      1.
+    </TBtn>
+
+    {/* Inline DOI citation */}
+    <TBtn
+      title="Cite a paper by DOI"
+      onClick={() => setShowDoiCite(true)}
+    >
+      📄
+    </TBtn>
+  </>
+)}
+```
+
+### Insert divider
 
 ```javascript
-// Compute relevance — outside JSX
-const isRelevantToUser = () => {
-  if (!profile || !post.comment_count) return false;
-  if (post.tier1 && post.tier1 === profile.identity_tier1) return true;
-  if (post.tier2?.includes(profile.identity_tier2)) return true;
-  const interests = new Set(
-    (profile.topic_interests || []).map(t => t.toLowerCase())
+const insertDivider = () => {
+  document.execCommand('insertHTML', false,
+    '<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/><p><br></p>'
   );
-  if ((post.tier2 || []).some(t => interests.has(t.toLowerCase()))) return true;
-  return false;
-};
-
-// Count how many commenters share the user's field
-// (approximate — use comment count as proxy, label by tier1)
-const getRelevanceLabel = () => {
-  const count = post.comment_count;
-  const field  = post.tier2?.[0] || post.tier1 || 'your field';
-  if (count === 1) return `1 researcher in ${field} is discussing this`;
-  if (count <= 5)  return `${count} researchers in ${field} are discussing this`;
-  return `${count} researchers in ${field} are discussing this`;
 };
 ```
 
+### Deep Dive editor styles
+
+When `isDeepDive` is true, apply richer typography to the contenteditable:
+
+```javascript
+// contenteditable style — changes when isDeepDive:
+const editorStyle = {
+  minHeight:  isDeepDive ? 220 : 120,
+  fontSize:   isDeepDive ? 15  : 13,
+  lineHeight: isDeepDive ? 1.7 : 1.55,
+  padding:    isDeepDive ? '14px 16px' : '10px 12px',
+  // Deep Dive gets a subtle background hint
+  background: isDeepDive ? '#fafafe' : T.w,
+  border: `1.5px solid ${isDeepDive ? T.v : T.bdr}`,
+  borderRadius: 12,
+  outline: 'none',
+  fontFamily: 'inherit',
+};
+```
+
+Add CSS-in-JS for heading and blockquote styles inside the editor.
+Since the app uses inline styles, inject a `<style>` tag once when
+the component mounts:
+
+```javascript
+useEffect(() => {
+  if (!isDeepDive) return;
+  const style = document.createElement('style');
+  style.id = 'deep-dive-editor-styles';
+  style.textContent = `
+    [data-deep-dive] h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 20px;
+      font-weight: 400;
+      margin: 18px 0 8px;
+      color: #1a1a2e;
+    }
+    [data-deep-dive] h3 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 16px;
+      font-weight: 400;
+      margin: 14px 0 6px;
+      color: #1a1a2e;
+    }
+    [data-deep-dive] blockquote {
+      border-left: 3px solid #6c63ff;
+      margin: 12px 0;
+      padding: 8px 14px;
+      background: #f0effe;
+      border-radius: 0 8px 8px 0;
+      font-style: italic;
+      color: #555;
+    }
+  `;
+  if (!document.getElementById('deep-dive-editor-styles')) {
+    document.head.appendChild(style);
+  }
+  return () => {
+    document.getElementById('deep-dive-editor-styles')?.remove();
+  };
+}, [isDeepDive]);
+```
+
+Add `data-deep-dive` attribute to the contenteditable when in Deep Dive mode.
+
+---
+
+## A4 — Inline DOI citation
+
+When the user clicks the 📄 cite button, show a small popover input:
+
+```javascript
+const [showDoiCite, setShowDoiCite] = useState(false);
+const [citeDoiInput, setCiteDoiInput] = useState('');
+const [citeFetching, setCiteFetching] = useState(false);
+const [citeError, setCiteError] = useState('');
+```
+
 ```jsx
-{isRelevantToUser() && (
+{showDoiCite && (
   <div style={{
-    fontSize: 11.5, color: T.v, fontWeight: 600,
-    marginBottom: 8,
-    display: 'flex', alignItems: 'center', gap: 5,
+    position: 'absolute', zIndex: 100,
+    background: T.w, border: `1.5px solid ${T.v}`,
+    borderRadius: 10, padding: 12, boxShadow: '0 4px 20px rgba(0,0,0,.12)',
+    width: 320,
   }}>
-    <svg width="12" height="12" viewBox="0 0 24 24" fill={T.v}>
-      <circle cx="12" cy="12" r="10"/>
-    </svg>
-    {getRelevanceLabel()}
+    <div style={{fontSize: 12.5, fontWeight: 600, marginBottom: 6}}>
+      Insert paper citation
+    </div>
+    <div style={{display: 'flex', gap: 6}}>
+      <input
+        autoFocus
+        value={citeDoiInput}
+        onChange={e => setCiteDoiInput(e.target.value)}
+        placeholder="10.1056/NEJMoa..."
+        onKeyDown={e => e.key === 'Enter' && insertCitation()}
+        style={{
+          flex: 1, fontSize: 12.5, padding: '6px 10px',
+          border: `1.5px solid ${T.bdr}`, borderRadius: 7,
+          fontFamily: 'inherit', outline: 'none',
+        }}
+      />
+      <Btn onClick={insertCitation} disabled={citeFetching}>
+        {citeFetching ? '...' : 'Cite'}
+      </Btn>
+    </div>
+    {citeError && (
+      <div style={{fontSize: 11.5, color: T.ro, marginTop: 4}}>
+        {citeError}
+      </div>
+    )}
+    <button onClick={() => {
+      setShowDoiCite(false);
+      setCiteDoiInput('');
+      setCiteError('');
+    }} style={{
+      fontSize: 11, color: T.mu, border: 'none',
+      background: 'transparent', cursor: 'pointer',
+      marginTop: 4, fontFamily: 'inherit',
+    }}>
+      Cancel
+    </button>
   </div>
 )}
 ```
 
-Place this just above the action bar, below the taxonomy chips.
+### Citation fetch and insert
+
+```javascript
+const insertCitation = async () => {
+  if (!citeDoiInput.trim()) return;
+  setCiteFetching(true);
+  setCiteError('');
+  try {
+    const resp = await fetch(
+      `https://api.crossref.org/works/${encodeURIComponent(citeDoiInput.trim())}`
+    );
+    if (!resp.ok) throw new Error('not found');
+    const data = await resp.json();
+    const w    = data.message;
+    const authors = (w.author || []).slice(0, 2)
+      .map(a => a.family || '').join(', ');
+    const year    = w.published?.['date-parts']?.[0]?.[0] || '';
+    const journal = w['container-title']?.[0] || '';
+    const title   = w.title?.[0] || '';
+    const doi     = citeDoiInput.trim();
+
+    // Insert a citation chip into the editor
+    const chipHtml = `<a href="https://doi.org/${doi}"
+      target="_blank" rel="noopener noreferrer"
+      data-doi="${doi}"
+      style="display:inline-flex;align-items:center;gap:5px;
+        background:#f0effe;border:1px solid rgba(108,99,255,.2);
+        border-radius:6px;padding:2px 8px;text-decoration:none;
+        font-size:12px;color:#6c63ff;font-weight:600;
+        font-style:normal;vertical-align:middle;"
+    >📄 ${authors}${authors ? ' · ' : ''}${year}${year ? ' — ' : ''}${journal || title}</a>&nbsp;`;
+
+    document.execCommand('insertHTML', false, chipHtml);
+
+    setShowDoiCite(false);
+    setCiteDoiInput('');
+  } catch {
+    setCiteError('DOI not found. Check the format and try again.');
+  }
+  setCiteFetching(false);
+};
+```
 
 ---
 
-## Apply same changes to GroupPostCard
+## A5 — Deep Dive post card visual treatment
 
-Apply changes 1, 2, 3, and 4 to `src/groups/GroupPostCard.jsx`
-using `group_post_comments` instead of `comments`.
+In `src/feed/PostCard.jsx`, when `post.is_deep_dive` is true,
+apply distinct visual styling:
 
-Change 5 (relevance hook) is less relevant in a group context since
-all members are already in the same field — skip it for GroupPostCard.
+```jsx
+<div style={{
+  background: T.w,
+  border: post.is_deep_dive
+    ? `1.5px solid rgba(108,99,255,.25)`
+    : `1px solid ${T.bdr}`,
+  borderLeft: post.is_deep_dive
+    ? `4px solid ${T.v}`
+    : `1px solid ${T.bdr}`,
+  borderRadius: 14,
+  padding: post.is_deep_dive
+    ? (isMobile ? '14px 14px 14px 12px' : '18px 20px 18px 18px')
+    : (isMobile ? '10px 12px' : '16px 18px'),
+  marginBottom: 12,
+}}>
+```
+
+Replace the "Post" badge with a "Deep Dive" badge when applicable:
+
+```jsx
+{post.is_deep_dive ? (
+  <span style={{
+    fontSize: 10.5, fontWeight: 700,
+    padding: '2px 9px', borderRadius: 20,
+    background: T.v2, color: T.v,
+    border: `1px solid rgba(108,99,255,.2)`,
+  }}>
+    🔬 Deep Dive
+  </span>
+) : null}
+```
+
+Apply richer typography to Deep Dive content:
+
+```jsx
+<div
+  style={{
+    fontSize:   post.is_deep_dive ? 15  : 13,
+    lineHeight: post.is_deep_dive ? 1.7 : 1.55,
+  }}
+  // ... existing SafeHtml or content renderer
+/>
+```
+
+Add heading and blockquote styles for rendered Deep Dive content —
+inject once at app level (in App.jsx or index.js):
+
+```javascript
+// In App.jsx useEffect on mount:
+const style = document.createElement('style');
+style.textContent = `
+  .deep-dive-content h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px; font-weight: 400;
+    margin: 18px 0 8px; color: #1a1a2e;
+  }
+  .deep-dive-content h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 16px; font-weight: 400;
+    margin: 14px 0 6px; color: #1a1a2e;
+  }
+  .deep-dive-content blockquote {
+    border-left: 3px solid #6c63ff;
+    margin: 12px 0; padding: 8px 14px;
+    background: #f0effe; border-radius: 0 8px 8px 0;
+    font-style: italic; color: #555;
+  }
+  .deep-dive-content a[data-doi] {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #f0effe;
+    border: 1px solid rgba(108,99,255,.2);
+    border-radius: 6px; padding: 2px 8px;
+    text-decoration: none; font-size: 12px;
+    color: #6c63ff; font-weight: 600;
+  }
+`;
+document.head.appendChild(style);
+```
+
+Apply `className="deep-dive-content"` to the content wrapper
+when `post.is_deep_dive` is true.
+
+---
+
+---
+
+# PART B — Research Identity Score (profile completion meter)
+
+## B1 — SQL migration
+
+Add to `migration_deepdive.sql` (same file):
+
+```sql
+-- Track which activation milestones a user has completed
+-- Stored as a JSONB object for flexibility
+alter table profiles
+  add column if not exists activation_milestones jsonb default '{}';
+
+-- Example value:
+-- {
+--   "name_set": true,
+--   "title_set": true,
+--   "institution_set": true,
+--   "identity_badge_set": true,
+--   "photo_set": true,
+--   "bio_written": true,
+--   "publication_added": true,
+--   "orcid_linked": true,
+--   "following_3": true,
+--   "interests_set": true,
+--   "first_post": true,
+--   "first_comment": true,
+--   "joined_group": true,
+--   "public_profile": true,
+--   "card_details": true,
+--   "publications_5": true
+-- }
+```
+
+---
+
+## B2 — Milestone definitions
+
+Create `src/lib/profileMilestones.js`:
+
+```javascript
+/**
+ * Research Identity Score — five stages of profile completion.
+ * Each milestone has:
+ *   - id: unique key stored in activation_milestones JSONB
+ *   - label: shown in the UI
+ *   - stage: 1-5
+ *   - check(profile, stats): returns true if milestone is complete
+ *   - cta: action label shown when incomplete
+ *   - ctaAction: screen or action to trigger
+ *   - importNote: shown when completed via import
+ */
+
+export const MILESTONES = [
+
+  // ── Stage 1: Identified ───────────────────────────────────────────────────
+  {
+    id: 'name_set', stage: 1,
+    label: 'Name and title set',
+    check: (p) => !!(p.name?.trim() && p.title?.trim()),
+    cta: 'Edit profile', ctaAction: 'edit_profile',
+  },
+  {
+    id: 'institution_set', stage: 1,
+    label: 'Institution added',
+    check: (p) => !!p.institution?.trim(),
+    cta: 'Add institution', ctaAction: 'edit_profile',
+  },
+  {
+    id: 'identity_badge_set', stage: 1,
+    label: 'Professional identity badge set',
+    check: (p) => !!(p.identity_tier1 && p.identity_tier2),
+    cta: 'Set your field', ctaAction: 'edit_profile',
+  },
+
+  // ── Stage 2: Credible ─────────────────────────────────────────────────────
+  {
+    id: 'photo_set', stage: 2,
+    label: 'Profile photo added',
+    check: (p) => !!p.avatar_url,
+    cta: 'Add photo', ctaAction: 'edit_profile',
+  },
+  {
+    id: 'bio_written', stage: 2,
+    label: 'Bio written (50+ words)',
+    check: (p) => (p.bio || '').trim().split(/\s+/).length >= 50,
+    cta: 'Write bio', ctaAction: 'edit_profile',
+    importNote: 'Completed via import',
+  },
+  {
+    id: 'publication_added', stage: 2,
+    label: 'At least 1 publication added',
+    check: (p, s) => (s.publicationCount || 0) >= 1,
+    cta: 'Add publication', ctaAction: 'publications',
+    importNote: 'Completed via ORCID import',
+  },
+
+  // ── Stage 3: Connected ────────────────────────────────────────────────────
+  {
+    id: 'orcid_linked', stage: 3,
+    label: 'ORCID linked and verified',
+    check: (p) => !!(p.orcid && p.orcid_verified),
+    cta: 'Link ORCID', ctaAction: 'import_orcid',
+    importNote: 'Completed via ORCID sign-up',
+  },
+  {
+    id: 'following_3', stage: 3,
+    label: 'Following at least 3 researchers',
+    check: (p, s) => (s.followingCount || 0) >= 3,
+    cta: 'Discover researchers', ctaAction: 'explore',
+  },
+  {
+    id: 'interests_set', stage: 3,
+    label: 'Research interests added (3+)',
+    check: (p) => (p.topic_interests || []).length >= 3,
+    cta: 'Add interests', ctaAction: 'edit_profile',
+  },
+
+  // ── Stage 4: Active ───────────────────────────────────────────────────────
+  {
+    id: 'first_post', stage: 4,
+    label: 'First post published',
+    check: (p, s) => (s.postCount || 0) >= 1,
+    cta: 'Write a post', ctaAction: 'new_post',
+  },
+  {
+    id: 'first_comment', stage: 4,
+    label: 'First comment made',
+    check: (p, s) => (s.commentCount || 0) >= 1,
+    cta: 'Join a discussion', ctaAction: 'feed',
+  },
+  {
+    id: 'joined_group', stage: 4,
+    label: 'Joined or created a group',
+    check: (p, s) => (s.groupCount || 0) >= 1,
+    cta: 'Explore groups', ctaAction: 'groups',
+  },
+
+  // ── Stage 5: Visible ──────────────────────────────────────────────────────
+  {
+    id: 'public_profile', stage: 5,
+    label: 'Public profile enabled',
+    check: (p) => !!p.profile_slug && p.profile_visibility !== 'private',
+    cta: 'Enable public profile', ctaAction: 'share_profile',
+  },
+  {
+    id: 'card_details', stage: 5,
+    label: 'Business card contact details added',
+    check: (p) => !!(p.card_email || p.card_linkedin || p.card_website),
+    cta: 'Add contact details', ctaAction: 'edit_profile',
+  },
+  {
+    id: 'publications_5', stage: 5,
+    label: '5 or more publications added',
+    check: (p, s) => (s.publicationCount || 0) >= 5,
+    cta: 'Add more publications', ctaAction: 'publications',
+    importNote: 'Completed via import',
+  },
+];
+
+export const STAGES = [
+  { number: 1, label: 'Identified',  icon: '🔬' },
+  { number: 2, label: 'Credible',    icon: '📄' },
+  { number: 3, label: 'Connected',   icon: '🔗' },
+  { number: 4, label: 'Active',      icon: '💬' },
+  { number: 5, label: 'Visible',     icon: '🌐' },
+];
+
+export const STAGE_REWARDS = {
+  2: 'Your profile now appears in Explore search',
+  3: 'You can now send direct messages',
+  4: 'Your posts appear in For You feeds across Luminary',
+  5: 'Your profile is fully shareable as a research CV',
+};
+
+/**
+ * Compute which stage the user has reached.
+ * A stage is complete when ALL its milestones are done.
+ * Stages only move forward — never backward.
+ */
+export function computeStage(profile, stats) {
+  let highestComplete = 0;
+  for (const stage of [1, 2, 3, 4, 5]) {
+    const stageMilestones = MILESTONES.filter(m => m.stage === stage);
+    const allDone = stageMilestones.every(m => m.check(profile, stats));
+    if (allDone) highestComplete = stage;
+    else break;
+  }
+  return highestComplete; // 0 = none complete, 5 = fully complete
+}
+
+/**
+ * Get the milestones for the next incomplete stage.
+ */
+export function getNextStageMilestones(profile, stats) {
+  const currentStage = computeStage(profile, stats);
+  const nextStage    = Math.min(currentStage + 1, 5);
+  return {
+    stage:      nextStage,
+    milestones: MILESTONES.filter(m => m.stage === nextStage),
+  };
+}
+```
+
+---
+
+## B3 — ProfileCompletionMeter component
+
+Create `src/components/ProfileCompletionMeter.jsx`:
+
+```jsx
+import { useState, useEffect } from 'react';
+import { supabase } from '../supabase';
+import { T } from '../lib/constants';
+import {
+  MILESTONES, STAGES, STAGE_REWARDS,
+  computeStage, getNextStageMilestones
+} from '../lib/profileMilestones';
+
+export default function ProfileCompletionMeter({
+  profile, user, setScreen, onAction
+}) {
+  const [stats,    setStats]    = useState({});
+  const [expanded, setExpanded] = useState(false);
+  const [loading,  setLoading]  = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const [pubsRes, postsRes, commentsRes, followingRes, groupsRes] =
+        await Promise.all([
+          supabase.from('publications').select('id', {count:'exact',head:true})
+            .eq('user_id', user.id),
+          supabase.from('posts').select('id', {count:'exact',head:true})
+            .eq('user_id', user.id),
+          supabase.from('comments').select('id', {count:'exact',head:true})
+            .eq('user_id', user.id),
+          supabase.from('follows').select('id', {count:'exact',head:true})
+            .eq('follower_id', user.id).eq('target_type', 'user'),
+          supabase.from('group_members').select('id', {count:'exact',head:true})
+            .eq('user_id', user.id).in('role', ['admin','member']),
+        ]);
+      setStats({
+        publicationCount: pubsRes.count  || 0,
+        postCount:        postsRes.count || 0,
+        commentCount:     commentsRes.count || 0,
+        followingCount:   followingRes.count || 0,
+        groupCount:       groupsRes.count || 0,
+      });
+      setLoading(false);
+    };
+    fetchStats();
+  }, [user.id]);
+
+  if (loading) return null;
+
+  const currentStage = computeStage(profile, stats);
+  const currentStageDef = STAGES[currentStage] || STAGES[0];
+  const nextStageDef    = STAGES[Math.min(currentStage, 4)];
+  const { stage: nextStage, milestones: nextMilestones } =
+    getNextStageMilestones(profile, stats);
+
+  const completedMilestones = MILESTONES.filter(m => m.check(profile, stats));
+  const totalMilestones     = MILESTONES.length;
+  const completedCount      = completedMilestones.length;
+
+  // Don't show if fully complete
+  if (currentStage === 5) return null;
+
+  return (
+    <div style={{
+      background: T.w, borderRadius: 12,
+      border: `1.5px solid rgba(108,99,255,.2)`,
+      marginBottom: 16, overflow: 'hidden',
+    }}>
+
+      {/* Collapsed header — always visible */}
+      <div
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          padding: '12px 16px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}
+      >
+        {/* Stage indicator dots */}
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          {STAGES.map((s, i) => (
+            <div key={s.number} style={{
+              width:  i < currentStage ? 24 : 8,
+              height: 8, borderRadius: 4,
+              background: i < currentStage ? T.v
+                : i === currentStage ? T.v2
+                : T.s3,
+              border: i === currentStage
+                ? `1.5px solid ${T.v}` : 'none',
+              transition: 'all .3s',
+            }}/>
+          ))}
+        </div>
+
+        <div style={{flex: 1}}>
+          <div style={{fontSize: 12.5, fontWeight: 700}}>
+            {currentStageDef.icon} {currentStageDef.label}
+            <span style={{
+              fontSize: 11, color: T.mu, fontWeight: 400,
+              marginLeft: 6,
+            }}>
+              → {nextStageDef.icon} {nextStageDef.label}
+            </span>
+          </div>
+          <div style={{fontSize: 11.5, color: T.mu, marginTop: 1}}>
+            {completedCount} of {totalMilestones} milestones complete
+          </div>
+        </div>
+
+        <span style={{
+          fontSize: 12, color: T.mu, transition: 'transform .2s',
+          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+          display: 'inline-block',
+        }}>
+          ▾
+        </span>
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div style={{borderTop: `1px solid ${T.bdr}`}}>
+
+          {/* All 5 stages */}
+          {STAGES.map(stageDef => {
+            const stageMilestones = MILESTONES.filter(
+              m => m.stage === stageDef.number
+            );
+            const stageComplete = stageMilestones.every(
+              m => m.check(profile, stats)
+            );
+            const isCurrentStage = stageDef.number === currentStage + 1;
+
+            return (
+              <div key={stageDef.number} style={{
+                padding: '12px 16px',
+                borderBottom: `1px solid ${T.bdr}`,
+                opacity: stageDef.number > currentStage + 1 ? 0.5 : 1,
+              }}>
+                {/* Stage header */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  marginBottom: 8,
+                }}>
+                  <span style={{
+                    fontSize: 16,
+                    opacity: stageComplete ? 1 : 0.4,
+                  }}>
+                    {stageDef.icon}
+                  </span>
+                  <div style={{flex: 1}}>
+                    <span style={{
+                      fontSize: 12.5, fontWeight: 700,
+                      color: stageComplete ? T.gr : T.text,
+                    }}>
+                      Stage {stageDef.number}: {stageDef.label}
+                    </span>
+                    {stageComplete && STAGE_REWARDS[stageDef.number] && (
+                      <div style={{fontSize: 11, color: T.gr, marginTop: 1}}>
+                        ✓ {STAGE_REWARDS[stageDef.number]}
+                      </div>
+                    )}
+                  </div>
+                  {stageComplete && (
+                    <span style={{
+                      fontSize: 10.5, fontWeight: 700,
+                      color: T.gr, background: T.gr2,
+                      padding: '1px 8px', borderRadius: 20,
+                    }}>
+                      Complete
+                    </span>
+                  )}
+                </div>
+
+                {/* Milestones */}
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 5,
+                }}>
+                  {stageMilestones.map(m => {
+                    const done = m.check(profile, stats);
+                    return (
+                      <div key={m.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                      }}>
+                        <div style={{
+                          width: 16, height: 16, borderRadius: '50%',
+                          flexShrink: 0,
+                          background: done ? T.gr : 'transparent',
+                          border: `1.5px solid ${done ? T.gr : T.bdr}`,
+                          display: 'flex', alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          {done && (
+                            <svg width="9" height="9" viewBox="0 0 12 12">
+                              <polyline points="2,6 5,9 10,3"
+                                stroke="white" strokeWidth="2"
+                                fill="none"/>
+                            </svg>
+                          )}
+                        </div>
+                        <span style={{
+                          fontSize: 12.5, flex: 1,
+                          color: done ? T.mu : T.text,
+                          textDecoration: done ? 'none' : 'none',
+                        }}>
+                          {m.label}
+                        </span>
+
+                        {/* CTA for incomplete milestones in next stage */}
+                        {!done && isCurrentStage && (
+                          <button onClick={() => onAction(m.ctaAction)}
+                            style={{
+                              fontSize: 11, color: T.v, fontWeight: 700,
+                              border: `1px solid ${T.v}`,
+                              background: T.v2,
+                              borderRadius: 20, padding: '2px 9px',
+                              cursor: 'pointer', fontFamily: 'inherit',
+                              flexShrink: 0,
+                            }}>
+                            {m.cta} →
+                          </button>
+                        )}
+
+                        {/* Import shortcut for importable milestones */}
+                        {!done && isCurrentStage && m.importNote && (
+                          <span style={{
+                            fontSize: 10.5, color: T.mu,
+                            fontStyle: 'italic',
+                          }}>
+                            or import
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## B4 — Wire meter into ProfileScreen
+
+In `src/profile/ProfileScreen.jsx`, render the meter at the top
+of the About tab content, above Work Experience:
+
+```jsx
+import ProfileCompletionMeter from '../components/ProfileCompletionMeter';
+
+{/* Shown only to the profile owner, not on public profile */}
+{activeTab === 'about' && isOwnProfile && (
+  <ProfileCompletionMeter
+    profile={profile}
+    user={user}
+    setScreen={setScreen}
+    onAction={(action) => {
+      // Map action IDs to app navigation
+      switch(action) {
+        case 'edit_profile':   setEditing(true); break;
+        case 'publications':   setActiveTab('publications'); break;
+        case 'explore':        setScreen('explore'); break;
+        case 'groups':         setScreen('groups'); break;
+        case 'new_post':       setScreen('post'); break;
+        case 'feed':           setScreen('feed'); break;
+        case 'share_profile':  setShowSharePanel(true); break;
+        case 'import_orcid':   setShowOrcid(true); break;
+        default: break;
+      }
+    }}
+  />
+)}
+```
+
+---
+
+## B5 — Auto-complete milestones on import
+
+When a LinkedIn, ORCID, or CV import completes successfully,
+check which milestones are now satisfied and update the profile
+stats display — no additional DB writes needed since `check()`
+reads live from `profile` and `stats`.
+
+The meter recalculates automatically on next render since it
+queries live data. No extra code needed — the `useEffect` in
+`ProfileCompletionMeter` refetches stats on mount.
+
+To give instant feedback after an import, call a prop
+`onImportComplete` that triggers a re-render of the meter:
+
+```javascript
+// In ProfileScreen, after any import saves to profile:
+setProfile(updatedProfile); // this re-renders the meter automatically
+```
 
 ---
 
 ## What NOT to change
 
-- The full comment thread expansion logic — unchanged
-- Feed fetch queries — unchanged
-- Profile, groups, library, projects screens
+- The existing RichTextEditor core logic — extend, don't replace
+- Feed fetch and display logic beyond PostCard visual changes
+- Group posts, library, projects screens
+- The sanitiseHtml function — Deep Dive content still passes through it
 - Run `npm run build` when done
 
 ---
 
 ## Testing checklist
 
-- [ ] Paper post: abstract truncates to 1 line, "↓ Read abstract"
-      expands it, "↑ Collapse" collapses it
-- [ ] Post with comments: top comment shows below action bar with
-      avatar, name, truncated text, "+N more" count
-- [ ] Post with comments: stacked commenter avatars appear next to
-      comment count (desktop only)
-- [ ] Post with 0 comments: reply box shows "Be the first to share
-      your perspective" (or rotating zero-comment prompt)
-- [ ] Post with comments: reply box shows taxonomy-aware prompt
-      matching post.tier1
-- [ ] Typing in reply box and pressing Enter submits the comment
-- [ ] After submitting: top comment updates to show the new comment
-- [ ] Prompt rotates to a different one after submitting
-- [ ] Relevance hook appears on posts where post.tier1 matches
-      the viewer's identity_tier1
-- [ ] Relevance hook does NOT appear on posts with 0 comments
-- [ ] On mobile: commenter avatars hidden, abstract still truncates
+**Deep Dive:**
+- [ ] Toggle appears on text post composer only (not paper posts)
+- [ ] Toggling on expands toolbar with H2, H3, blockquote, divider, cite buttons
+- [ ] H2 in editor renders in DM Serif Display, larger size
+- [ ] Blockquote renders with violet left border and light background
+- [ ] DOI citation: enter a real DOI → chip appears inline in editor
+- [ ] Published Deep Dive post: left violet border in feed card
+- [ ] Published Deep Dive: content renders with larger font and line height
+- [ ] Deep Dive badge appears instead of generic Post badge
+- [ ] Citation chip in published post links to doi.org correctly
+
+**Profile meter:**
+- [ ] Meter appears on own profile About tab only (not visible to visitors)
+- [ ] Stage dots show correct progress
+- [ ] Collapsed view shows current stage → next stage
+- [ ] Expanding shows all 5 stages with individual milestones
+- [ ] Completed milestones show green checkmark
+- [ ] Incomplete milestones in the next stage show CTA buttons
+- [ ] CTA buttons navigate correctly (edit profile, explore, etc.)
+- [ ] Completing a milestone via LinkedIn import auto-updates meter
+- [ ] Meter disappears when all Stage 5 milestones are complete
+- [ ] Stages never go backwards if content is removed
