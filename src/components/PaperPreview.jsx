@@ -37,6 +37,12 @@ export default function PaperPreview({ post, currentUserId, onViewPaper, abstrac
               📄 Open paper ↗
             </a>
           )}
+          {cleanAbstract&&(
+            <button onClick={toggleExpanded}
+              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:expanded?T.v2:T.w,color:T.v,border:`1.5px solid rgba(108,99,255,.3)`,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+              {expanded ? '↑ Hide abstract' : '↓ Read abstract'}
+            </button>
+          )}
           {post.paper_doi&&onViewPaper&&(
             <button
               onClick={()=>onViewPaper(post.paper_doi)}
@@ -50,22 +56,9 @@ export default function PaperPreview({ post, currentUserId, onViewPaper, abstrac
         </div>
       </div>
 
-      {cleanAbstract&&(
+      {cleanAbstract && expanded && (
         <div style={{borderTop:`1px solid rgba(108,99,255,.15)`,padding:"12px 15px",background:"rgba(255,255,255,.5)"}}>
-          <div style={{fontSize:11,fontWeight:700,color:T.v,textTransform:"uppercase",letterSpacing:".05em",marginBottom:7}}>Abstract</div>
-          <div style={{
-            fontSize:12.5,color:T.text,lineHeight:1.8,
-            overflow: expanded ? 'visible' : 'hidden',
-            display: expanded ? 'block' : '-webkit-box',
-            WebkitLineClamp: expanded ? 'none' : 1,
-            WebkitBoxOrient: 'vertical',
-          }}>
-            {cleanAbstract}
-          </div>
-          <button onClick={toggleExpanded}
-            style={{marginTop:7,fontSize:11.5,color:T.v,fontWeight:700,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",padding:0,display:"block"}}>
-            {expanded?"↑ Collapse":"↓ Read abstract"}
-          </button>
+          <div style={{fontSize:12.5,color:T.text,lineHeight:1.8}}>{cleanAbstract}</div>
         </div>
       )}
     </div>
