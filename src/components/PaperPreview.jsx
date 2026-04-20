@@ -39,7 +39,7 @@ export default function PaperPreview({ post, currentUserId, onViewPaper, abstrac
           )}
           {cleanAbstract&&(
             <button onClick={toggleExpanded}
-              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:expanded?T.v2:T.w,color:T.v,border:`1.5px solid rgba(108,99,255,.3)`,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,background:T.w,color:T.v,border:`1.5px solid ${T.v}`,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
               {expanded ? '↑ Hide abstract' : '↓ Read abstract'}
             </button>
           )}
@@ -51,7 +51,7 @@ export default function PaperPreview({ post, currentUserId, onViewPaper, abstrac
             </button>
           )}
           {post.paper_doi&&(
-            <FollowBtn targetType="paper" targetId={post.paper_doi} currentUserId={currentUserId} label="Follow Paper"/>
+            <FollowBtn targetType="paper" targetId={post.paper_doi} currentUserId={currentUserId} label="Follow Paper" variant="outline"/>
           )}
         </div>
       </div>

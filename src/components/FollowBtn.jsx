@@ -11,7 +11,7 @@ import { T } from '../lib/constants';
  *   currentUserId  UUID of the logged-in user — if null, renders nothing
  *   label       optional override for the follow label (default: 'Follow')
  */
-export default function FollowBtn({ targetType, targetId, currentUserId, label = 'Follow', onToggle }) {
+export default function FollowBtn({ targetType, targetId, currentUserId, label = 'Follow', onToggle, variant }) {
   const [following, setFollowing] = useState(false);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
@@ -62,8 +62,8 @@ export default function FollowBtn({ targetType, targetId, currentUserId, label =
         padding: '4px 11px',
         borderRadius: 20,
         border: `1.5px solid ${following ? T.bdr : T.v}`,
-        background: following ? T.w : T.v,
-        color: following ? T.mu : '#fff',
+        background: following ? T.w : variant === 'outline' ? T.w : T.v,
+        color: following ? T.mu : variant === 'outline' ? T.v : '#fff',
         cursor: saving ? 'default' : 'pointer',
         fontWeight: 600,
         fontFamily: 'inherit',
