@@ -616,6 +616,26 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
                 Forgot password?
               </span>
             </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 14px' }}>
+              <div style={{ flex: 1, height: 1, background: T.bdr }} />
+              <span style={{ fontSize: 11.5, color: T.mu, whiteSpace: 'nowrap' }}>or sign in with</span>
+              <div style={{ flex: 1, height: 1, background: T.bdr }} />
+            </div>
+
+            <button onClick={handleOrcidOAuth} style={{
+              width: '100%', padding: '13px 16px', borderRadius: 12,
+              border: `2px solid ${T.bdr}`, background: T.w, cursor: 'pointer',
+              textAlign: 'left', fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <span style={{ fontSize: 22 }}>🔬</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>Sign in with ORCID</div>
+                <div style={{ fontSize: 11.5, color: T.mu }}>Use your researcher identity</div>
+              </div>
+              <span style={{ marginLeft: 'auto', color: T.mu, fontSize: 13 }}>→</span>
+            </button>
           </>
         )}
 

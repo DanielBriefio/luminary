@@ -187,7 +187,7 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
     const { data: myMemberships } = await supabase.from('group_members').select('group_id').eq('user_id', user.id);
     const myIds = (myMemberships || []).map(r => r.group_id);
 
-    let q = supabase.from('groups').select('id, name, slug, description, research_topic, tier1, tier2, institution, company, country, location, avatar_url, is_public').eq('is_public', true).limit(30);
+    let q = supabase.from('groups').select('id, name, slug, description, research_topic, tier1, tier2, institution, company, country, location, avatar_url, is_public').limit(30);
     if (myIds.length) q = q.not('id', 'in', `(${myIds.join(',')})`);
     const { data: groups } = await q;
 

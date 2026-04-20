@@ -5,6 +5,35 @@ import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
 
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function trunc(s, n) { return s && s.length > n ? s.slice(0, n-1)+'…' : (s||''); }
+
+function makeGroupBadgeSvg(group, url) {
+  const name  = esc(trunc(group?.name || 'Research Group', 28));
+  const topic = esc(trunc(group?.research_topic || '', 38));
+  const aff   = esc(trunc(group?.institution || group?.company || '', 38));
+  const short = url ? url.replace(/^https?:\/\//, '') : '';
+  const lines = [topic, aff].filter(Boolean);
+  const h = 80 + lines.length * 17;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="${h}" role="img" aria-label="${name} on Luminary">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="100%" stop-color="#764ba2"/>
+    </linearGradient>
+    <clipPath id="cl"><rect width="320" height="${h}" rx="12"/></clipPath>
+  </defs>
+  <rect width="320" height="${h}" rx="12" fill="url(#bg)"/>
+  <rect width="72" height="${h}" fill="rgba(0,0,0,0.18)" clip-path="url(#cl)"/>
+  <text x="36" y="${Math.round(h/2)+4}" font-family="Georgia,serif" font-size="26" fill="white" text-anchor="middle" font-weight="bold">L</text>
+  <text x="36" y="${Math.round(h/2)+18}" font-family="Arial,sans-serif" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle" letter-spacing="2">UMINARY</text>
+  <text x="86" y="28" font-family="Arial,sans-serif" font-size="14" fill="white" font-weight="bold">${name}</text>
+  ${lines.map((l, i) => `<text x="86" y="${44 + i*17}" font-family="Arial,sans-serif" font-size="11" fill="rgba(255,255,255,0.82)">${l}</text>`).join('\n  ')}
+  ${short ? `<text x="86" y="${h - 12}" font-family="Arial,sans-serif" font-size="10" fill="rgba(255,255,255,0.55)">${esc(short)}</text>` : ''}
+</svg>`;
+}
+
 export default function GroupProfile({ groupId, group, user, myRole, onGroupUpdate, onViewGroup, onSwitchTab }) {
   const [stats,         setStats]         = useState(null);
   const [leader,        setLeader]        = useState(null);
@@ -126,12 +155,13 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
   };
 
   useEffect(() => {
+    if (!editing || !editPublicEnabled) return;
     if (!group?.slug || !group?.public_profile_enabled || !qrRef.current) return;
     import('qrcode').then(QRCode => {
       QRCode.toCanvas(qrRef.current, `https://luminary.to/g/${group.slug}`,
         { width: 140, margin: 1, color: { dark: '#1b1d36', light: '#ffffff' } });
     }).catch(() => {});
-  }, [group?.slug, group?.public_profile_enabled]);
+  }, [group?.slug, group?.public_profile_enabled, editing, editPublicEnabled]);
 
   const cancelEdit = () => { setEditing(false); setCollabSearch(''); setCollabResults([]); };
 
@@ -675,21 +705,38 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
                   ))}
                 </div>
 
-                {/* QR + copy link */}
+                {/* QR + copy link + badge */}
                 {group.slug && group.public_profile_enabled && (
                   <div style={{ textAlign: 'center', paddingTop: 8 }}>
                     <canvas ref={qrRef} style={{ borderRadius: 10, display: 'block', margin: '0 auto 8px' }}/>
                     <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 8 }}>
                       luminary.to/g/{group.slug}
                     </div>
-                    <button onClick={() => navigator.clipboard.writeText(`https://luminary.to/g/${group.slug}`)}
-                      style={{
-                        padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${T.v}`,
-                        background: T.v2, color: T.v, cursor: 'pointer',
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <button onClick={() => navigator.clipboard.writeText(`https://luminary.to/g/${group.slug}`)}
+                        style={{
+                          padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${T.v}`,
+                          background: T.v2, color: T.v, cursor: 'pointer',
+                          fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                        }}>
+                        Copy link
+                      </button>
+                      <button onClick={() => {
+                        const svg = makeGroupBadgeSvg(group, `https://luminary.to/g/${group.slug}`);
+                        const blob = new Blob([svg], { type: 'image/svg+xml' });
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = `${group.slug || 'group'}-badge.svg`;
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                      }} style={{
+                        padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${T.bdr}`,
+                        background: T.w, color: T.mu, cursor: 'pointer',
                         fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
                       }}>
-                      Copy link
-                    </button>
+                        Download badge
+                      </button>
+                    </div>
                   </div>
                 )}
               </>
