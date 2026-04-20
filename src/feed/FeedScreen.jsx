@@ -230,21 +230,25 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       });
     }
 
-    // ── 6b. Fetch group_id / group_name for posts reposted from groups ────
-    // posts_with_meta view may not expose these new columns, so query posts directly
-    const nonGroupItems = allItems.filter(p => !p.group_id);
+    // ── 6b. Fetch group_id / group_name + is_deep_dive from posts directly ──
+    // posts_with_meta view was compiled before these columns were added;
+    // SELECT * on a view does not auto-include new columns in PostgreSQL.
     let groupRefMap = {};
-    if (nonGroupItems.length) {
-      const { data: grefs } = await supabase
-        .from('posts').select('id, group_id, group_name')
-        .in('id', nonGroupItems.map(p => p.id))
-        .not('group_id', 'is', null);
-      (grefs || []).forEach(p => { groupRefMap[p.id] = { group_id: p.group_id, group_name: p.group_name }; });
+    let deepDiveMap = {};
+    if (allItems.length) {
+      const { data: extraCols } = await supabase
+        .from('posts').select('id, group_id, group_name, is_deep_dive')
+        .in('id', allItems.map(p => p.id));
+      (extraCols || []).forEach(p => {
+        if (p.group_id)     groupRefMap[p.id] = { group_id: p.group_id, group_name: p.group_name };
+        if (p.is_deep_dive) deepDiveMap[p.id] = true;
+      });
     }
 
     const enriched = allItems.map(item=>({
       ...item,
       ...(groupRefMap[item.id] || {}),
+      is_deep_dive:  deepDiveMap[item.id] || false,
       user_liked:    likedSet.has(item.id),
       repost_count:  repostCountMap[item.id]||0,
       user_reposted: userRepostedSet.has(item.id),
