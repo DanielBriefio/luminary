@@ -596,6 +596,47 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
           </div>
         )}
 
+        {/* Deep Dive toggle — text posts only, shown above the editor */}
+        {postType === 'text' && (
+          <div
+            onClick={() => setIsDeepDive(d => !d)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '9px 12px', marginBottom: 8,
+              borderRadius: 10,
+              background: isDeepDive ? T.v2 : T.s2,
+              border: `1.5px solid ${isDeepDive ? T.v : T.bdr}`,
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{
+              width: 38, height: 20, borderRadius: 10,
+              background: isDeepDive ? T.v : T.bdr,
+              position: 'relative', flexShrink: 0,
+              transition: 'background .2s',
+            }}>
+              <div style={{
+                position: 'absolute', top: 2,
+                left: isDeepDive ? 19 : 2,
+                width: 16, height: 16, borderRadius: '50%',
+                background: 'white',
+                boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                transition: 'left .2s',
+              }}/>
+            </div>
+            <div style={{flex: 1}}>
+              <div style={{fontSize: 12.5, fontWeight: 700, color: isDeepDive ? T.v : T.text}}>
+                🔬 Deep Dive {isDeepDive ? '— on' : ''}
+              </div>
+              <div style={{fontSize: 11, color: T.mu}}>
+                {isDeepDive
+                  ? 'H2/H3 headings, blockquotes, horizontal dividers, and inline DOI citations enabled'
+                  : 'Enable for structured posts with headings, blockquotes, and paper citations'}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Text editor */}
         <div style={{marginBottom:0}}>
           <RichTextEditor
@@ -605,6 +646,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
             minHeight={isMobile ? (uploadFile ? 120 : 200) : (uploadFile ? 70 : 110)}
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
+              isDeepDive ? "Use H2 headings for sections, ❝ for pull quotes, 📄 Cite to add paper references..." :
               "Share a finding, insight, lab update, or question..."
             }/>
         </div>
@@ -699,38 +741,6 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
               </div>
             )}
 
-          </div>
-        )}
-
-        {/* Deep Dive toggle — text posts only */}
-        {postType === 'text' && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 0', borderTop: `1px solid ${T.bdr}`,
-            marginTop: 8,
-          }}>
-            <div
-              onClick={() => setIsDeepDive(d => !d)}
-              style={{
-                width: 40, height: 22, borderRadius: 11,
-                background: isDeepDive ? T.v : T.s3,
-                position: 'relative', cursor: 'pointer',
-                transition: 'background .2s', flexShrink: 0,
-              }}
-            >
-              <div style={{
-                position: 'absolute', top: 3,
-                left: isDeepDive ? 21 : 3,
-                width: 16, height: 16, borderRadius: '50%',
-                background: 'white',
-                boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-                transition: 'left .2s',
-              }}/>
-            </div>
-            <div>
-              <div style={{fontSize: 13, fontWeight: 600, color: T.text}}>Create a Deep Dive</div>
-              <div style={{fontSize: 11.5, color: T.mu}}>Structured post with sections, citations and richer formatting</div>
-            </div>
           </div>
         )}
 

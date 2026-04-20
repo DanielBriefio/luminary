@@ -192,14 +192,17 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
         {isDeepDive && (
           <>
             <div style={{width:1, height:18, background:T.bdr, margin:'0 4px'}}/>
-            <TBtn title="Pull quote" onClick={() => exec('formatBlock', 'blockquote')}>❝</TBtn>
-            <TBtn title="Section divider" onClick={insertDivider}>─</TBtn>
-            <TBtn title="Cite a paper by DOI" onClick={() => setShowDoiCite(s => !s)}>📄</TBtn>
+            <TBtn label="❝" title="Blockquote / pull quote" onClick={() => exec('formatBlock', 'blockquote')}/>
+            <TBtn label="─" title="Section divider (horizontal rule)" onClick={insertDivider}/>
+            <TBtn label="📄 Cite" title="Cite a paper by DOI" onClick={() => setShowDoiCite(s => !s)}/>
           </>
         )}
 
         <div style={{marginLeft:"auto", fontSize:10.5, color:T.mu, paddingRight:4}}>
-          {isDeepDive ? <span style={{color:T.v, fontWeight:600}}>Deep Dive</span> : '⌘B · ⌘I'}
+          {isDeepDive
+            ? <span style={{background:T.v, color:'#fff', fontWeight:700, fontSize:10, padding:'2px 8px', borderRadius:20}}>🔬 Deep Dive</span>
+            : '⌘B · ⌘I'
+          }
         </div>
       </div>
 
