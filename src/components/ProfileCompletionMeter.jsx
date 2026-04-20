@@ -131,14 +131,16 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
                     }}>
                       Stage {stageDef.number}: {stageDef.label}
                     </span>
-                    {stageComplete && STAGE_REWARDS[stageDef.number] && (
-                      <div style={{fontSize:11, color:T.gr, marginTop:1}}>
-                        ✓ Unlocked: {STAGE_REWARDS[stageDef.number]}
-                      </div>
-                    )}
-                    {isNext && !stageComplete && nextReward && (
-                      <div style={{fontSize:11, color:T.v, marginTop:1}}>
-                        Complete to unlock: {nextReward}
+                    {STAGE_REWARDS[stageDef.number] && (
+                      <div style={{
+                        fontSize: 11, marginTop: 2,
+                        color: stageComplete ? T.gr : T.mu,
+                        display: 'flex', alignItems: 'center', gap: 4,
+                      }}>
+                        {stageComplete
+                          ? <span>✓ Unlocked: {STAGE_REWARDS[stageDef.number]}</span>
+                          : <span>🔒 Unlock: {STAGE_REWARDS[stageDef.number]}</span>
+                        }
                       </div>
                     )}
                   </div>

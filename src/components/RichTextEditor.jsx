@@ -51,7 +51,8 @@ function buildVancouverRef(w) {
 }
 
 export default function RichTextEditor({ value, onChange, placeholder="", minHeight=110, isDeepDive=false }) {
-  const editorRef = useRef(null);
+  const editorRef      = useRef(null);
+  const savedRangeRef  = useRef(null); // saved cursor position before popover opens
   const [activeFormats, setActiveFormats] = useState({});
   const [showDoiCite,  setShowDoiCite]  = useState(false);
   const [citeDoiInput, setCiteDoiInput] = useState('');
@@ -118,6 +119,20 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
     syncContent();
   };
 
+  // Save cursor position before popover steals focus, restore before insert
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel?.rangeCount) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+  };
+
+  const restoreSelection = () => {
+    const sel = window.getSelection();
+    if (sel && savedRangeRef.current) {
+      sel.removeAllRanges();
+      sel.addRange(savedRangeRef.current);
+    }
+  };
+
   // Rebuild the references section at the bottom of the editor
   const rebuildRefs = (cits) => {
     if (!editorRef.current) return;
@@ -154,8 +169,9 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
       const text   = buildVancouverRef(w);
       const updated = [...citations, { n: N, doi: rawDoi, url: doiUrl, text }];
 
-      // Insert inline superscript at cursor
+      // Restore cursor to where it was before the popover opened, then insert
       editorRef.current?.focus();
+      restoreSelection();
       document.execCommand('insertHTML', false,
         `<sup><a href="${doiUrl}" target="_blank" rel="noopener noreferrer" ` +
         `style="color:#6c63ff;text-decoration:none;font-weight:700;">(${N})</a></sup>`
@@ -269,7 +285,7 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
             <div style={{width:1, height:18, background:T.bdr, margin:'0 4px'}}/>
             <TBtn label="❝" title="Blockquote — click again to remove" onClick={toggleBlockquote}/>
             <TBtn label="─" title="Horizontal divider" onClick={insertDivider}/>
-            <TBtn label="📄 Cite" title="Cite a paper by DOI — inserts (N) with reference list" onClick={() => setShowDoiCite(s => !s)}/>
+            <TBtn label="📄 Cite" title="Cite a paper by DOI — inserts (N) with reference list" onClick={() => { saveSelection(); setShowDoiCite(s => !s); }}/>
           </>
         )}
 

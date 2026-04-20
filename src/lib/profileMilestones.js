@@ -114,10 +114,11 @@ export const STAGES = [
 ];
 
 export const STAGE_REWARDS = {
-  2: 'Your profile now appears in Explore search',
-  3: 'You can now send direct messages',
+  1: 'Your profile is set up and ready to be discovered',
+  2: 'Your profile appears in Explore researcher search',
+  3: 'You can send and receive direct messages',
   4: 'Your posts appear in For You feeds across Luminary',
-  5: 'Your profile is fully shareable as a research CV',
+  5: 'Your profile is fully shareable as a public research CV',
 };
 
 export function computeStage(profile, stats) {
