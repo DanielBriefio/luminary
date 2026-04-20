@@ -74,6 +74,24 @@ create table if not exists project_posts (
   created_at        timestamptz default now()
 );
 
+-- ── INTERACTIONS ─────────────────────────────────────────────────────────────
+
+create table if not exists project_post_likes (
+  id         uuid primary key default gen_random_uuid(),
+  post_id    uuid references project_posts(id) on delete cascade not null,
+  user_id    uuid references profiles(id) on delete cascade not null,
+  created_at timestamptz default now(),
+  unique(post_id, user_id)
+);
+
+create table if not exists project_post_comments (
+  id         uuid primary key default gen_random_uuid(),
+  post_id    uuid references project_posts(id) on delete cascade not null,
+  user_id    uuid references profiles(id) on delete cascade not null,
+  content    text not null,
+  created_at timestamptz default now()
+);
+
 -- ── VIEW ─────────────────────────────────────────────────────────────────────
 
 create or replace view project_posts_with_meta as
@@ -100,24 +118,6 @@ join projects p  on p.id  = pp.project_id
 left join project_folders pf on pf.id = pp.folder_id;
 
 grant select on project_posts_with_meta to anon, authenticated;
-
--- ── INTERACTIONS ─────────────────────────────────────────────────────────────
-
-create table if not exists project_post_likes (
-  id         uuid primary key default gen_random_uuid(),
-  post_id    uuid references project_posts(id) on delete cascade not null,
-  user_id    uuid references profiles(id) on delete cascade not null,
-  created_at timestamptz default now(),
-  unique(post_id, user_id)
-);
-
-create table if not exists project_post_comments (
-  id         uuid primary key default gen_random_uuid(),
-  post_id    uuid references project_posts(id) on delete cascade not null,
-  user_id    uuid references profiles(id) on delete cascade not null,
-  content    text not null,
-  created_at timestamptz default now()
-);
 
 -- ── INDEXES ──────────────────────────────────────────────────────────────────
 
