@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
-import { T } from '../lib/constants';
+import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 
 import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
@@ -18,6 +18,9 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     return (profile?.topic_interests?.length>0)?'personalised':'chronological';
   });
   const [potw, setPotw] = useState(null); // { title, journal, year, doi, discussCount }
+  const [filterTier1,  setFilterTier1]  = useState([]);
+  const [filterTier2,  setFilterTier2]  = useState([]);
+  const [showFilter,   setShowFilter]   = useState(false);
 
   useEffect(()=>{ localStorage.setItem('luminary_feed_mode',feedMode); },[feedMode]);
 
@@ -292,6 +295,27 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     }));
   };
 
+  const toggleTier1 = (t1) => {
+    const selected = filterTier1.includes(t1);
+    setFilterTier1(prev => selected ? prev.filter(x => x !== t1) : [...prev, t1]);
+    if (selected) {
+      const tier2s = getTier2(t1);
+      setFilterTier2(prev => prev.filter(t => !tier2s.includes(t)));
+    }
+  };
+
+  const toggleTier2 = (t2) =>
+    setFilterTier2(prev => prev.includes(t2) ? prev.filter(x => x !== t2) : [...prev, t2]);
+
+  const activeFilters = filterTier1.length + filterTier2.length;
+
+  const filteredPosts = posts.filter(p => {
+    if (!activeFilters) return true;
+    if (filterTier1.includes(p.tier1)) return true;
+    if (filterTier2.length && p.tier2?.some(t => filterTier2.includes(t))) return true;
+    return false;
+  });
+
   const emptyMsg = fp === 'fol'
     ? { icon: '👥', title: "Follow people & papers to build your feed", body: "Use the + Follow button on any post or paper to start seeing their updates here." }
     : { icon: '🌱', title: "The feed is quiet", body: "Be the first Founding Fellow to post. Share a paper, a finding, or a tip to get the community started." };
@@ -311,17 +335,64 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         {[["all","All"],["papers","📄 Papers"]].map(([k,l])=>(
           <div key={k} onClick={()=>setTab(k)} style={{padding:"8px 16px",fontSize:12.5,color:tab===k?T.v:T.mu,cursor:"pointer",borderBottom:`2.5px solid ${tab===k?T.v:"transparent"}`,fontWeight:600}}>{l}</div>
         ))}
-        {fp==='sug'&&!isMobile&&(
-          <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
-            <span style={{fontSize:11,color:T.mu}}>Sort:</span>
-            {[['personalised','Research interests'],['chronological','Chronological']].map(([mode,label])=>(
-              <button key={mode} onClick={()=>setFeedMode(mode)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:600,fontFamily:'inherit',cursor:'pointer',border:`1.5px solid ${feedMode===mode?T.v:T.bdr}`,background:feedMode===mode?T.v2:'transparent',color:feedMode===mode?T.v:T.mu,transition:'all .15s'}}>
-                {label}
-              </button>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
+          {fp==='sug'&&!isMobile&&(
+            <>
+              <span style={{fontSize:11,color:T.mu}}>Sort:</span>
+              {[['personalised','Research interests'],['chronological','Chronological']].map(([mode,label])=>(
+                <button key={mode} onClick={()=>setFeedMode(mode)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:600,fontFamily:'inherit',cursor:'pointer',border:`1.5px solid ${feedMode===mode?T.v:T.bdr}`,background:feedMode===mode?T.v2:'transparent',color:feedMode===mode?T.v:T.mu,transition:'all .15s'}}>
+                  {label}
+                </button>
+              ))}
+              <div style={{width:1,height:16,background:T.bdr,margin:'0 2px'}}/>
+            </>
+          )}
+          <button onClick={()=>setShowFilter(s=>!s)} style={{
+            padding:'4px 11px',borderRadius:20,fontSize:11,fontWeight:600,
+            fontFamily:'inherit',cursor:'pointer',transition:'all .15s',
+            border:`1.5px solid ${activeFilters?T.v:T.bdr}`,
+            background:activeFilters?T.v2:showFilter?T.s2:'transparent',
+            color:activeFilters?T.v:T.mu,
+          }}>
+            🔬 Filter{activeFilters ? ` · ${activeFilters}` : ''}
+          </button>
+        </div>
+      </div>
+
+      {showFilter && (
+        <div style={{background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:'10px 18px',flexShrink:0}}>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {TIER1_LIST.map(t1 => (
+              <button key={t1} onClick={()=>toggleTier1(t1)} style={{
+                padding:'4px 11px',borderRadius:20,fontSize:11,fontWeight:600,
+                fontFamily:'inherit',cursor:'pointer',transition:'all .15s',
+                border:`1.5px solid ${filterTier1.includes(t1)?T.v:T.bdr}`,
+                background:filterTier1.includes(t1)?T.v2:T.w,
+                color:filterTier1.includes(t1)?T.v:T.mu,
+              }}>{t1}</button>
             ))}
           </div>
-        )}
-      </div>
+          {filterTier1.length > 0 && (
+            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:`1px solid ${T.bdr}`}}>
+              {filterTier1.flatMap(t1=>getTier2(t1)).map(t2=>(
+                <button key={t2} onClick={()=>toggleTier2(t2)} style={{
+                  padding:'3px 10px',borderRadius:20,fontSize:10.5,fontWeight:600,
+                  fontFamily:'inherit',cursor:'pointer',transition:'all .15s',
+                  border:`1.5px solid ${filterTier2.includes(t2)?T.v:T.bdr}`,
+                  background:filterTier2.includes(t2)?T.v2:T.s2,
+                  color:filterTier2.includes(t2)?T.v:T.mu,
+                }}>{t2}</button>
+              ))}
+            </div>
+          )}
+          {activeFilters > 0 && (
+            <button onClick={()=>{setFilterTier1([]);setFilterTier2([]);}} style={{
+              marginTop:8,fontSize:11,color:T.ro,border:'none',background:'transparent',
+              cursor:'pointer',fontFamily:'inherit',padding:0,display:'block',
+            }}>Clear all filters</button>
+          )}
+        </div>
+      )}
       <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
         <div style={{padding:"16px 18px",boxSizing:"border-box",width:"100%"}}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 264px",gap:16,alignItems:"start",minWidth:0,width:"100%"}}>
@@ -336,13 +407,13 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                   </span>
                 </div>
               )}
-              {loading ? <Spinner/> : posts.length === 0 ? (
+              {loading ? <Spinner/> : filteredPosts.length === 0 ? (
                 <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:36,textAlign:"center",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
                   <div style={{fontSize:36,marginBottom:12}}>{emptyMsg.icon}</div>
                   <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:8}}>{emptyMsg.title}</div>
                   <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                 </div>
-              ) : posts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
+              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
             </div>
             {!isMobile && (
               <div>
