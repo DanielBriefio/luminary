@@ -21,13 +21,43 @@ function TBtn({ label, title, onClick, active=false }) {
   );
 }
 
+// Build a Vancouver-style reference string from CrossRef work object
+function buildVancouverRef(w) {
+  const authors = (w.author || [])
+    .slice(0, 6)
+    .map(a => {
+      const family = a.family || '';
+      const initials = (a.given || '').replace(/[^A-Za-z ]/g, '').split(' ')
+        .map(n => n[0] ? n[0].toUpperCase() : '').filter(Boolean).join('');
+      return `${family} ${initials}`.trim();
+    });
+  const authorStr = (w.author || []).length > 6 ? `${authors.join(', ')}, et al` : authors.join(', ');
+  const title   = (w.title?.[0] || '').replace(/<[^>]+>/g, '');
+  const journal = w['container-title']?.[0] || '';
+  const year    = w.published?.['date-parts']?.[0]?.[0] || '';
+  const volume  = w.volume || '';
+  const issue   = w.issue || '';
+  const pages   = w.page || '';
+
+  let ref = authorStr ? `${authorStr}. ` : '';
+  ref += title ? `${title}. ` : '';
+  ref += journal ? `<em>${journal}</em>. ` : '';
+  ref += year ? String(year) : '';
+  if (volume) ref += `;${volume}`;
+  if (issue)  ref += `(${issue})`;
+  if (pages)  ref += `:${pages}`;
+  if (year || volume || pages) ref += '.';
+  return ref;
+}
+
 export default function RichTextEditor({ value, onChange, placeholder="", minHeight=110, isDeepDive=false }) {
   const editorRef = useRef(null);
   const [activeFormats, setActiveFormats] = useState({});
-  const [showDoiCite,   setShowDoiCite]   = useState(false);
-  const [citeDoiInput,  setCiteDoiInput]  = useState('');
-  const [citeFetching,  setCiteFetching]  = useState(false);
-  const [citeError,     setCiteError]     = useState('');
+  const [showDoiCite,  setShowDoiCite]  = useState(false);
+  const [citeDoiInput, setCiteDoiInput] = useState('');
+  const [citeFetching, setCiteFetching] = useState(false);
+  const [citeError,    setCiteError]    = useState('');
+  const [citations,    setCitations]    = useState([]);
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
@@ -54,6 +84,91 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
       ul:        document.queryCommandState('insertUnorderedList'),
       ol:        document.queryCommandState('insertOrderedList'),
     });
+  };
+
+  // Toggle blockquote: detect if cursor is inside one and unwrap if so
+  const toggleBlockquote = () => {
+    editorRef.current?.focus();
+    const sel = window.getSelection();
+    if (sel?.rangeCount) {
+      let node = sel.getRangeAt(0).commonAncestorContainer;
+      if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+      let bq = node;
+      while (bq && bq !== editorRef.current) {
+        if (bq.tagName === 'BLOCKQUOTE') break;
+        bq = bq.parentElement;
+      }
+      if (bq && bq.tagName === 'BLOCKQUOTE' && editorRef.current?.contains(bq)) {
+        // Unwrap: move all children out before the blockquote, then remove it
+        const parent = bq.parentNode;
+        while (bq.firstChild) parent.insertBefore(bq.firstChild, bq);
+        parent.removeChild(bq);
+        syncContent();
+        return;
+      }
+    }
+    exec('formatBlock', 'blockquote');
+  };
+
+  const insertDivider = () => {
+    editorRef.current?.focus();
+    document.execCommand('insertHTML', false,
+      '<hr/><p><br></p>'
+    );
+    syncContent();
+  };
+
+  // Rebuild the references section at the bottom of the editor
+  const rebuildRefs = (cits) => {
+    if (!editorRef.current) return;
+    const existing = editorRef.current.querySelector('[data-luminary-refs]');
+    if (existing) existing.remove();
+    if (cits.length === 0) { syncContent(); return; }
+
+    const refDiv = document.createElement('div');
+    refDiv.setAttribute('data-luminary-refs', '1');
+    refDiv.innerHTML =
+      `<hr/>` +
+      `<p><strong>References</strong></p>` +
+      cits.map(c =>
+        `<p>${c.n}. ${c.text} ` +
+        `<a href="${c.url}" target="_blank" rel="noopener noreferrer">doi:${c.doi}</a></p>`
+      ).join('');
+
+    editorRef.current.appendChild(refDiv);
+    syncContent();
+  };
+
+  const insertCitation = async () => {
+    if (!citeDoiInput.trim()) return;
+    const rawDoi = citeDoiInput.trim().replace(/^https?:\/\/(dx\.)?doi\.org\//, '');
+    setCiteFetching(true);
+    setCiteError('');
+    try {
+      const resp = await fetch(`https://api.crossref.org/works/${encodeURIComponent(rawDoi)}`);
+      if (!resp.ok) throw new Error('not found');
+      const { message: w } = await resp.json();
+
+      const N      = citations.length + 1;
+      const doiUrl = `https://doi.org/${rawDoi}`;
+      const text   = buildVancouverRef(w);
+      const updated = [...citations, { n: N, doi: rawDoi, url: doiUrl, text }];
+
+      // Insert inline superscript at cursor
+      editorRef.current?.focus();
+      document.execCommand('insertHTML', false,
+        `<sup><a href="${doiUrl}" target="_blank" rel="noopener noreferrer" ` +
+        `style="color:#6c63ff;text-decoration:none;font-weight:700;">(${N})</a></sup>`
+      );
+
+      setCitations(updated);
+      rebuildRefs(updated);
+      setShowDoiCite(false);
+      setCiteDoiInput('');
+    } catch {
+      setCiteError('DOI not found. Try e.g. 10.1038/s41586-021-03819-2');
+    }
+    setCiteFetching(false);
   };
 
   const linkifyPlain = (text) => {
@@ -105,52 +220,6 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
     syncContent();
   };
 
-  const insertDivider = () => {
-    document.execCommand('insertHTML', false,
-      '<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/><p><br></p>'
-    );
-    syncContent();
-  };
-
-  const insertCitation = async () => {
-    if (!citeDoiInput.trim()) return;
-    setCiteFetching(true);
-    setCiteError('');
-    try {
-      const resp = await fetch(
-        `https://api.crossref.org/works/${encodeURIComponent(citeDoiInput.trim())}`
-      );
-      if (!resp.ok) throw new Error('not found');
-      const data = await resp.json();
-      const w    = data.message;
-      const authors = (w.author || []).slice(0, 2).map(a => a.family || '').join(', ');
-      const year    = w.published?.['date-parts']?.[0]?.[0] || '';
-      const journal = w['container-title']?.[0] || '';
-      const title   = w.title?.[0] || '';
-      const doi     = citeDoiInput.trim();
-
-      const chipHtml = `<a href="https://doi.org/${doi}"
-        target="_blank" rel="noopener noreferrer"
-        data-doi="${doi}"
-        style="display:inline-flex;align-items:center;gap:5px;
-          background:#f0effe;border:1px solid rgba(108,99,255,.2);
-          border-radius:6px;padding:2px 8px;text-decoration:none;
-          font-size:12px;color:#6c63ff;font-weight:600;
-          font-style:normal;vertical-align:middle;"
-      >📄 ${authors}${authors ? ' · ' : ''}${year}${year ? ' — ' : ''}${journal || title}</a>&nbsp;`;
-
-      editorRef.current?.focus();
-      document.execCommand('insertHTML', false, chipHtml);
-      syncContent();
-
-      setShowDoiCite(false);
-      setCiteDoiInput('');
-    } catch {
-      setCiteError('DOI not found. Check the format and try again.');
-    }
-    setCiteFetching(false);
-  };
-
   const toolbarGroups = [
     [
       { label:"B",  title:"Bold (⌘B)",    cmd:"bold" },
@@ -180,10 +249,16 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
           <div key={gi} style={{display:"flex", alignItems:"center", gap:1}}>
             {gi>0 && <div style={{width:1, height:16, background:T.bdr, margin:"0 4px"}}/>}
             {grp.map(b => (
-              <TBtn key={b.cmd+b.val}
+              <TBtn key={b.cmd+(b.val||'')}
                 label={<span style={b.style||{}}>{b.label}</span>}
                 title={b.title}
-                active={b.cmd==='bold'?activeFormats.bold : b.cmd==='italic'?activeFormats.italic : b.cmd==='underline'?activeFormats.underline : b.cmd==='insertUnorderedList'?activeFormats.ul : b.cmd==='insertOrderedList'?activeFormats.ol : false}
+                active={
+                  b.cmd==='bold'?activeFormats.bold :
+                  b.cmd==='italic'?activeFormats.italic :
+                  b.cmd==='underline'?activeFormats.underline :
+                  b.cmd==='insertUnorderedList'?activeFormats.ul :
+                  b.cmd==='insertOrderedList'?activeFormats.ol : false
+                }
                 onClick={()=>exec(b.cmd, b.val||null)}/>
             ))}
           </div>
@@ -192,9 +267,9 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
         {isDeepDive && (
           <>
             <div style={{width:1, height:18, background:T.bdr, margin:'0 4px'}}/>
-            <TBtn label="❝" title="Blockquote / pull quote" onClick={() => exec('formatBlock', 'blockquote')}/>
-            <TBtn label="─" title="Section divider (horizontal rule)" onClick={insertDivider}/>
-            <TBtn label="📄 Cite" title="Cite a paper by DOI" onClick={() => setShowDoiCite(s => !s)}/>
+            <TBtn label="❝" title="Blockquote — click again to remove" onClick={toggleBlockquote}/>
+            <TBtn label="─" title="Horizontal divider" onClick={insertDivider}/>
+            <TBtn label="📄 Cite" title="Cite a paper by DOI — inserts (N) with reference list" onClick={() => setShowDoiCite(s => !s)}/>
           </>
         )}
 
@@ -242,15 +317,16 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
           borderRadius: 10, padding: 12, boxShadow: '0 4px 20px rgba(0,0,0,.12)',
           width: 320,
         }}>
-          <div style={{fontSize: 12.5, fontWeight: 600, marginBottom: 6}}>
-            Insert paper citation
+          <div style={{fontSize: 12.5, fontWeight: 700, marginBottom: 2}}>Cite a paper</div>
+          <div style={{fontSize: 11.5, color: T.mu, marginBottom: 8}}>
+            Inserts <strong>(N)</strong> at cursor and adds a numbered reference at the bottom.
           </div>
           <div style={{display: 'flex', gap: 6}}>
             <input
               autoFocus
               value={citeDoiInput}
               onChange={e => setCiteDoiInput(e.target.value)}
-              placeholder="10.1056/NEJMoa..."
+              placeholder="10.1038/s41586-021-03819-2"
               onKeyDown={e => e.key === 'Enter' && insertCitation()}
               style={{
                 flex: 1, fontSize: 12.5, padding: '6px 10px',
@@ -292,6 +368,10 @@ export default function RichTextEditor({ value, onChange, placeholder="", minHei
           background: #f0effe; border-radius: 0 8px 8px 0;
           font-style: italic; color: #555;
         }
+        [data-deep-dive] hr { border:none; border-top:1px solid #e5e7eb; margin:16px 0; }
+        [data-deep-dive] sup a { color:#6c63ff; text-decoration:none; font-weight:700; }
+        [data-luminary-refs] p { font-size:12px; color:#555; line-height:1.6; margin:3px 0; }
+        [data-luminary-refs] hr { border:none; border-top:1px solid #e5e7eb; margin:16px 0 10px; }
       `}</style>
     </div>
   );

@@ -1,6 +1,6 @@
 export function sanitiseHtml(html) {
   if (!html) return '';
-  const allowed = ['b','strong','i','em','u','h2','h3','ul','ol','li','p','br','a','div','span'];
+  const allowed = ['b','strong','i','em','u','h2','h3','ul','ol','li','p','br','a','div','span','blockquote','sup','hr'];
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
   tmp.querySelectorAll('*').forEach(el => {

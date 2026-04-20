@@ -69,7 +69,11 @@ const getPublicGroupSlug = () => {
     .deep-dive-content h2 { font-family:'DM Serif Display',serif; font-size:20px; font-weight:400; margin:18px 0 8px; color:#1a1a2e; }
     .deep-dive-content h3 { font-family:'DM Serif Display',serif; font-size:16px; font-weight:400; margin:14px 0 6px; color:#1a1a2e; }
     .deep-dive-content blockquote { border-left:3px solid #6c63ff; margin:12px 0; padding:8px 14px; background:#f0effe; border-radius:0 8px 8px 0; font-style:italic; color:#555; }
-    .deep-dive-content a[data-doi] { display:inline-flex; align-items:center; gap:5px; background:#f0effe; border:1px solid rgba(108,99,255,.2); border-radius:6px; padding:2px 8px; text-decoration:none; font-size:12px; color:#6c63ff; font-weight:600; }
+    .deep-dive-content hr { border:none; border-top:1px solid #e5e7eb; margin:16px 0; }
+    .deep-dive-content sup { font-size:11px; vertical-align:super; line-height:0; }
+    .deep-dive-content sup a { color:#6c63ff; text-decoration:none; font-weight:700; }
+    .deep-dive-content div p { font-size:12px; color:#666; line-height:1.6; margin:2px 0; }
+    .deep-dive-content div > p:first-child { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#7a7fa8; margin-bottom:4px; }
   `;
   document.head.appendChild(s);
 })();
