@@ -72,7 +72,6 @@ const getPublicGroupSlug = () => {
     .deep-dive-content hr { border:none; border-top:1px solid #e5e7eb; margin:16px 0; }
     .deep-dive-content sup { font-size:11px; vertical-align:super; line-height:0; }
     .deep-dive-content sup a { color:#6c63ff; text-decoration:none; font-weight:700; }
-    .deep-dive-content div { margin-top:14px; padding-top:10px; border-top:1px solid #e5e7eb; }
     .deep-dive-content div p { font-size:12px; color:#666; line-height:1.6; margin:2px 0; }
   `;
   document.head.appendChild(s);
