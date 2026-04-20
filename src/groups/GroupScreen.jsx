@@ -6,6 +6,7 @@ import GroupFeed from './GroupFeed';
 import GroupMembers from './GroupMembers';
 import GroupProfile from './GroupProfile';
 import GroupLibrary from './GroupLibrary';
+import GroupProjects from './GroupProjects';
 
 // Shown when a non-member tries to view a closed group
 function JoinRequestPanel({ group, user, onBack, onJoined }) {
@@ -195,10 +196,11 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
 
   const isAlumni = myRole === 'alumni';
   const tabs = [
-    ...(!isAlumni ? [{ id: 'feed',    icon: '📋', label: 'Feed' }] : []),
-    { id: 'members', icon: '👥', label: 'Members' },
-    { id: 'profile', icon: '🏛️', label: 'Profile' },
-    { id: 'library', icon: '📚', label: 'Library' },
+    ...(!isAlumni ? [{ id: 'feed',     icon: '📋', label: 'Feed' }] : []),
+    { id: 'members',  icon: '👥', label: 'Members' },
+    { id: 'profile',  icon: '🏛️', label: 'Profile' },
+    { id: 'library',  icon: '📚', label: 'Library' },
+    { id: 'projects', icon: '🚀', label: 'Projects' },
   ];
 
   const activeMemberCount = stats?.active_member_count || 0;
@@ -337,6 +339,13 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
             myRole={myRole}
             onStatsChanged={fetchGroup}
             onNavigateToPost={onNavigateToPost}
+          />
+        )}
+        {activeTab === 'projects' && (
+          <GroupProjects
+            groupId={groupId}
+            user={user}
+            myRole={myRole}
           />
         )}
       </div>

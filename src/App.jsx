@@ -26,6 +26,7 @@ import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
 import PublicGroupProfileScreen from './groups/PublicGroupProfileScreen';
 import LibraryScreen from './library/LibraryScreen';
+import ProjectsScreen from './projects/ProjectsScreen';
 
 import OrcidImporter from './profile/OrcidImporter';
 
@@ -385,6 +386,7 @@ export default function App() {
     groups: activeGroupId
       ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedGroupPostIds={savedGroupPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
+    projects: <ProjectsScreen user={user}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     post:         <NewPostScreen user={user} profile={profile} onPostCreated={()=>setScreen('feed')}/>,
@@ -526,6 +528,7 @@ export default function App() {
                   if(n.id==='groups') setActiveGroupId(null);
                   setScreen(n.id);
                 }}
+
                   style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",margin:"1px 8px",borderRadius:9,cursor:"pointer",fontSize:12.5,fontWeight:screen===n.id?700:500,color:screen===n.id?T.v:T.mu,background:screen===n.id?T.v2:"transparent"}}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{flexShrink:0}}><path d={n.p}/></svg>
                   {n.l}

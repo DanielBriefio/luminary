@@ -192,6 +192,14 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
 
       <div style={{ padding: 16, position: 'relative' }}>
 
+        {/* Project badge */}
+        {post.project_name && (
+          <div style={{ fontSize: 11, color: T.mu, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>{post.project_icon}</span>
+            <span style={{ fontWeight: 600 }}>{post.project_name}</span>
+          </div>
+        )}
+
         {/* Author header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
           <Av color={post.author_avatar || 'me'} size={38} name={post.author_name} url={post.author_avatar_url || ''}/>
