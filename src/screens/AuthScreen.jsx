@@ -50,12 +50,27 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [consentNotifications, setConsentNotifications] = useState(true);
   const [consentMarketing,     setConsentMarketing]     = useState(false);
 
+  // Waitlist path
+  const [waitlistName,        setWaitlistName]        = useState('');
+  const [waitlistEmail,       setWaitlistEmail]       = useState('');
+  const [waitlistInstitution, setWaitlistInstitution] = useState('');
+  const [waitlistRole,        setWaitlistRole]        = useState('');
+  const [waitlistReferral,    setWaitlistReferral]    = useState('');
+  const [waitlistSubmitted,   setWaitlistSubmitted]   = useState(false);
+
   const goToMode = (m) => {
     setMode(m); setError(''); setSuccess('');
     setSignupPath(null);
     setInviteCode(''); setInviteValid(null); setInviteError(''); setInviteRateLimited(false);
     setConsentTerms(false); setConsentNotifications(true); setConsentMarketing(false);
     setSignupEmail(''); setSignupPassword(''); setSignupName(''); setSignupError('');
+    setWaitlistName(''); setWaitlistEmail(''); setWaitlistInstitution('');
+    setWaitlistRole(''); setWaitlistReferral(''); setWaitlistSubmitted(false);
+  };
+
+  const isAcademicEmail = email => {
+    const domain = (email.split('@')[1] || '').toLowerCase();
+    return /\.(edu|ac\.[a-z]{2,}|edu\.[a-z]{2,})$/.test(domain);
   };
 
   // ── Sign-in / forgot ──────────────────────────────────────────────────────
@@ -103,6 +118,27 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     }
 
     setInviteChecking(false);
+  };
+
+  // ── Waitlist submission ───────────────────────────────────────────────────
+  const handleWaitlistSubmit = async () => {
+    setSignupLoading(true); setSignupError('');
+    try {
+      const hasOptional = !!(waitlistInstitution.trim() || waitlistRole.trim() || waitlistReferral.trim());
+      const { error } = await supabase.from('waitlist').insert({
+        full_name:       waitlistName.trim(),
+        email:           waitlistEmail.trim().toLowerCase(),
+        institution:     waitlistInstitution.trim() || null,
+        role_title:      waitlistRole.trim()        || null,
+        referral_source: waitlistReferral.trim()    || null,
+        is_priority:     hasOptional || isAcademicEmail(waitlistEmail),
+      });
+      if (error) throw error;
+      setWaitlistSubmitted(true);
+    } catch (e) {
+      setSignupError(e.message || 'Something went wrong. Please try again.');
+    }
+    setSignupLoading(false);
   };
 
   // ── ORCID OAuth redirect ──────────────────────────────────────────────────
@@ -285,6 +321,67 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       </div>
     );
 
+    if (signupPath === 'waitlist') {
+      const hasOptional = !!(waitlistInstitution || waitlistRole || waitlistReferral);
+      const academic    = waitlistEmail.includes('@') && isAcademicEmail(waitlistEmail);
+
+      if (waitlistSubmitted) return (
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <div style={{ fontSize: 44, marginBottom: 16 }}>🎉</div>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>You're on the list!</div>
+          <div style={{ fontSize: 14, color: T.mu, lineHeight: 1.65 }}>
+            We'll be in touch at <strong style={{ color: T.text }}>{waitlistEmail}</strong> when your spot opens up.
+            {academic && <>{' '}Academic email detected — you'll get priority access.</>}
+          </div>
+          <Btn variant="s" onClick={() => goToMode('login')} style={{ width: '100%', marginTop: 28 }}>
+            Back to Sign In →
+          </Btn>
+        </div>
+      );
+
+      return (
+        <div>
+          <button onClick={() => setSignupPath(null)} style={backBtn}>← Back</button>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Join the Luminary waitlist</div>
+          <div style={{ fontSize: 13, color: T.mu, marginBottom: 20, lineHeight: 1.6 }}>
+            We're growing carefully. Drop your details and we'll let you know when your spot opens.
+          </div>
+
+          <Inp label="Full name" value={waitlistName} onChange={setWaitlistName} placeholder="Dr. Jane Smith" />
+
+          <Inp label="Email address" type="email" value={waitlistEmail} onChange={setWaitlistEmail} placeholder="you@university.edu" />
+          {academic && (
+            <div style={{ fontSize: 11.5, color: T.gr, fontWeight: 700, marginTop: -12, marginBottom: 12 }}>
+              ✓ Academic email — priority access
+            </div>
+          )}
+
+          <div style={{
+            margin: '20px 0 16px', padding: '12px 14px',
+            background: T.v2, borderRadius: 10, borderLeft: `3px solid ${T.v}`,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.v }}>
+              Tell us a little bit about you to get priority access.
+            </div>
+          </div>
+
+          <Inp label="Institution (optional)" value={waitlistInstitution} onChange={setWaitlistInstitution} placeholder="University of…" />
+          <Inp label="Role / Title (optional)" value={waitlistRole} onChange={setWaitlistRole} placeholder="Research Fellow, MD, PhD student…" />
+          <Inp label="Where did you hear about us? (optional)" value={waitlistReferral} onChange={setWaitlistReferral} placeholder="Colleague, conference, Twitter…" />
+
+          {signupError && (
+            <div style={{ color: T.ro, fontSize: 12.5, marginTop: 8 }}>{signupError}</div>
+          )}
+
+          <Btn variant="s" onClick={handleWaitlistSubmit}
+            disabled={signupLoading || !waitlistName.trim() || !waitlistEmail.trim()}
+            style={{ width: '100%', marginTop: 16 }}>
+            {signupLoading ? 'Submitting…' : hasOptional ? 'Request priority access →' : 'Join the waiting list →'}
+          </Btn>
+        </div>
+      );
+    }
+
     if (!signupPath) return (
       <div>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, textAlign: 'center', marginBottom: 8 }}>
@@ -319,7 +416,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         </button>
 
         <button onClick={handleOrcidOAuth} style={{
-          width: '100%', padding: '16px', borderRadius: 14,
+          width: '100%', padding: '16px', borderRadius: 14, marginBottom: 12,
           border: `2px solid ${T.bdr}`, background: T.w, cursor: 'pointer',
           textAlign: 'left', fontFamily: 'inherit',
           display: 'flex', alignItems: 'center', gap: 14,
@@ -332,6 +429,20 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
             <div style={{ fontSize: 12, color: T.mu }}>
               Verified researcher identity — auto-fills your profile
             </div>
+          </div>
+          <span style={{ marginLeft: 'auto', color: T.mu }}>→</span>
+        </button>
+
+        <button onClick={() => setSignupPath('waitlist')} style={{
+          width: '100%', padding: '16px', borderRadius: 14,
+          border: `2px dashed ${T.bdr}`, background: T.s2, cursor: 'pointer',
+          textAlign: 'left', fontFamily: 'inherit',
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          <span style={{ fontSize: 28 }}>📋</span>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Join the waiting list</div>
+            <div style={{ fontSize: 12, color: T.mu }}>No invite yet? We'll notify you when a spot opens</div>
           </div>
           <span style={{ marginLeft: 'auto', color: T.mu }}>→</span>
         </button>
