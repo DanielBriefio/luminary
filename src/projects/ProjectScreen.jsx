@@ -27,7 +27,7 @@ function SidebarItem({ label, active, onClick, onDelete }) {
   );
 }
 
-export default function ProjectScreen({ projectId, user, onBack }) {
+export default function ProjectScreen({ projectId, user, onBack, group, onBackToGroup }) {
   const [project,        setProject]        = useState(null);
   const [folders,        setFolders]        = useState([]);
   const [myRole,         setMyRole]         = useState(null);
@@ -107,8 +107,20 @@ export default function ProjectScreen({ projectId, user, onBack }) {
         borderRight: `1px solid ${T.bdr}`,
         display: 'flex', flexDirection: 'column', overflowY: 'auto',
       }}>
+        {group && onBackToGroup && (
+          <button onClick={onBackToGroup} style={{
+            fontSize: 11, color: T.mu, padding: '10px 14px 4px',
+            border: 'none', background: 'transparent',
+            cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', gap: 4,
+            borderBottom: `1px solid ${T.bdr}`, width: '100%',
+          }}>
+            ← {group.name}
+          </button>
+        )}
+
         <button onClick={onBack} style={{
-          fontSize: 11, color: T.mu, padding: '10px 14px 0',
+          fontSize: 11, color: T.mu, padding: group ? '6px 14px 0' : '10px 14px 0',
           border: 'none', background: 'transparent',
           cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
           display: 'flex', alignItems: 'center', gap: 4,

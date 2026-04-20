@@ -7,6 +7,7 @@ import GroupMembers from './GroupMembers';
 import GroupProfile from './GroupProfile';
 import GroupLibrary from './GroupLibrary';
 import GroupProjects from './GroupProjects';
+import ProjectScreen from '../projects/ProjectScreen';
 
 // Shown when a non-member tries to view a closed group
 function JoinRequestPanel({ group, user, onBack, onJoined }) {
@@ -137,13 +138,14 @@ function GroupAvatar({ group, size = 48 }) {
 }
 
 export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup, onMarkRead, savedGroupPostIds = new Set(), onSaveToggled, onNavigateToPost }) {
-  const [group,      setGroup]      = useState(null);
-  const [myRole,     setMyRole]     = useState(null);
-  const [activeTab,  setActiveTab]  = useState('feed');
-  const [loading,    setLoading]    = useState(true);
-  const [stats,      setStats]      = useState(null);
-  const [confirmDel, setConfirmDel] = useState(false);
-  const [deleting,   setDeleting]   = useState(false);
+  const [group,           setGroup]           = useState(null);
+  const [myRole,          setMyRole]          = useState(null);
+  const [activeTab,       setActiveTab]       = useState('feed');
+  const [loading,         setLoading]         = useState(true);
+  const [stats,           setStats]           = useState(null);
+  const [confirmDel,      setConfirmDel]      = useState(false);
+  const [deleting,        setDeleting]        = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState(null);
 
   const fetchGroup = async () => {
     const [{ data: grp }, { data: mem }] = await Promise.all([
@@ -205,6 +207,19 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
 
   const activeMemberCount = stats?.active_member_count || 0;
   const alumniCount       = stats?.alumni_count || 0;
+
+  // When a project is active inside the group, render it full-width (no sidebar)
+  if (activeProjectId) {
+    return (
+      <ProjectScreen
+        projectId={activeProjectId}
+        user={user}
+        group={group}
+        onBackToGroup={() => { setActiveProjectId(null); setActiveTab('feed'); }}
+        onBack={() => setActiveProjectId(null)}
+      />
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -346,6 +361,7 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
             groupId={groupId}
             user={user}
             myRole={myRole}
+            onSelectProject={id => setActiveProjectId(id)}
           />
         )}
       </div>

@@ -5,13 +5,11 @@ import { timeAgo } from '../lib/utils';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import CreateProjectModal from '../projects/CreateProjectModal';
-import ProjectScreen from '../projects/ProjectScreen';
 
-export default function GroupProjects({ groupId, user, myRole }) {
-  const [projects,      setProjects]      = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [showCreate,    setShowCreate]    = useState(false);
-  const [activeProject, setActiveProject] = useState(null);
+export default function GroupProjects({ groupId, user, myRole, onSelectProject }) {
+  const [projects,   setProjects]   = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -27,16 +25,6 @@ export default function GroupProjects({ groupId, user, myRole }) {
 
   useEffect(() => { fetchProjects(); }, [groupId]); // eslint-disable-line
 
-  if (activeProject) {
-    return (
-      <ProjectScreen
-        projectId={activeProject}
-        user={user}
-        onBack={() => { setActiveProject(null); fetchProjects(); }}
-      />
-    );
-  }
-
   const canCreate = myRole === 'admin' || myRole === 'member';
 
   return (
@@ -46,7 +34,7 @@ export default function GroupProjects({ groupId, user, myRole }) {
           user={user}
           ownerId={groupId}
           isGroupProject={true}
-          onProjectCreated={id => { setShowCreate(false); setActiveProject(id); }}
+          onProjectCreated={id => { setShowCreate(false); onSelectProject?.(id); fetchProjects(); }}
           onClose={() => setShowCreate(false)}
         />
       )}
@@ -72,7 +60,7 @@ export default function GroupProjects({ groupId, user, myRole }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {projects.map(p => (
-            <GroupProjectCard key={p.id} project={p} onClick={() => setActiveProject(p.id)}/>
+            <GroupProjectCard key={p.id} project={p} onClick={() => onSelectProject?.(p.id)}/>
           ))}
         </div>
       )}
