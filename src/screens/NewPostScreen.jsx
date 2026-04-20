@@ -134,6 +134,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
   const [uploadCategory,setUploadCategory] = useState('');
   const [uploading,setUploading]         = useState(false);
 
+  const [isDeepDive, setIsDeepDive]       = useState(false);
   const [tags,setTags]                   = useState('');
   const [visibility,setVisibility]       = useState('everyone');
   const [loading,setLoading]             = useState(false);
@@ -372,6 +373,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
       tier1:          '',
       tier2:          [],
       visibility,
+      is_deep_dive:   isDeepDive,
     }).select('id').single();
     setLoading(false);
     if(error) { setError(error.message); return; }
@@ -599,6 +601,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
           <RichTextEditor
             value={content}
             onChange={setContent}
+            isDeepDive={isDeepDive}
             minHeight={isMobile ? (uploadFile ? 120 : 200) : (uploadFile ? 70 : 110)}
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
@@ -696,6 +699,38 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* Deep Dive toggle — text posts only */}
+        {postType === 'text' && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 0', borderTop: `1px solid ${T.bdr}`,
+            marginTop: 8,
+          }}>
+            <div
+              onClick={() => setIsDeepDive(d => !d)}
+              style={{
+                width: 40, height: 22, borderRadius: 11,
+                background: isDeepDive ? T.v : T.s3,
+                position: 'relative', cursor: 'pointer',
+                transition: 'background .2s', flexShrink: 0,
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: 3,
+                left: isDeepDive ? 21 : 3,
+                width: 16, height: 16, borderRadius: '50%',
+                background: 'white',
+                boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                transition: 'left .2s',
+              }}/>
+            </div>
+            <div>
+              <div style={{fontSize: 13, fontWeight: 600, color: T.text}}>Create a Deep Dive</div>
+              <div style={{fontSize: 11.5, color: T.mu}}>Structured post with sections, citations and richer formatting</div>
+            </div>
           </div>
         )}
 

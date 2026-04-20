@@ -16,6 +16,7 @@ import ShareProfilePanel from './ShareProfilePanel';
 import CvExportPanel from './CvExportPanel';
 import { useWindowSize } from '../lib/useWindowSize';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
+import ProfileCompletionMeter from '../components/ProfileCompletionMeter';
 
 function EF({label,val,onChange,placeholder=""}) {
   return (
@@ -48,7 +49,7 @@ function VisibilityToggle({ label, value, onChange }) {
   );
 }
 
-export default function ProfileScreen({ user, profile, setProfile }) {
+export default function ProfileScreen({ user, profile, setProfile, setScreen }) {
   const { isMobile } = useWindowSize();
   const [editing,setEditing]     = useState(false);
   const [form,setForm]           = useState({name_prefix:'',first_name:'',middle_name:'',last_name:'',name_suffix:'',title:'',institution:'',location:'',bio:'',orcid:'',twitter:''});
@@ -973,6 +974,23 @@ export default function ProfileScreen({ user, profile, setProfile }) {
 
           {tab==='about'&&(
             <div>
+              <ProfileCompletionMeter
+                profile={profile}
+                user={user}
+                onAction={(action) => {
+                  switch(action) {
+                    case 'edit_profile':   setEditing(true); break;
+                    case 'publications':   setTab('publications'); break;
+                    case 'explore':        setScreen?.('explore'); break;
+                    case 'groups':         setScreen?.('groups'); break;
+                    case 'new_post':       setScreen?.('post'); break;
+                    case 'feed':           setScreen?.('feed'); break;
+                    case 'share_profile':  setShowSharePanel(true); break;
+                    case 'import_orcid':   setShowOrcid(true); break;
+                    default: break;
+                  }
+                }}
+              />
               {!hasExperience&&!hasSkills&&(
                 <div style={{background:`linear-gradient(135deg,${T.bl2},#dbeafe)`,border:'1px solid rgba(66,133,244,.2)',borderRadius:12,padding:'16px 18px',marginBottom:18}}>
                   <div style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>

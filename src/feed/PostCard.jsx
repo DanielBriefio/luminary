@@ -243,7 +243,14 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   if (deleted) return null;
 
   return (
-    <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,overflow:"hidden",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
+    <div style={{
+      background: T.w,
+      border: post.is_deep_dive ? `1.5px solid rgba(108,99,255,.25)` : `1px solid ${T.bdr}`,
+      borderLeft: post.is_deep_dive ? `4px solid ${T.v}` : undefined,
+      borderRadius: 14,
+      overflow: "hidden",
+      boxShadow: "0 2px 12px rgba(108,99,255,.07)",
+    }}>
 
       {/* Group source banner — entire row is clickable */}
       {post.group_id && post.group_name && (
@@ -328,6 +335,20 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           )}
         </div>
 
+        {/* Post type badge */}
+        {post.is_deep_dive && (
+          <div style={{marginBottom: 8}}>
+            <span style={{
+              fontSize: 10.5, fontWeight: 700,
+              padding: '2px 9px', borderRadius: 20,
+              background: T.v2, color: T.v,
+              border: `1px solid rgba(108,99,255,.2)`,
+            }}>
+              🔬 Deep Dive
+            </span>
+          </div>
+        )}
+
         {editing ? (
           <div style={{marginBottom:12}}>
             <RichTextEditor value={editText} onChange={setEditText} placeholder="Edit your post..." minHeight={80}/>
@@ -338,7 +359,12 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           </div>
         ) : (
           <>
-            {post.content&&<SafeHtml html={post.content} tags={post.tags} onTagClick={onTagClick}/>}
+            {post.content&&(
+              <div className={post.is_deep_dive ? 'deep-dive-content' : undefined}
+                style={{fontSize: post.is_deep_dive ? 15 : undefined, lineHeight: post.is_deep_dive ? 1.7 : undefined}}>
+                <SafeHtml html={post.content} tags={post.tags} onTagClick={onTagClick}/>
+              </div>
+            )}
             {post.post_type==='text'&&(()=>{
               const url = extractFirstUrl(post.content||'');
               return url ? <LinkPreview url={url}/> : null;

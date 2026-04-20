@@ -60,6 +60,20 @@ const getPublicGroupSlug = () => {
   return m ? m[1] : null;
 };
 
+// Inject deep-dive-content CSS once at module level
+(function injectDeepDiveStyles() {
+  if (document.getElementById('deep-dive-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'deep-dive-styles';
+  s.textContent = `
+    .deep-dive-content h2 { font-family:'DM Serif Display',serif; font-size:20px; font-weight:400; margin:18px 0 8px; color:#1a1a2e; }
+    .deep-dive-content h3 { font-family:'DM Serif Display',serif; font-size:16px; font-weight:400; margin:14px 0 6px; color:#1a1a2e; }
+    .deep-dive-content blockquote { border-left:3px solid #6c63ff; margin:12px 0; padding:8px 14px; background:#f0effe; border-radius:0 8px 8px 0; font-style:italic; color:#555; }
+    .deep-dive-content a[data-doi] { display:inline-flex; align-items:center; gap:5px; background:#f0effe; border:1px solid rgba(108,99,255,.2); border-radius:6px; padding:2px 8px; text-decoration:none; font-size:12px; color:#6c63ff; font-weight:600; }
+  `;
+  document.head.appendChild(s);
+})();
+
 export default function App() {
   const [publicSlug]      = useState(getPublicSlug);
   const [publicPostId]    = useState(getPublicPostId);
@@ -387,7 +401,7 @@ export default function App() {
       ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedGroupPostIds={savedGroupPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     projects: <ProjectsScreen user={user}/>,
-    profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile}/>,
+    profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     post:         <NewPostScreen user={user} profile={profile} onPostCreated={()=>setScreen('feed')}/>,
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
