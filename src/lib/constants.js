@@ -189,3 +189,82 @@ export const getTier2 = (tier1) => TAXONOMY[tier1] || [];
 // Find which Tier 1 a Tier 2 belongs to
 export const getTier1ForTier2 = (tier2) =>
   TIER1_LIST.find(t1 => TAXONOMY[t1].includes(tier2)) || null;
+
+// ── DISCUSSION PROMPTS ────────────────────────────────────────────────────────
+
+export const DISCUSSION_PROMPTS = {
+  'Clinical Medicine': [
+    "How does this change your clinical approach?",
+    "Have you seen similar outcomes in your practice?",
+    "What patient population would benefit most?",
+    "Does this align with current guidelines?",
+    "What are the real-world implementation challenges?",
+  ],
+  'Basic Life Sciences': [
+    "What mechanism do you think is driving this?",
+    "Have you replicated anything similar in your lab?",
+    "What's the next experiment you'd run?",
+    "Does this challenge any existing models?",
+    "What are the key limitations of this approach?",
+  ],
+  'Pharmacology & Therapeutics': [
+    "What are the translational implications?",
+    "How does this compare to current standard of care?",
+    "What safety signals would you watch for?",
+    "Is the therapeutic window realistic?",
+    "What biomarker would you use to stratify patients?",
+  ],
+  'Pharmaceutical & Biotech Industry': [
+    "What are the market access implications?",
+    "How does this fit into the treatment algorithm?",
+    "What evidence gaps remain before approval?",
+    "How would you position this vs existing options?",
+    "What payer objections do you anticipate?",
+  ],
+  'Public Health & Epidemiology': [
+    "How generalisable are these findings?",
+    "What are the policy implications?",
+    "Which populations are underrepresented here?",
+    "What confounders concern you most?",
+    "How would you design the follow-up study?",
+  ],
+  'Bioengineering & Informatics': [
+    "What's the scalability challenge here?",
+    "How robust is this to real-world data noise?",
+    "What validation dataset would you use?",
+    "Is the compute cost realistic for clinical deployment?",
+    "What's your benchmark for success?",
+  ],
+  'Medical Devices & Diagnostics Industry': [
+    "What's the regulatory path for this?",
+    "How does the clinical workflow integration look?",
+    "What's the training requirement for end users?",
+    "How does this perform in low-resource settings?",
+    "What's the reimbursement case?",
+  ],
+  'Medical Education & Research Methods': [
+    "How would you teach this concept differently?",
+    "What's the evidence base for this approach?",
+    "How do you assess competency here?",
+    "What bias concerns do you have with this design?",
+    "How reproducible are these results?",
+  ],
+  default: [
+    "What's your take on this?",
+    "How does this apply to your work?",
+    "What would you add to this?",
+    "What questions does this raise for you?",
+    "Have you encountered this in your field?",
+  ],
+};
+
+export const ZERO_COMMENT_PROMPTS = [
+  "Be the first to share your perspective",
+  "What does this mean for your field?",
+  "Start the discussion — what's your take?",
+  "Have a question about this? Ask it here",
+  "Share your experience with this topic",
+];
+
+export const getDiscussionPrompts = (tier1) =>
+  DISCUSSION_PROMPTS[tier1] || DISCUSSION_PROMPTS.default;

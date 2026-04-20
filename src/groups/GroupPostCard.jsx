@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T, TIER1_LIST, getTier2 } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, ZERO_COMMENT_PROMPTS, getDiscussionPrompts } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import { useWindowSize } from '../lib/useWindowSize';
 import Av from '../components/Av';
@@ -63,6 +63,41 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
   const [editTier1,   setEditTier1]   = useState(post.tier1 || '');
   const [editTier2,   setEditTier2]   = useState(post.tier2 || []);
   const [editTags,    setEditTags]    = useState(post.tags  || []);
+
+  const [abstractExpanded, setAbstractExpanded] = useState(false);
+  const [topComment,       setTopComment]       = useState(null);
+  const [commenterAvatars, setCommenterAvatars] = useState([]);
+  const [showReplyBox,     setShowReplyBox]     = useState(false);
+  const [replyText,        setReplyText]        = useState('');
+  const [promptIndex,      setPromptIndex]      = useState(() => Math.floor(Math.random() * 10));
+
+  useEffect(() => {
+    if (!post.comment_count || post.comment_count === 0) return;
+    supabase
+      .from('group_post_comments')
+      .select('id, content, created_at, profiles(name, avatar_url, avatar_color)')
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+      .then(({ data }) => { if (data) setTopComment(data); });
+    supabase
+      .from('group_post_comments')
+      .select('user_id, profiles(name, avatar_url, avatar_color)')
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: true })
+      .limit(10)
+      .then(({ data }) => {
+        if (!data) return;
+        const seen = new Set();
+        const unique = data.filter(c => {
+          if (seen.has(c.user_id)) return false;
+          seen.add(c.user_id);
+          return true;
+        });
+        setCommenterAvatars(unique.slice(0, 3));
+      });
+  }, [post.id, post.comment_count]);
 
   const isOwner  = currentUserId === post.user_id;
   const isAdmin  = myRole === 'admin';
@@ -177,6 +212,27 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
     await supabase.from('group_posts').update({ tier1: editTier1, tier2: editTier2, tags: editTags }).eq('id', post.id);
     setEditingTags(false);
     onRefresh?.();
+  };
+
+  const submitQuickReply = async () => {
+    if (!replyText.trim() || !currentUserId) return;
+    const text = replyText.trim();
+    setReplyText('');
+    setShowReplyBox(false);
+    await supabase.from('group_post_comments').insert({
+      post_id: post.id,
+      user_id: currentUserId,
+      content: text,
+    });
+    const { data } = await supabase
+      .from('group_post_comments')
+      .select('id, content, created_at, profiles(name, avatar_url, avatar_color)')
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    if (data) setTopComment(data);
+    setPromptIndex(i => i + 1);
   };
 
   if (deleted) return null;
@@ -298,6 +354,32 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
           <PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper}/>
         )}
 
+        {/* Paper abstract — truncated by default */}
+        {post.post_type === 'paper' && post.paper_abstract && (
+          <div style={{marginBottom: 8}}>
+            <div style={{
+              fontSize: 12.5, color: T.mu, lineHeight: 1.55,
+              overflow: abstractExpanded ? 'visible' : 'hidden',
+              display: abstractExpanded ? 'block' : '-webkit-box',
+              WebkitLineClamp: abstractExpanded ? 'none' : 1,
+              WebkitBoxOrient: 'vertical',
+            }}>
+              {post.paper_abstract}
+            </div>
+            <button
+              onClick={() => setAbstractExpanded(e => !e)}
+              style={{
+                fontSize: 11.5, color: T.v, fontWeight: 600,
+                border: 'none', background: 'transparent',
+                cursor: 'pointer', fontFamily: 'inherit',
+                padding: '2px 0', marginTop: 2,
+              }}
+            >
+              {abstractExpanded ? '↑ Collapse' : '↓ Read abstract'}
+            </button>
+          </div>
+        )}
+
         {/* Taxonomy tags — hidden on mobile */}
         {!isMobile && (post.tier2?.length > 0 || post.tags?.length > 0) && !editingTags && (
           <div style={{ marginTop: 8, paddingTop: 6, borderTop: `1px solid ${T.bdr}` }}>
@@ -352,12 +434,36 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
             </svg>
             {(!isMobile || likeCount > 0) && <span>{likeCount}</span>}
           </button>
-          <button onClick={toggleComments} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: isMobile ? '6px 8px' : '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: T.mu, fontFamily: 'inherit', fontSize: isMobile ? 12 : 13 }}>
+
+          {/* Comment button with stacked commenter avatars */}
+          <button onClick={toggleComments} style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            border: 'none', background: 'transparent',
+            cursor: 'pointer', padding: isMobile ? '6px 6px' : '8px 8px',
+          }}>
+            {!isMobile && commenterAvatars.length > 0 && (
+              <div style={{display: 'flex', marginRight: 2}}>
+                {commenterAvatars.map((c, i) => (
+                  <div key={c.user_id} style={{
+                    marginLeft: i === 0 ? 0 : -8,
+                    zIndex: commenterAvatars.length - i,
+                    position: 'relative',
+                    borderRadius: '50%',
+                    border: `1.5px solid ${T.w}`,
+                  }}>
+                    <Av size={20} color={c.profiles?.avatar_color} name={c.profiles?.name} url={c.profiles?.avatar_url || ''}/>
+                  </div>
+                ))}
+              </div>
+            )}
             <svg width={isMobile ? 15 : 16} height={isMobile ? 15 : 16} viewBox="0 0 24 24" fill="none" stroke={T.mu} strokeWidth="1.8">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
-            {(!isMobile || commCount > 0) && <span>{commCount}</span>}
+            {(!isMobile || commCount > 0) && (
+              <span style={{fontSize: isMobile ? 12 : 13, color: T.mu}}>{commCount}</span>
+            )}
           </button>
+
           <button onClick={toggleSave} title={saved ? 'Unsave' : 'Save post'}
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '6px 8px' : '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: saved ? T.v : T.mu, marginLeft: 'auto' }}>
             <svg width={isMobile ? 14 : 16} height={isMobile ? 14 : 16} viewBox="0 0 24 24"
@@ -388,6 +494,113 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
             )}
           </div>
         </div>
+
+        {/* Top comment preview */}
+        {topComment && !showReplyBox && !showComments && (
+          <div
+            onClick={toggleComments}
+            style={{
+              marginTop: 10,
+              padding: '9px 12px',
+              background: T.s2,
+              borderRadius: 10,
+              border: `1px solid ${T.bdr}`,
+              cursor: 'pointer',
+              display: 'flex', gap: 8, alignItems: 'flex-start',
+            }}
+          >
+            <Av
+              size={24}
+              color={topComment.profiles?.avatar_color}
+              name={topComment.profiles?.name}
+              url={topComment.profiles?.avatar_url || ''}
+            />
+            <div style={{flex: 1, minWidth: 0}}>
+              <span style={{fontSize: 12, fontWeight: 700, marginRight: 5}}>
+                {topComment.profiles?.name}
+              </span>
+              <span style={{
+                fontSize: 12.5, color: T.text, lineHeight: 1.45,
+                overflow: 'hidden', display: '-webkit-box',
+                WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+              }}>
+                {topComment.content?.replace(/<[^>]+>/g, '')}
+              </span>
+            </div>
+            {commCount > 1 && (
+              <span style={{
+                fontSize: 11, color: T.mu, flexShrink: 0,
+                alignSelf: 'center',
+              }}>
+                +{commCount - 1} more
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Quick reply box — collapsed trigger */}
+        {!showReplyBox && currentUserId && (
+          <button
+            onClick={() => setShowReplyBox(true)}
+            style={{
+              width: '100%', marginTop: 8,
+              display: 'flex', alignItems: 'center', gap: 8,
+              border: `1px solid ${T.bdr}`, borderRadius: 24,
+              padding: '7px 12px', background: T.s2,
+              cursor: 'pointer', fontFamily: 'inherit',
+              textAlign: 'left',
+            }}
+          >
+            <Av size={22} color={currentProfile?.avatar_color}
+              name={currentProfile?.name} url={currentProfile?.avatar_url || ''}/>
+            <span style={{
+              fontSize: 12.5, color: T.mu, flex: 1,
+              overflow: 'hidden', textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {commCount === 0
+                ? ZERO_COMMENT_PROMPTS[promptIndex % ZERO_COMMENT_PROMPTS.length]
+                : getDiscussionPrompts(post.tier1)[promptIndex % getDiscussionPrompts(post.tier1).length]
+              }
+            </span>
+          </button>
+        )}
+
+        {/* Quick reply box — expanded */}
+        {showReplyBox && (
+          <div style={{marginTop: 8, display: 'flex', gap: 8, alignItems: 'flex-start'}}>
+            <Av size={28} color={currentProfile?.avatar_color}
+              name={currentProfile?.name} url={currentProfile?.avatar_url || ''}/>
+            <div style={{flex: 1}}>
+              <textarea
+                autoFocus
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                placeholder={
+                  commCount === 0
+                    ? ZERO_COMMENT_PROMPTS[promptIndex % ZERO_COMMENT_PROMPTS.length]
+                    : getDiscussionPrompts(post.tier1)[promptIndex % getDiscussionPrompts(post.tier1).length]
+                }
+                rows={2}
+                style={{
+                  width: '100%', fontSize: 13, lineHeight: 1.5,
+                  padding: '8px 12px', borderRadius: 12,
+                  border: `1.5px solid ${T.v}`, outline: 'none',
+                  fontFamily: 'inherit', resize: 'none',
+                  background: T.w, boxSizing: 'border-box',
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitQuickReply(); }
+                  if (e.key === 'Escape') { setShowReplyBox(false); setReplyText(''); }
+                }}
+              />
+              <div style={{display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 5}}>
+                <Btn onClick={() => { setShowReplyBox(false); setReplyText(''); }}>Cancel</Btn>
+                <Btn variant="s" onClick={submitQuickReply} disabled={!replyText.trim()}>Reply</Btn>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Comments */}
