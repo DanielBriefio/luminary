@@ -351,33 +351,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
 
         {/* Paper card */}
         {post.post_type === 'paper' && post.paper_title && (
-          <PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper}/>
-        )}
-
-        {/* Paper abstract — truncated by default */}
-        {post.post_type === 'paper' && post.paper_abstract && (
-          <div style={{marginBottom: 8}}>
-            <div style={{
-              fontSize: 12.5, color: T.mu, lineHeight: 1.55,
-              overflow: abstractExpanded ? 'visible' : 'hidden',
-              display: abstractExpanded ? 'block' : '-webkit-box',
-              WebkitLineClamp: abstractExpanded ? 'none' : 1,
-              WebkitBoxOrient: 'vertical',
-            }}>
-              {post.paper_abstract}
-            </div>
-            <button
-              onClick={() => setAbstractExpanded(e => !e)}
-              style={{
-                fontSize: 11.5, color: T.v, fontWeight: 600,
-                border: 'none', background: 'transparent',
-                cursor: 'pointer', fontFamily: 'inherit',
-                padding: '2px 0', marginTop: 2,
-              }}
-            >
-              {abstractExpanded ? '↑ Collapse' : '↓ Read abstract'}
-            </button>
-          </div>
+          <PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper} abstractExpanded={abstractExpanded} onToggleAbstract={() => setAbstractExpanded(e => !e)}/>
         )}
 
         {/* Taxonomy tags — hidden on mobile */}

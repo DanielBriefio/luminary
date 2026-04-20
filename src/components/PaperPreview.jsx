@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { T } from '../lib/constants';
 import FollowBtn from './FollowBtn';
 
-export default function PaperPreview({ post, currentUserId, onViewPaper }) {
-  const [expanded, setExpanded] = useState(false);
+export default function PaperPreview({ post, currentUserId, onViewPaper, abstractExpanded, onToggleAbstract }) {
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const expanded = abstractExpanded !== undefined ? abstractExpanded : internalExpanded;
+  const toggleExpanded = onToggleAbstract || (() => setInternalExpanded(e => !e));
 
   const doiUrl = post.paper_doi
     ? (post.paper_doi.startsWith('http') ? post.paper_doi : `https://doi.org/${post.paper_doi}`)
@@ -51,20 +53,19 @@ export default function PaperPreview({ post, currentUserId, onViewPaper }) {
       {cleanAbstract&&(
         <div style={{borderTop:`1px solid rgba(108,99,255,.15)`,padding:"12px 15px",background:"rgba(255,255,255,.5)"}}>
           <div style={{fontSize:11,fontWeight:700,color:T.v,textTransform:"uppercase",letterSpacing:".05em",marginBottom:7}}>Abstract</div>
-          <div style={{fontSize:12.5,color:T.text,lineHeight:1.8}}>
-            {expanded
-              ? cleanAbstract
-              : cleanAbstract.length > 420
-                ? <>{cleanAbstract.slice(0,420).trimEnd()}… </>
-                : cleanAbstract
-            }
+          <div style={{
+            fontSize:12.5,color:T.text,lineHeight:1.8,
+            overflow: expanded ? 'visible' : 'hidden',
+            display: expanded ? 'block' : '-webkit-box',
+            WebkitLineClamp: expanded ? 'none' : 1,
+            WebkitBoxOrient: 'vertical',
+          }}>
+            {cleanAbstract}
           </div>
-          {cleanAbstract.length > 420 && (
-            <button onClick={()=>setExpanded(!expanded)}
-              style={{marginTop:7,fontSize:11.5,color:T.v,fontWeight:700,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",padding:0,display:"block"}}>
-              {expanded?"↑ Collapse abstract":"↓ Read full abstract"}
-            </button>
-          )}
+          <button onClick={toggleExpanded}
+            style={{marginTop:7,fontSize:11.5,color:T.v,fontWeight:700,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",padding:0,display:"block"}}>
+            {expanded?"↑ Collapse":"↓ Read abstract"}
+          </button>
         </div>
       )}
     </div>
