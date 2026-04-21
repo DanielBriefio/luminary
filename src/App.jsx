@@ -27,6 +27,8 @@ import AccountSettingsScreen from './screens/AccountSettingsScreen';
 import PublicGroupProfileScreen from './groups/PublicGroupProfileScreen';
 import LibraryScreen from './library/LibraryScreen';
 import ProjectsScreen from './projects/ProjectsScreen';
+import AdminShell from './admin/AdminShell';
+import NotFoundScreen from './screens/NotFoundScreen';
 
 import OrcidImporter from './profile/OrcidImporter';
 
@@ -83,6 +85,7 @@ export default function App() {
   const [publicPaperDoi]  = useState(getPublicPaperDoi);
   const [publicCardSlug]  = useState(getPublicCardSlug);
   const [publicGroupSlug] = useState(getPublicGroupSlug);
+  const [isAdminRoute]    = useState(() => window.location.pathname === '/admin');
   const { isMobile } = useWindowSize();
   const [session,setSession]=useState(null);
   const [profile,setProfile]=useState(null);
@@ -394,6 +397,14 @@ export default function App() {
   />;
 
   const user=session.user;
+
+  // Admin route: gate on profile.is_admin
+  if (isAdminRoute) {
+    if (!profile) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;
+    if (!profile.is_admin) return <>{fonts}<NotFoundScreen /></>;
+    return <>{fonts}<AdminShell supabase={supabase} user={user} profile={profile} /></>;
+  }
+
   const screens={
     feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds}/>,
     explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
