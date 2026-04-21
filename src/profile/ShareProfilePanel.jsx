@@ -179,7 +179,7 @@ export default function ShareProfilePanel({ user, profile, onClose, onProfileUpd
           </button>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Share Profile</div>
-            <div style={{ fontSize: 11.5, color: T.mu }}>Public research profile settings</div>
+            <div style={{ fontSize: 11.5, color: T.mu }}>Public profile settings</div>
           </div>
           {profileUrl && (
             <a href={profileUrl} target="_blank" rel="noopener noreferrer"

@@ -63,7 +63,7 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
           user_id:    user.id,
           post_type:  'milestone',
           visibility: 'everyone',
-          content:    `<h3>🎉 Profile complete!</h3><p>You've built your Luminary research profile. Share it with colleagues so they can follow your work and publications.</p>`,
+          content:    `<h3>🎉 Profile complete!</h3><p>You've built your Luminary profile. Share it with colleagues so they can follow your work and publications.</p>`,
         }));
       });
   }, [loading, profile, stats, user.id]);
@@ -108,7 +108,7 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
             ))}
           </div>
           <span style={{fontSize:11.5, color: T.mu, whiteSpace:'nowrap', flexShrink:0}}>
-            Research profile {Math.round((completedCount / totalMilestones) * 100)}% complete
+            Profile {Math.round((completedCount / totalMilestones) * 100)}% complete
           </span>
           <span style={{
             fontSize: 11, color: T.mu, flexShrink: 0,

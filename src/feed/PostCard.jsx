@@ -122,7 +122,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             Profile complete!
           </div>
           <div style={{ fontSize: 13, color: T.mu, lineHeight: 1.6, marginBottom: 14 }}>
-            Your Luminary research profile is ready. Share it with colleagues, print your QR code on a poster, or exchange your virtual business card at your next conference.
+            Your Luminary profile is ready. Share it with colleagues, print your QR code on a poster, or exchange your virtual business card at your next conference.
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
