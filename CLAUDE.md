@@ -521,6 +521,7 @@ referral_source (TEXT, nullable), is_priority (bool, default false),
 created_at (timestamptz)
 - RLS enabled; one policy: `anon_insert_waitlist` (INSERT, with_check = true) — anonymous users can insert, nobody can read/update/delete via RLS
 - Written to by a public landing page outside this repo; no select policy means rows are not readable by the app
+- 1 row as of 2026-04-22 snapshot
 
 ## RLS — Groups (key policies)
 
