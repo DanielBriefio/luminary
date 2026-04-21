@@ -306,30 +306,34 @@ Profile sections (stored as JSONB arrays in `profiles`):
 ## Database Schema (live — verified against Supabase 2026-04-22)
 
 ### `profiles`
-id (FK auth.users), name, title, institution, location, bio, orcid, twitter, website,
-avatar_color, avatar_url, profile_slug (TEXT UNIQUE), profile_visibility (JSONB),
+id (uuid, FK auth.users, NOT NULL), name (TEXT NOT NULL), title, institution, location, bio,
+orcid, twitter, website,
+avatar_color, avatar_url, profile_slug (TEXT UNIQUE, nullable),
+profile_visibility (JSONB NOT NULL, default includes posts/skills/education/publications/volunteering/work_history/organizations),
 work_history (JSONB), education (JSONB), volunteering (JSONB), organizations (JSONB),
 honors (JSONB), languages (JSONB), skills (JSONB), patents (JSONB), grants (JSONB),
 li_publications (JSONB), certifications (JSONB),
+activation_milestones (JSONB, default '{}') — milestone completion state for ProfileCompletionMeter,
 first_name, middle_name, last_name, name_prefix, name_suffix,
 identity_tier1, identity_tier2, field_tags (TEXT[]), topic_interests (TEXT[]),
 h_index, i10_index, xp, level,
-onboarding_completed (bool), signup_method, orcid_verified, orcid_imported_at,
-linkedin_imported_at,
-email_notifications (bool), email_marketing (bool),
+onboarding_completed (bool), signup_method (default 'invite'), orcid_verified (bool),
+orcid_imported_at, linkedin_imported_at,
+email_notifications (bool, default true), email_marketing (bool, default false),
 marketing_consent_at, terms_accepted_at, privacy_accepted_at,
 card_email, card_phone, card_linkedin, card_website,
-card_visible, card_show_email, card_show_phone,
-card_show_linkedin, card_show_website, card_show_orcid, card_show_twitter,
+card_visible (bool, default true),
+card_show_email, card_show_phone, card_show_linkedin, card_show_website,
+card_show_orcid (bool, default true), card_show_twitter (bool, default true),
 card_address (TEXT — deferred drop; still in DB, removed from all code),
 card_show_address (bool — deferred drop; still in DB, removed from all code),
-work_phone, work_address, work_street, work_city, work_postal_code, work_country,
-card_show_work_phone, card_show_work_address,
+work_phone, work_address, card_show_work_phone, card_show_work_address,
+work_street, work_city, work_postal_code, work_country,
 location_city, location_country,
-work_mode (TEXT: 'researcher' | 'clinician' | 'industry' | 'clinician_scientist'),
+work_mode (TEXT, default 'researcher': 'researcher' | 'clinician' | 'industry' | 'clinician_scientist'),
 -- Note: 'clinician_scientist' replaces the legacy 'both' value (migration_profile_v2.sql)
-primary_hospital, years_in_practice, additional_quals, patient_population,
-subspeciality, clinical_highlight_value, clinical_highlight_label,
+primary_hospital, years_in_practice (int), additional_quals (TEXT[]),
+patient_population, subspeciality, clinical_highlight_label, clinical_highlight_value,
 created_at
 
 ### `posts`
@@ -469,6 +473,7 @@ created_by (uuid FK profiles — always set; the person who created it; used in 
 name, description,
 icon (TEXT), cover_color (TEXT),
 status (TEXT: 'active' | 'archived'), is_pinned (bool),
+template_type (TEXT, nullable — slug of the template used to create the project, e.g. 'conference', 'research_project'),
 created_at, updated_at
 - Personal project: user_id = created_by, group_id = NULL
 - Group project: user_id = NULL, group_id = group, created_by = creator
