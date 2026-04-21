@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
-import { T, PUB_TYPES } from '../lib/constants';
+import { T, PUB_TYPES, WORK_MODE_MAP } from '../lib/constants';
 import Av from '../components/Av';
 import FollowBtn from '../components/FollowBtn';
 import ExpandableBio from '../components/ExpandableBio';
@@ -84,10 +84,14 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
   const hIndex     = citations.reduce((h, c, i) => c >= (i + 1) ? i + 1 : h, 0);
   const totalCit   = citations.reduce((s, c) => s + c, 0);
 
+  const pubTabLabel = p.work_mode === 'clinician'
+    ? `Publications & Presentations (${pubCount})`
+    : `Publications (${pubCount})`;
+
   const tabs = [
     ['about', 'About'],
     ['posts', `Posts (${posts.length})`],
-    ...(pubs.length > 0 ? [['publications', `Publications (${pubCount})`]] : []),
+    ...(pubs.length > 0 ? [['publications', pubTabLabel]] : []),
   ];
 
   const isOwnProfile = currentUserId === userId;
@@ -160,6 +164,45 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                       style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{p.twitter} ↗</a>
                   )}
                 </div>
+                {/* Work mode badge */}
+                {p.work_mode && WORK_MODE_MAP[p.work_mode] && (
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{
+                      fontSize: 12, fontWeight: 700,
+                      padding: '4px 12px', borderRadius: 20,
+                      background: p.work_mode === 'clinician' ? '#e8f5e9' : p.work_mode === 'industry' ? '#fff8e1' : p.work_mode === 'both' ? '#e3f2fd' : T.v2,
+                      color: p.work_mode === 'clinician' ? '#2e7d32' : p.work_mode === 'industry' ? '#f57f17' : p.work_mode === 'both' ? '#1565c0' : T.v,
+                    }}>
+                      {WORK_MODE_MAP[p.work_mode].icon} {WORK_MODE_MAP[p.work_mode].label}
+                    </span>
+                  </div>
+                )}
+
+                {/* Clinical identity block — clinician/both mode */}
+                {(p.work_mode === 'clinician' || p.work_mode === 'both') && (
+                  <div style={{ marginBottom: 8 }}>
+                    {p.primary_hospital && (
+                      <div style={{ fontSize: 13, color: T.text, fontWeight: 500, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>🏥</span> {p.primary_hospital}
+                      </div>
+                    )}
+                    {p.years_in_practice && (
+                      <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 3 }}>
+                        {p.years_in_practice} years in practice
+                      </div>
+                    )}
+                    {(p.additional_quals || []).length > 0 && (
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
+                        {p.additional_quals.map(q => (
+                          <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
+                            {q}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {p.bio && <div style={{ marginBottom: 12, maxWidth: 560 }}><ExpandableBio text={p.bio} /></div>}
               </div>
               {!isOwnProfile && (
@@ -184,18 +227,29 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
             </div>
 
             {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, margin: '10px 0 16px' }}>
-              {[
+            {(() => {
+              const isClinician = p.work_mode === 'clinician';
+              const statItems = isClinician ? [
+                [posts.length || '—', 'Posts'],
+                [pubCount || '—', 'Publications'],
+                ...(p.years_in_practice ? [[p.years_in_practice, 'Yrs Practice']] : []),
+                ...(p.clinical_highlight_value ? [[p.clinical_highlight_value, p.clinical_highlight_label || 'Highlight']] : []),
+              ] : [
                 [posts.length || '—', 'Posts'],
                 [pubCount || '—', 'Publications'],
                 [hIndex > 0 ? `h${hIndex}` : '—', 'h-index'],
-              ].map(([v, l]) => (
-                <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v }}>{v}</div>
-                  <div style={{ fontSize: 9.5, color: T.mu, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{l}</div>
+              ];
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${statItems.length},1fr)`, gap: 8, margin: '10px 0 16px' }}>
+                  {statItems.map(([v, l]) => (
+                    <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v }}>{v}</div>
+                      <div style={{ fontSize: 9.5, color: T.mu, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{l}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
 
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: `1px solid ${T.bdr}`, margin: '0 -22px', padding: '0 22px' }}>
@@ -213,6 +267,40 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
 
             {tab === 'about' && (
               <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderTop: 'none', borderRadius: '0 0 14px 14px', padding: '18px 22px', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
+                {/* Research interests — all modes */}
+                {(p.topic_interests || []).length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Research Interests</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {p.topic_interests.map(t => (
+                        <span key={t} style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.2)`, fontWeight: 600 }}>
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clinical sections — clinician/both mode */}
+                {(p.work_mode === 'clinician' || p.work_mode === 'both') && p.patient_population && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Patient Population</div>
+                    <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6 }}>{p.patient_population}</div>
+                  </div>
+                )}
+                {(p.work_mode === 'clinician' || p.work_mode === 'both') && (p.additional_quals || []).length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Additional Qualifications</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {p.additional_quals.map(q => (
+                        <span key={q} style={{ fontSize: 12.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
+                          {q}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {wh.length > 0 && <>
                   <SH label="Work Experience" />
                   {wh.map((e, i) => (

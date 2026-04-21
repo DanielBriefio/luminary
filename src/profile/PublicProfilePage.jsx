@@ -89,9 +89,13 @@ export default function PublicProfilePage({ slug }) {
   const grt  = vis.grants        !== false ? (profile.grants         || []) : [];
   const showPubs = vis.publications !== false;
 
+  const pubTabLabel = profile.work_mode === 'clinician'
+    ? `Publications & Presentations (${pubs.length})`
+    : `Publications (${pubs.length})`;
+
   const tabs = [
     ['about', 'About'],
-    ...(showPubs && pubs.length > 0 ? [['publications', `Publications (${pubs.length})`]] : []),
+    ...(showPubs && pubs.length > 0 ? [['publications', pubTabLabel]] : []),
     ['card', 'Contact Details'],
   ];
 
@@ -177,6 +181,31 @@ export default function PublicProfilePage({ slug }) {
                   style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{profile.twitter} ↗</a>
               )}
             </div>
+            {/* Clinical identity block — clinician/both mode */}
+            {(profile.work_mode === 'clinician' || profile.work_mode === 'both') && (
+              <div style={{ marginBottom: 12 }}>
+                {profile.primary_hospital && (
+                  <div style={{ fontSize: 13, color: T.text, fontWeight: 500, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>🏥</span> {profile.primary_hospital}
+                  </div>
+                )}
+                {profile.years_in_practice && (
+                  <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 3 }}>
+                    {profile.years_in_practice} years in practice
+                  </div>
+                )}
+                {(profile.additional_quals || []).length > 0 && (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                    {profile.additional_quals.map(q => (
+                      <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
+                        {q}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {profile.bio && <div style={{ marginBottom: 14, maxWidth: 620 }}><ExpandableBio text={profile.bio} /></div>}
 
             {profile.topic_interests?.length > 0 && (
@@ -193,20 +222,33 @@ export default function PublicProfilePage({ slug }) {
             )}
 
             {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 9, margin: '14px 0' }}>
-              {[
+            {(() => {
+              const isClinician = profile.work_mode === 'clinician';
+              const statItems = isClinician ? [
+                ['—', 'Followers'],
+                ['—', 'Following'],
+                ...(profile.years_in_practice ? [[profile.years_in_practice, 'Yrs Practice']] : []),
+                profile.clinical_highlight_value
+                  ? [profile.clinical_highlight_value, profile.clinical_highlight_label || 'Highlight']
+                  : [pubStats.pubCount || '—', 'Publications'],
+              ] : [
                 ['—', 'Followers'],
                 ['—', 'Following'],
                 [pubStats.pubCount || '—', 'Publications'],
                 [pubStats.totalCitations || '—', 'Citations'],
                 [pubStats.hIndex > 0 ? `h${pubStats.hIndex}` : '—', 'h-index'],
-              ].map(([v, l]) => (
-                <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 19, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v }}>{v}</div>
-                  <div style={{ fontSize: 9.5, color: T.mu, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{l}</div>
+              ];
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${statItems.length},1fr)`, gap: 9, margin: '14px 0' }}>
+                  {statItems.map(([v, l]) => (
+                    <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 19, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v }}>{v}</div>
+                      <div style={{ fontSize: 9.5, color: T.mu, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{l}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
 
           {/* Tabs */}
@@ -229,6 +271,30 @@ export default function PublicProfilePage({ slug }) {
 
           {tab === 'about' && (
             <div>
+              {/* Clinical sections — shown for clinician/both mode */}
+              {(profile.work_mode === 'clinician' || profile.work_mode === 'both') && profile.patient_population && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
+                    Patient Population
+                  </div>
+                  <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6 }}>{profile.patient_population}</div>
+                </div>
+              )}
+              {(profile.work_mode === 'clinician' || profile.work_mode === 'both') && (profile.additional_quals || []).length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
+                    Additional Qualifications
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {profile.additional_quals.map(q => (
+                      <span key={q} style={{ fontSize: 12.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
+                        {q}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {wh.length > 0 && <>
                 <SH label="Work Experience" />
                 {wh.map((p, i) => (
@@ -345,6 +411,11 @@ export default function PublicProfilePage({ slug }) {
 
           {tab === 'publications' && (
             <div>
+              {profile.work_mode === 'clinician' && (
+                <div style={{ fontSize: 12.5, color: T.mu, padding: '10px 0', borderBottom: `1px solid ${T.bdr}`, marginBottom: 12 }}>
+                  Presentations, lectures, and publications
+                </div>
+              )}
               {pubs.length === 0
                 ? <div style={{ textAlign: 'center', padding: '40px 0', color: T.mu }}>
                     <div style={{ fontSize: 32, marginBottom: 10 }}>📚</div>

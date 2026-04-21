@@ -48,7 +48,10 @@ export default function CardQROverlay({ profile, onClose }) {
           {profile.name}
         </div>
         <div style={{ fontSize:12.5, color:'#888', marginBottom:24, lineHeight:1.4 }}>
-          {[profile.title, profile.institution].filter(Boolean).join(' · ')}
+          {(profile.work_mode === 'clinician' || profile.work_mode === 'both')
+            ? [profile.identity_tier2 || profile.title, profile.primary_hospital].filter(Boolean).join(' · ')
+            : [profile.title, profile.institution].filter(Boolean).join(' · ')
+          }
         </div>
 
         {/* QR code */}
