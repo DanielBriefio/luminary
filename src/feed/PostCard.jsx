@@ -104,6 +104,64 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
   const isOwner = currentUserId && currentUserId === post.user_id;
 
+  // Milestone post — special celebration card, no social actions
+  if (post.post_type === 'milestone') {
+    const slug = post.author_slug || currentProfile?.profile_slug;
+    return (
+      <div style={{
+        background: 'linear-gradient(135deg, #eeecff 0%, #f0f9ff 100%)',
+        border: `1.5px solid rgba(108,99,255,.25)`,
+        borderRadius: 14, overflow: 'hidden',
+        boxShadow: '0 2px 12px rgba(108,99,255,.1)',
+      }}>
+        <div style={{ height: 4, background: 'linear-gradient(90deg, #667eea, #764ba2, #f093fb)' }}/>
+        <div style={{ padding: '20px 22px' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
+          <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 18, marginBottom: 6, color: T.text }}>
+            Profile complete!
+          </div>
+          <div style={{ fontSize: 13, color: T.mu, lineHeight: 1.6, marginBottom: 16 }}>
+            You've built your Luminary research profile. Share it with colleagues so they can follow your work.
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            {slug && (
+              <a
+                href={`${window.location.origin}/p/${slug}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{
+                  padding: '9px 18px', borderRadius: 10, border: 'none',
+                  background: 'linear-gradient(135deg, #6c63ff, #764ba2)',
+                  color: '#fff', fontSize: 13, fontWeight: 700,
+                  textDecoration: 'none', display: 'inline-block',
+                }}
+              >
+                View my profile →
+              </a>
+            )}
+            {slug && (
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(`${window.location.origin}/p/${slug}`);
+                }}
+                style={{
+                  padding: '9px 16px', borderRadius: 10,
+                  border: `1.5px solid rgba(108,99,255,.3)`, background: 'transparent',
+                  color: T.v, fontSize: 13, fontWeight: 600,
+                  fontFamily: 'inherit', cursor: 'pointer',
+                }}
+              >
+                📋 Copy link
+              </button>
+            )}
+          </div>
+          <div style={{ marginTop: 14, fontSize: 11, color: T.mu }}>
+            Only visible to you · {timeAgo(post.created_at)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const goToProfile = (userId, slug) => {
     if (onViewUser && userId) { onViewUser(userId); return; }
     if (slug) window.location.href = `/p/${slug}`;

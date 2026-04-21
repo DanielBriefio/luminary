@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
+    "canvas-confetti": "^1.9.4",
     "jszip": "^3.10.1",
     "mammoth": "^1.6.0",
     "qrcode": "^1.5.4",

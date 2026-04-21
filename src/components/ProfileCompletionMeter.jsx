@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import confetti from 'canvas-confetti';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import { MILESTONES, STAGES, STAGE_REWARDS, computeStage } from '../lib/profileMilestones';
@@ -26,6 +27,36 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
       setLoading(false);
     });
   }, [user.id]);
+
+  // Fire celebration when profile reaches stage 5 for the first time
+  useEffect(() => {
+    if (loading) return;
+    const stage = computeStage(profile, stats);
+    if (stage < 5) return;
+    const flagKey = `luminary_profile_celebrated_${user.id}`;
+    if (localStorage.getItem(flagKey)) return;
+    localStorage.setItem(flagKey, '1');
+
+    // Confetti burst
+    confetti({
+      particleCount: 140,
+      spread: 90,
+      origin: { y: 0.5 },
+      colors: ['#6c63ff', '#764ba2', '#f093fb', '#10b981', '#f59e0b', '#ffffff'],
+    });
+
+    // Private milestone post — insert only if none exists yet
+    supabase.from('posts').select('id').eq('user_id', user.id).eq('post_type', 'milestone').limit(1)
+      .then(({ data }) => {
+        if (data?.length) return;
+        supabase.from('posts').insert({
+          user_id:    user.id,
+          post_type:  'milestone',
+          visibility: 'private',
+          content:    `<h3>🎉 Profile complete!</h3><p>You've built your Luminary research profile. Share it with colleagues so they can follow your work and publications.</p>`,
+        });
+      });
+  }, [loading, profile, stats, user.id]);
 
   if (loading) return null;
 

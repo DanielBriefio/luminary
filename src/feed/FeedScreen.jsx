@@ -310,9 +310,14 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       }
     }
 
+    // Strip private posts that don't belong to the current user
+    const visible = withSlugData.filter(p =>
+      p.visibility !== 'private' || p.user_id === user?.id
+    );
+
     const filtered = fp === 'sug'
-      ? applyModeFilter(withSlugData, modeFilter, profile?.work_mode || 'researcher')
-      : withSlugData;
+      ? applyModeFilter(visible, modeFilter, profile?.work_mode || 'researcher')
+      : visible;
 
     setPosts(filtered);
     setLoading(false);
