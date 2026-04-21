@@ -329,3 +329,56 @@ export const COMPOSER_PROMPTS = {
     "Share a perspective on translating evidence to practice...",
   ],
 };
+
+export const FEED_TIPS = [
+  {
+    id: 'qr_code',
+    icon: '📱',
+    title: 'QR code for conferences',
+    body: 'Your profile has a QR code under Profile → Share. Print it on a poster or slide so colleagues can find your work instantly.',
+  },
+  {
+    id: 'business_card',
+    icon: '🪪',
+    title: 'Virtual business card',
+    body: 'Share your digital business card at conferences. It shows your contact details and links — no paper needed.',
+    linkLabel: 'Open my card',
+    linkKey: 'card',
+  },
+  {
+    id: 'publications_import',
+    icon: '📄',
+    title: 'Import your publications',
+    body: 'Import from ORCID, upload a CV, or search Europe PMC — all from your Publications tab. Your full record in minutes.',
+  },
+  {
+    id: 'groups',
+    icon: '🔬',
+    title: 'Create a research group',
+    body: 'Groups give your team a shared feed, library, and project space. Great for labs, clinical teams, and journal clubs.',
+  },
+  {
+    id: 'library',
+    icon: '📚',
+    title: 'Save papers to your library',
+    body: 'Add papers from Europe PMC or ClinicalTrials.gov to your personal library. Organise them in folders by project.',
+  },
+  {
+    id: 'follow_papers',
+    icon: '🔔',
+    title: 'Follow a paper',
+    body: 'Click + Follow on any paper post to see new discussions about it in your Following feed.',
+  },
+  {
+    id: 'topics',
+    icon: '✨',
+    title: 'Personalise your feed',
+    body: 'Add research interests to your profile, then use the ⭐ My Field filter for a feed tuned to your work.',
+  },
+  {
+    id: 'cv_export',
+    icon: '📋',
+    title: 'Export your CV',
+    body: 'Export your full profile as a formatted PDF CV from Publications → Export. Ready for grant applications or job materials.',
+  },
+];

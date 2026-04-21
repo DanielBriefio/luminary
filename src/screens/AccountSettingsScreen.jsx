@@ -128,6 +128,28 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
     </label>
   );
 
+  const TipsToggle = () => {
+    const [tipsOn, setTipsOn] = useState(!localStorage.getItem('luminary_tips_dismissed'));
+    const toggle = () => {
+      if (tipsOn) {
+        localStorage.setItem('luminary_tips_dismissed', '1');
+      } else {
+        localStorage.removeItem('luminary_tips_dismissed');
+        localStorage.removeItem('luminary_tips_index');
+      }
+      setTipsOn(v => !v);
+    };
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Show tips in feed</div>
+          <div style={{ fontSize: 12, color: T.mu }}>Feature tips shown in the right sidebar of your feed</div>
+        </div>
+        <Toggle value={tipsOn} onChange={toggle} label="" sublabel=""/>
+      </div>
+    );
+  };
+
   const SectionHead = ({ label }) => (
     <div style={{
       fontSize: 10.5, fontWeight: 700, color: T.mu, textTransform: 'uppercase',
@@ -253,6 +275,10 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
               </Btn>
             </div>
           </div>
+
+          {/* Feed tips */}
+          <SectionHead label="Feed tips"/>
+          <TipsToggle/>
 
           {/* Email preferences */}
           <SectionHead label="Email preferences"/>

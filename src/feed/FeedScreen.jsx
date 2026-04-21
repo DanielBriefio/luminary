@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { T, TIER1_LIST, getTier2, WORK_MODE_MAP } from '../lib/constants';
+import FeedTipCard from '../components/FeedTipCard';
 
 import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
@@ -26,9 +27,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   );
   const [showModeTooltip, setShowModeTooltip] = useState(
     () => !localStorage.getItem('luminary_mode_tooltip_seen')
-  );
-  const [showQrTip, setShowQrTip] = useState(
-    () => !localStorage.getItem('luminary_qr_tip_dismissed')
   );
 
   useEffect(()=>{ localStorage.setItem('luminary_feed_mode',feedMode); },[feedMode]);
@@ -545,38 +543,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                   <div style={{fontSize:12,color:T.mu,lineHeight:1.7}}>You're one of the first people on Luminary. Every post you share helps build the scientific community we've been missing.</div>
                 </div>
 
-                {showQrTip && profile?.profile_slug && (
-                  <div style={{
-                    background: T.v2, border:`1px solid rgba(108,99,255,.2)`,
-                    borderRadius:14, padding:15,
-                    boxShadow:"0 2px 12px rgba(108,99,255,.07)", marginBottom:12,
-                  }}>
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8}}>
-                      <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.08em',color:T.v,fontWeight:700}}>
-                        📱 Share your profile
-                      </div>
-                      <button onClick={() => { setShowQrTip(false); localStorage.setItem('luminary_qr_tip_dismissed','1'); }}
-                        style={{fontSize:12,color:T.mu,border:'none',background:'transparent',cursor:'pointer',lineHeight:1,padding:0}}>
-                        ✕
-                      </button>
-                    </div>
-                    <div style={{fontSize:12,color:T.v,lineHeight:1.7,marginBottom:10}}>
-                      Your profile has a QR code — print it on a poster, add it to a slide, or exchange your virtual business card at conferences.
-                    </div>
-                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                      <a href={`${window.location.origin}/p/${profile.profile_slug}`}
-                        target="_blank" rel="noopener noreferrer"
-                        style={{fontSize:12,color:T.v,fontWeight:700,textDecoration:'none'}}>
-                        View public profile →
-                      </a>
-                      <a href={`${window.location.origin}/c/${profile.profile_slug}`}
-                        target="_blank" rel="noopener noreferrer"
-                        style={{fontSize:12,color:T.v,fontWeight:700,textDecoration:'none'}}>
-                        🪪 Open business card →
-                      </a>
-                    </div>
-                  </div>
-                )}
+                <FeedTipCard profile={profile}/>
                 {potw && (
                   <button
                     onClick={() => onViewPaper && onViewPaper(potw.doi)}
