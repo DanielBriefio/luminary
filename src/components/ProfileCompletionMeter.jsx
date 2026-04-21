@@ -51,13 +51,20 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
       {/* Clickable header — compact single row */}
       <div onClick={() => setExpanded(e => !e)} style={{padding: '10px 14px', cursor: 'pointer'}}>
         <div style={{display:'flex', alignItems:'center', gap:10}}>
-          {/* Slim progress bar */}
-          <div style={{flex:1, height:5, borderRadius:3, background: T.s3, overflow:'hidden'}}>
+          {/* Slim progress bar with stage dividers */}
+          <div style={{flex:1, height:5, borderRadius:3, background: T.s3, position:'relative'}}>
             <div style={{
               height:'100%', borderRadius:3, background: T.v,
               width: `${Math.round((completedCount / totalMilestones) * 100)}%`,
               transition: 'width .4s',
             }}/>
+            {[3,6,9,12].map(t => (
+              <div key={t} style={{
+                position:'absolute', top:0, bottom:0,
+                left: `${Math.round((t / totalMilestones) * 100)}%`,
+                width: 2, background: T.w,
+              }}/>
+            ))}
           </div>
           <span style={{fontSize:11.5, color: T.mu, whiteSpace:'nowrap', flexShrink:0}}>
             Research profile {Math.round((completedCount / totalMilestones) * 100)}% complete
