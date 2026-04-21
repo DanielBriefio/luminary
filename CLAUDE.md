@@ -519,8 +519,8 @@ id (uuid PK), full_name (TEXT NOT NULL), email (TEXT NOT NULL),
 institution (TEXT, nullable), role_title (TEXT, nullable),
 referral_source (TEXT, nullable), is_priority (bool, default false),
 created_at (timestamptz)
-- No RLS policies — likely written to by a public landing page outside this repo
-- Do not add RLS without understanding the external write path
+- RLS enabled; one policy: `anon_insert_waitlist` (INSERT, with_check = true) — anonymous users can insert, nobody can read/update/delete via RLS
+- Written to by a public landing page outside this repo; no select policy means rows are not readable by the app
 
 ## RLS — Groups (key policies)
 
