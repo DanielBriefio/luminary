@@ -107,6 +107,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   // Milestone post — special celebration card, no social actions
   if (post.post_type === 'milestone') {
     const slug = post.author_slug || currentProfile?.profile_slug;
+    const cardUrl = slug ? `${window.location.origin}/c/${slug}` : null;
     return (
       <div style={{
         background: 'linear-gradient(135deg, #eeecff 0%, #f0f9ff 100%)',
@@ -120,41 +121,55 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 18, marginBottom: 6, color: T.text }}>
             Profile complete!
           </div>
-          <div style={{ fontSize: 13, color: T.mu, lineHeight: 1.6, marginBottom: 16 }}>
-            You've built your Luminary research profile. Share it with colleagues so they can follow your work.
+          <div style={{ fontSize: 13, color: T.mu, lineHeight: 1.6, marginBottom: 14 }}>
+            Your Luminary research profile is ready. Share it with colleagues, print your QR code on a poster, or exchange your virtual business card at your next conference.
           </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
             {slug && (
-              <a
-                href={`${window.location.origin}/p/${slug}`}
-                target="_blank" rel="noopener noreferrer"
+              <a href={`${window.location.origin}/p/${slug}`} target="_blank" rel="noopener noreferrer"
                 style={{
-                  padding: '9px 18px', borderRadius: 10, border: 'none',
+                  padding: '8px 16px', borderRadius: 10, border: 'none',
                   background: 'linear-gradient(135deg, #6c63ff, #764ba2)',
-                  color: '#fff', fontSize: 13, fontWeight: 700,
+                  color: '#fff', fontSize: 12.5, fontWeight: 700,
                   textDecoration: 'none', display: 'inline-block',
-                }}
-              >
+                }}>
                 View my profile →
+              </a>
+            )}
+            {cardUrl && (
+              <a href={cardUrl} target="_blank" rel="noopener noreferrer"
+                style={{
+                  padding: '8px 14px', borderRadius: 10,
+                  border: `1.5px solid rgba(108,99,255,.3)`, background: 'transparent',
+                  color: T.v, fontSize: 12.5, fontWeight: 600,
+                  textDecoration: 'none', display: 'inline-block',
+                }}>
+                🪪 Virtual business card
               </a>
             )}
             {slug && (
               <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(`${window.location.origin}/p/${slug}`);
-                }}
+                onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/p/${slug}`)}
                 style={{
-                  padding: '9px 16px', borderRadius: 10,
-                  border: `1.5px solid rgba(108,99,255,.3)`, background: 'transparent',
-                  color: T.v, fontSize: 13, fontWeight: 600,
+                  padding: '8px 14px', borderRadius: 10,
+                  border: `1.5px solid ${T.bdr}`, background: 'transparent',
+                  color: T.mu, fontSize: 12.5, fontWeight: 600,
                   fontFamily: 'inherit', cursor: 'pointer',
-                }}
-              >
-                📋 Copy link
+                }}>
+                📋 Copy profile link
               </button>
             )}
           </div>
-          <div style={{ marginTop: 14, fontSize: 11, color: T.mu }}>
+
+          <div style={{
+            background: 'rgba(108,99,255,.07)', borderRadius: 9,
+            padding: '9px 12px', fontSize: 12, color: T.v, lineHeight: 1.6,
+          }}>
+            💡 <strong>Tip:</strong> Your QR code is in your profile under <em>Share</em>. Add it to a poster or slide so colleagues can find you instantly.
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 11, color: T.mu }}>
             Only visible to you · {timeAgo(post.created_at)}
           </div>
         </div>

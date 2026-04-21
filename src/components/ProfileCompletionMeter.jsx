@@ -52,7 +52,7 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
         supabase.from('posts').insert({
           user_id:    user.id,
           post_type:  'milestone',
-          visibility: 'private',
+          visibility: 'everyone',
           content:    `<h3>🎉 Profile complete!</h3><p>You've built your Luminary research profile. Share it with colleagues so they can follow your work and publications.</p>`,
         });
       });
