@@ -34,27 +34,37 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
     const stage = computeStage(profile, stats);
     if (stage < 5) return;
     const flagKey = `luminary_profile_celebrated_${user.id}`;
-    if (localStorage.getItem(flagKey)) return;
-    localStorage.setItem(flagKey, '1');
+    // Confetti — fires once per device via localStorage
+    if (!localStorage.getItem(flagKey)) {
+      localStorage.setItem(flagKey, '1');
+      confetti({
+        particleCount: 140,
+        spread: 90,
+        origin: { y: 0.5 },
+        colors: ['#6c63ff', '#764ba2', '#f093fb', '#10b981', '#f59e0b', '#ffffff'],
+      });
+    }
 
-    // Confetti burst
-    confetti({
-      particleCount: 140,
-      spread: 90,
-      origin: { y: 0.5 },
-      colors: ['#6c63ff', '#764ba2', '#f093fb', '#10b981', '#f59e0b', '#ffffff'],
-    });
-
-    // Private milestone post — insert only if none exists yet
-    supabase.from('posts').select('id').eq('user_id', user.id).eq('post_type', 'milestone').limit(1)
+    // Milestone post — always ensure a readable (visibility='everyone') one exists.
+    // Deletes any old visibility='private' post left over from before the fix.
+    supabase.from('posts').select('id, visibility')
+      .eq('user_id', user.id).eq('post_type', 'milestone')
       .then(({ data }) => {
-        if (data?.length) return;
-        supabase.from('posts').insert({
+        const readable = (data || []).find(p => p.visibility === 'everyone');
+        if (readable) return; // already correct — nothing to do
+
+        // Delete stale private copies then insert a readable one
+        const staleIds = (data || []).map(p => p.id);
+        const cleanup = staleIds.length
+          ? supabase.from('posts').delete().in('id', staleIds)
+          : Promise.resolve();
+
+        cleanup.then(() => supabase.from('posts').insert({
           user_id:    user.id,
           post_type:  'milestone',
           visibility: 'everyone',
           content:    `<h3>🎉 Profile complete!</h3><p>You've built your Luminary research profile. Share it with colleagues so they can follow your work and publications.</p>`,
-        });
+        }));
       });
   }, [loading, profile, stats, user.id]);
 
