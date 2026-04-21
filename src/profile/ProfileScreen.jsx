@@ -624,12 +624,16 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       );
     }
     return (
-      <div style={{padding:"13px 0",borderBottom:"1px solid "+T.bdr}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-          <div style={{width:36,height:36,borderRadius:9,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,border:"1px solid "+T.bdr,background:T.s2}}>{logo}</div>
-          <div style={{marginLeft:"auto"}}>{menu}</div>
+      <div style={{display:"flex",gap:12,padding:"12px 0",borderBottom:"1px solid "+T.bdr,alignItems:"flex-start"}}>
+        <div style={{width:36,height:36,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,background:"#e5e7eb"}}>
+          {logo}
         </div>
-        <div>{renderView(item)}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
+            <div style={{flex:1,minWidth:0}}>{renderView(item)}</div>
+            {menu}
+          </div>
+        </div>
       </div>
     );
   }
@@ -1274,9 +1278,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <EditableRow key={i} item={e} index={i} field="education" array={edu} logo="🎓"
                       renderView={e=>(
                         <>
-                          <div style={{fontSize:13,fontWeight:700,marginBottom:1}}>{e.school}</div>
-                          <div style={{fontSize:12,fontWeight:600,color:T.v,marginBottom:1}}>{[e.degree,e.field].filter(Boolean).join(', ')}</div>
-                          {(e.start||e.end)&&<div style={{fontSize:11,color:T.mu}}>{formatDateRange(e.start,e.end)}</div>}
+                          <div style={{fontSize:14,fontWeight:700,lineHeight:1.3,marginBottom:2,color:T.text}}>{e.school}</div>
+                          {(e.degree||e.field)&&<div style={{fontSize:13,fontWeight:600,color:T.v,marginBottom:1}}>{[e.degree,e.field].filter(Boolean).join(', ')}</div>}
+                          {(e.start||e.end)&&<div style={{fontSize:12,color:T.mu}}>{formatDateRange(e.start,e.end)}</div>}
                         </>
                       )}
                       renderEdit={(f,set)=>(
@@ -1301,9 +1305,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <EditableRow key={i} item={v} index={i} field="volunteering" array={vol} logo="🤝"
                       renderView={v=>(
                         <>
-                          <div style={{fontSize:13,fontWeight:700,marginBottom:1}}>{v.role||'Volunteer'}</div>
-                          <div style={{fontSize:12,fontWeight:600,color:T.v,marginBottom:1}}>{v.org}</div>
-                          {(v.start||v.end)&&<div style={{fontSize:11,color:T.mu}}>{formatDateRange(v.start,v.end)}</div>}
+                          <div style={{fontSize:14,fontWeight:700,lineHeight:1.3,marginBottom:2,color:T.text}}>{v.role||'Volunteer'}</div>
+                          {v.org&&<div style={{fontSize:13,fontWeight:600,color:T.v,marginBottom:1}}>{v.org}</div>}
+                          {(v.start||v.end)&&<div style={{fontSize:12,color:T.mu}}>{formatDateRange(v.start,v.end)}</div>}
                         </>
                       )}
                       renderEdit={(f,set)=>(
@@ -1327,9 +1331,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <EditableRow key={i} item={o} index={i} field="organizations" array={org} logo="🏛️"
                       renderView={o=>(
                         <>
-                          <div style={{fontSize:13,fontWeight:700,marginBottom:1}}>{o.name}</div>
-                          {o.role&&<div style={{fontSize:12,fontWeight:600,color:T.v,marginBottom:1}}>{o.role}</div>}
-                          {(o.start||o.end)&&<div style={{fontSize:11,color:T.mu}}>{formatDateRange(o.start,o.end)}</div>}
+                          <div style={{fontSize:14,fontWeight:700,lineHeight:1.3,marginBottom:2,color:T.text}}>{o.name}</div>
+                          {o.role&&<div style={{fontSize:13,fontWeight:600,color:T.v,marginBottom:1}}>{o.role}</div>}
+                          {(o.start||o.end)&&<div style={{fontSize:12,color:T.mu}}>{formatDateRange(o.start,o.end)}</div>}
                         </>
                       )}
                       renderEdit={(f,set)=>(
@@ -1356,9 +1360,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <EditableRow key={i} item={g} index={i} field="grants" array={grt} logo="💰"
                       renderView={g=>(
                         <>
-                          <div style={{fontSize:13,fontWeight:700,marginBottom:1}}>{g.title}</div>
-                          {g.agency&&<div style={{fontSize:12,fontWeight:600,color:T.v,marginBottom:2}}>{g.agency}</div>}
-                          <div style={{fontSize:11.5,color:T.mu,display:'flex',gap:10,flexWrap:'wrap'}}>
+                          <div style={{fontSize:14,fontWeight:700,lineHeight:1.3,marginBottom:2,color:T.text}}>{g.title}</div>
+                          {g.agency&&<div style={{fontSize:13,fontWeight:600,color:T.v,marginBottom:2}}>{g.agency}</div>}
+                          <div style={{fontSize:12,color:T.mu,display:'flex',gap:10,flexWrap:'wrap'}}>
                             {g.grant_number&&<span>#{g.grant_number}</span>}
                             {g.amount_value&&<span style={{fontWeight:600,color:T.gr}}>{g.amount_value}{g.amount_currency?' '+g.amount_currency:''}</span>}
                             {g.role&&<span>{g.role}</span>}
@@ -1431,9 +1435,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <EditableRow key={i} item={h} index={i} field="honors" array={hon} logo="🏅"
                       renderView={h=>(
                         <>
-                          <div style={{fontSize:13,fontWeight:700,marginBottom:1}}>{h.title}</div>
-                          {h.issuer&&<div style={{fontSize:12,color:T.mu}}>{h.issuer}</div>}
-                          {h.date&&<div style={{fontSize:11,color:T.mu}}>{h.date}</div>}
+                          <div style={{fontSize:14,fontWeight:700,lineHeight:1.3,marginBottom:2,color:T.text}}>{h.title}</div>
+                          {h.issuer&&<div style={{fontSize:13,color:T.mu,marginBottom:1}}>{h.issuer}</div>}
+                          {h.date&&<div style={{fontSize:12,color:T.mu}}>{h.date}</div>}
                         </>
                       )}
                       renderEdit={(f,set)=>(
@@ -1455,9 +1459,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <EditableRow key={i} item={p} index={i} field="patents" array={pat} logo="⚗️"
                       renderView={p=>(
                         <>
-                          <div style={{fontSize:13,fontWeight:700,marginBottom:1}}>{p.title}</div>
-                          {p.number&&<div style={{fontSize:12,color:T.mu}}>Patent {p.number}</div>}
-                          {p.url&&<a href={p.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11.5,color:T.v}}>View ↗</a>}
+                          <div style={{fontSize:14,fontWeight:700,lineHeight:1.3,marginBottom:2,color:T.text}}>{p.title}</div>
+                          {p.number&&<div style={{fontSize:12,color:T.mu,marginBottom:1}}>Patent {p.number}</div>}
+                          {p.url&&<a href={p.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:T.v}}>View ↗</a>}
                         </>
                       )}
                       renderEdit={(f,set)=>(

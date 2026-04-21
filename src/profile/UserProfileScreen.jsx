@@ -297,9 +297,9 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                   <SH label="Education" />
                   {edu.map((e, i) => (
                     <Row key={i} logo="🎓">
-                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{e.school}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 1 }}>{[e.degree, e.field].filter(Boolean).join(', ')}</div>
-                      {(e.start || e.end) && <div style={{ fontSize: 11, color: T.mu }}>{formatDateRange(e.start, e.end)}</div>}
+                      <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 2, color: T.text }}>{e.school}</div>
+                      {(e.degree || e.field) && <div style={{ fontSize: 13, fontWeight: 600, color: T.v, marginBottom: 1 }}>{[e.degree, e.field].filter(Boolean).join(', ')}</div>}
+                      {(e.start || e.end) && <div style={{ fontSize: 12, color: T.mu }}>{formatDateRange(e.start, e.end)}</div>}
                     </Row>
                   ))}
                 </>}
@@ -308,9 +308,9 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                   <SH label="Volunteering" />
                   {vol.map((v, i) => (
                     <Row key={i} logo="🤝">
-                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{v.role || 'Volunteer'}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 1 }}>{v.org}</div>
-                      {(v.start || v.end) && <div style={{ fontSize: 11, color: T.mu }}>{formatDateRange(v.start, v.end)}</div>}
+                      <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 2, color: T.text }}>{v.role || 'Volunteer'}</div>
+                      {v.org && <div style={{ fontSize: 13, fontWeight: 600, color: T.v, marginBottom: 1 }}>{v.org}</div>}
+                      {(v.start || v.end) && <div style={{ fontSize: 12, color: T.mu }}>{formatDateRange(v.start, v.end)}</div>}
                     </Row>
                   ))}
                 </>}
@@ -319,9 +319,9 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                   <SH label="Organizations &amp; Memberships" />
                   {org.map((o, i) => (
                     <Row key={i} logo="🏛️">
-                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{o.name}</div>
-                      {o.role && <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 1 }}>{o.role}</div>}
-                      {(o.start || o.end) && <div style={{ fontSize: 11, color: T.mu }}>{formatDateRange(o.start, o.end)}</div>}
+                      <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 2, color: T.text }}>{o.name}</div>
+                      {o.role && <div style={{ fontSize: 13, fontWeight: 600, color: T.v, marginBottom: 1 }}>{o.role}</div>}
+                      {(o.start || o.end) && <div style={{ fontSize: 12, color: T.mu }}>{formatDateRange(o.start, o.end)}</div>}
                     </Row>
                   ))}
                 </>}
@@ -330,9 +330,9 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                   <SH label="Grants &amp; Funding" />
                   {grt.map((g, i) => (
                     <Row key={i} logo="💰">
-                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{g.title}</div>
-                      {g.agency && <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 2 }}>{g.agency}</div>}
-                      <div style={{ fontSize: 11.5, color: T.mu, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 2, color: T.text }}>{g.title}</div>
+                      {g.agency && <div style={{ fontSize: 13, fontWeight: 600, color: T.v, marginBottom: 2 }}>{g.agency}</div>}
+                      <div style={{ fontSize: 12, color: T.mu, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                         {g.grant_number && <span>#{g.grant_number}</span>}
                         {g.amount_value && <span style={{ fontWeight: 600, color: T.gr }}>{g.amount_value}{g.amount_currency ? ' ' + g.amount_currency : ''}</span>}
                         {g.role && <span>{g.role}</span>}
@@ -365,9 +365,9 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                       <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 7, color: T.text }}>Honors &amp; Awards</div>
                       {hon.map((h, i) => (
                         <Row key={i} logo="🏅">
-                          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{h.title}</div>
-                          {h.issuer && <div style={{ fontSize: 12, color: T.mu }}>{h.issuer}</div>}
-                          {h.date   && <div style={{ fontSize: 11, color: T.mu }}>{h.date}</div>}
+                          <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 2, color: T.text }}>{h.title}</div>
+                          {h.issuer && <div style={{ fontSize: 13, color: T.mu, marginBottom: 1 }}>{h.issuer}</div>}
+                          {h.date   && <div style={{ fontSize: 12, color: T.mu }}>{h.date}</div>}
                         </Row>
                       ))}
                     </div>
@@ -377,9 +377,9 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                       <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 7, color: T.text }}>Patents</div>
                       {pat.map((pt, i) => (
                         <Row key={i} logo="⚗️">
-                          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{pt.title}</div>
-                          {pt.number && <div style={{ fontSize: 12, color: T.mu }}>Patent {pt.number}</div>}
-                          {pt.url    && <a href={pt.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, color: T.v }}>View ↗</a>}
+                          <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 2, color: T.text }}>{pt.title}</div>
+                          {pt.number && <div style={{ fontSize: 12, color: T.mu, marginBottom: 1 }}>Patent {pt.number}</div>}
+                          {pt.url    && <a href={pt.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.v }}>View ↗</a>}
                         </Row>
                       ))}
                     </div>
@@ -467,8 +467,8 @@ function Row({ logo, logoChar, children }) {
   }
   return (
     <div style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: '1px solid ' + T.bdr, alignItems: 'flex-start' }}>
-      <div style={{ width: 38, height: 38, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, border: '1px solid ' + T.bdr, background: T.s2 }}>{logo}</div>
-      <div style={{ flex: 1 }}>{children}</div>
+      <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, background: '#e5e7eb' }}>{logo}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
     </div>
   );
 }
