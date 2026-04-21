@@ -48,64 +48,25 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
       marginBottom: 16, overflow: 'hidden',
     }}>
 
-      {/* Clickable header */}
-      <div onClick={() => setExpanded(e => !e)} style={{padding: '14px 16px', cursor: 'pointer'}}>
-
-        {/* Title row */}
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom: 10}}>
-          <div>
-            <div style={{fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 2}}>
-              Complete your profile to unlock more features
-            </div>
-            {nextReward && (
-              <div style={{fontSize: 11.5, color: T.v, fontWeight: 600}}>
-                → Next unlock: {nextReward}
-              </div>
-            )}
-            <div style={{fontSize: 11, color: T.mu, marginTop: 2}}>
-              {completedCount} of {totalMilestones} milestones complete
-            </div>
+      {/* Clickable header — compact single row */}
+      <div onClick={() => setExpanded(e => !e)} style={{padding: '10px 14px', cursor: 'pointer'}}>
+        <div style={{display:'flex', alignItems:'center', gap:10}}>
+          {/* Slim progress bar */}
+          <div style={{flex:1, height:5, borderRadius:3, background: T.s3, overflow:'hidden'}}>
+            <div style={{
+              height:'100%', borderRadius:3, background: T.v,
+              width: `${Math.round((completedCount / totalMilestones) * 100)}%`,
+              transition: 'width .4s',
+            }}/>
           </div>
+          <span style={{fontSize:11.5, color: T.mu, whiteSpace:'nowrap', flexShrink:0}}>
+            Research profile {Math.round((completedCount / totalMilestones) * 100)}% complete
+          </span>
           <span style={{
-            fontSize: 13, color: T.mu, marginLeft: 8, flexShrink: 0,
+            fontSize: 11, color: T.mu, flexShrink: 0,
             transform: expanded ? 'rotate(180deg)' : 'none',
             display: 'inline-block', transition: 'transform .2s',
           }}>▾</span>
-        </div>
-
-        {/* Stage labels above the bar */}
-        <div style={{display: 'flex', marginBottom: 4}}>
-          {STAGES.map(s => {
-            const done    = s.number <= currentStage;
-            const current = s.number === nextStageNum;
-            return (
-              <div key={s.number} style={{
-                flex: 1, textAlign: 'center',
-                fontSize: 10, fontWeight: current || done ? 700 : 400,
-                color: done ? T.v : current ? T.text : T.mu,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                paddingBottom: 2,
-              }}>
-                {done ? '✓ ' : ''}{s.label}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Segmented progress bar */}
-        <div style={{display: 'flex', gap: 3, height: 8}}>
-          {STAGES.map(s => {
-            const done    = s.number <= currentStage;
-            const current = s.number === nextStageNum;
-            return (
-              <div key={s.number} style={{
-                flex: 1, borderRadius: 4,
-                background: done ? T.v : current ? T.v2 : T.s3,
-                border: current ? `1.5px solid ${T.v}` : 'none',
-                transition: 'background .3s',
-              }}/>
-            );
-          })}
         </div>
       </div>
 

@@ -37,9 +37,9 @@ export const MILESTONES = [
   },
   {
     id: 'orcid_linked',
-    label: 'ORCID linked and verified',
-    check: (p) => !!(p.orcid && p.orcid_verified),
-    cta: 'Link ORCID', ctaAction: 'import_orcid',
+    label: 'ORCID added to profile',
+    check: (p) => !!p.orcid,
+    cta: 'Add ORCID', ctaAction: 'edit_profile',
   },
   {
     id: 'following_3',
