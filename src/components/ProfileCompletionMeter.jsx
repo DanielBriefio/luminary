@@ -136,7 +136,7 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
                         borderRadius: 20, padding: '2px 9px',
                         cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
                       }}>
-                      {m.cta} →
+                      {(m.ctaLabels?.[profile?.work_mode] || m.cta)} →
                     </button>
                   )}
                 </div>

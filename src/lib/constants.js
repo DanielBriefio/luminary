@@ -268,3 +268,64 @@ export const ZERO_COMMENT_PROMPTS = [
 
 export const getDiscussionPrompts = (tier1) =>
   DISCUSSION_PROMPTS[tier1] || DISCUSSION_PROMPTS.default;
+
+// ── WORK MODES ────────────────────────────────────────────────────────────────
+
+export const WORK_MODES = [
+  {
+    id:          'researcher',
+    label:       'Researcher',
+    icon:        '🔬',
+    description: 'Lab, clinical trials, publishing',
+    statsConfig: ['followers', 'following', 'publications', 'citations'],
+  },
+  {
+    id:          'clinician',
+    label:       'Clinician',
+    icon:        '🏥',
+    description: 'I see patients, applying evidence',
+    statsConfig: ['followers', 'following', 'experience', 'highlight'],
+  },
+  {
+    id:          'both',
+    label:       'Both',
+    icon:        '⚕️',
+    description: 'Research and clinical practice',
+    statsConfig: ['followers', 'following', 'publications', 'highlight'],
+  },
+  {
+    id:          'industry',
+    label:       'Industry',
+    icon:        '💊',
+    description: 'Pharma, MedTech, Medical Affairs, HEOR',
+    statsConfig: ['followers', 'following', 'publications', 'highlight'],
+  },
+];
+
+export const WORK_MODE_MAP = Object.fromEntries(
+  WORK_MODES.map(m => [m.id, m])
+);
+
+export const COMPOSER_PROMPTS = {
+  researcher: [
+    "Share a paper you found interesting...",
+    "What's the latest in your field?",
+    "Share a finding from your research...",
+  ],
+  clinician: [
+    "Share a clinical insight from your practice...",
+    "What guideline update changed how you treat patients?",
+    "Share a technique or approach that works for you...",
+    "What does this paper mean for your patients?",
+  ],
+  both: [
+    "Share what bridges your research and clinical work...",
+    "What's the latest in your field?",
+    "Share an insight from the bench or bedside...",
+  ],
+  industry: [
+    "Share an insight from your field...",
+    "What's the latest in Medical Affairs or HEOR?",
+    "Share a perspective on translating evidence to practice...",
+  ],
+};

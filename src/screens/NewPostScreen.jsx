@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T, AUTO_TAG_ENABLED, EDGE_HEADERS } from '../lib/constants';
+import { T, AUTO_TAG_ENABLED, EDGE_HEADERS, COMPOSER_PROMPTS } from '../lib/constants';
 
 const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
 import { getFileCategory } from '../lib/fileUtils';
@@ -101,6 +101,11 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
   const { isMobile } = useWindowSize();
   const [postType,setPostType]           = useState('text');
   const [content,setContent]             = useState('');
+
+  const [composerPrompt] = useState(() => {
+    const prompts = COMPOSER_PROMPTS[profile?.work_mode || 'researcher'];
+    return prompts[Math.floor(Math.random() * prompts.length)];
+  });
 
   // Paper fields
   const [paperTitle,setPaperTitle]       = useState('');
@@ -647,7 +652,7 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
               isDeepDive ? "Use H2 headings for sections, ❝ for pull quotes, 📄 Cite to add paper references..." :
-              "Share a finding, insight, lab update, or question..."
+              composerPrompt
             }/>
         </div>
 

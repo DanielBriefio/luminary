@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T, TIER1_LIST, getTier2, getTier1ForTier2 } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, getTier1ForTier2, WORK_MODE_MAP } from '../lib/constants';
 import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
 import { formatDateRange } from '../lib/linkedInUtils';
 import Av from '../components/Av';
@@ -34,6 +34,39 @@ function PF({label,field,form,setForm,placeholder=""}) {
       <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:4}}>{label}</label>
       <input value={form[field]||''} onChange={e=>setForm(f=>({...f,[field]:e.target.value}))} placeholder={placeholder}
         style={{width:'100%',background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 13px',fontSize:13,fontFamily:'inherit',outline:'none',color:T.text}}/>
+    </div>
+  );
+}
+
+const inputStyle = {width:'100%',background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 13px',fontSize:13,fontFamily:'inherit',outline:'none',color:T.text};
+const labelStyle = {display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:4};
+
+function QualChipInput({ value, onChange, placeholder }) {
+  const [input, setInput] = useState('');
+  const add = () => {
+    const trimmed = input.trim();
+    if (!trimmed || value.includes(trimmed)) return;
+    onChange([...value, trimmed]);
+    setInput('');
+  };
+  const remove = (chip) => onChange(value.filter(v => v !== chip));
+  return (
+    <div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:value.length?8:0}}>
+        {value.map(chip => (
+          <span key={chip} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px 4px 12px',borderRadius:20,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.2)`,fontSize:12.5,fontWeight:600}}>
+            {chip}
+            <button onClick={()=>remove(chip)} style={{fontSize:11,color:T.v,border:'none',background:'transparent',cursor:'pointer',padding:0,lineHeight:1,opacity:0.7}}>✕</button>
+          </span>
+        ))}
+      </div>
+      <div style={{display:'flex',gap:6}}>
+        <input value={input} onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add();}}}
+          placeholder={placeholder}
+          style={{...inputStyle,flex:1}}/>
+        <Btn onClick={add} disabled={!input.trim()}>Add</Btn>
+      </div>
     </div>
   );
 }
@@ -77,11 +110,12 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
   const [pendingCvPubs, setPendingCvPubs] = useState([]);
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showSharePanel,  setShowSharePanel]  = useState(false);
-  const [showAllSkills,  setShowAllSkills]  = useState(false);
-  const [showCvExport,   setShowCvExport]   = useState(false);
-  const [editingTopics,  setEditingTopics]  = useState(false);
-  const [topicDraft,     setTopicDraft]     = useState([]);
-  const [savingTopics,   setSavingTopics]   = useState(false);
+  const [showAllSkills,      setShowAllSkills]      = useState(false);
+  const [showCvExport,       setShowCvExport]       = useState(false);
+  const [editingTopics,      setEditingTopics]      = useState(false);
+  const [topicDraft,         setTopicDraft]         = useState([]);
+  const [savingTopics,       setSavingTopics]       = useState(false);
+  const [showClinicalFields, setShowClinicalFields] = useState(false);
 
   // ORCID grants importer state
   const [showOrcidGrants,    setShowOrcidGrants]    = useState(false);
@@ -301,8 +335,23 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       card_show_website:form.card_show_website, card_show_orcid:form.card_show_orcid,
       card_show_twitter:form.card_show_twitter,
     };
-    // Try full save first; if card columns don't exist yet, fall back to core only
-    const { data, error } = await supabase.from('profiles').update({...coreUpdates,...cardUpdates}).eq('id',user.id).select().single();
+    // Work mode + clinical + work contact fields (from migration_workmode.sql)
+    const workModeUpdates = {
+      work_mode: form.work_mode,
+      subspeciality: form.subspeciality,
+      years_in_practice: form.years_in_practice ? parseInt(form.years_in_practice) : null,
+      primary_hospital: form.primary_hospital,
+      patient_population: form.patient_population,
+      additional_quals: form.additional_quals,
+      clinical_highlight_label: form.clinical_highlight_label,
+      clinical_highlight_value: form.clinical_highlight_value,
+      work_phone: form.work_phone,
+      work_address: form.work_address,
+      card_show_work_phone: form.card_show_work_phone,
+      card_show_work_address: form.card_show_work_address,
+    };
+    // Try full save first; if some columns don't exist yet, fall back to core only
+    const { data, error } = await supabase.from('profiles').update({...coreUpdates,...cardUpdates,...workModeUpdates}).eq('id',user.id).select().single();
     if(error){
       const { data:d2, error:e2 } = await supabase.from('profiles').update(coreUpdates).eq('id',user.id).select().single();
       if(e2){ alert('Save failed: '+e2.message); setSaving(false); return; }
@@ -355,6 +404,21 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       card_show_website:  profile.card_show_website  ??true,
       card_show_orcid:    profile.card_show_orcid    ??true,
       card_show_twitter:  profile.card_show_twitter  ??true,
+      // work mode
+      work_mode:              profile.work_mode              || 'researcher',
+      // clinical fields
+      subspeciality:          profile.subspeciality          || '',
+      years_in_practice:      profile.years_in_practice      || '',
+      primary_hospital:       profile.primary_hospital       || '',
+      patient_population:     profile.patient_population     || '',
+      additional_quals:       profile.additional_quals       || [],
+      clinical_highlight_label: profile.clinical_highlight_label || '',
+      clinical_highlight_value: profile.clinical_highlight_value || '',
+      // work contact
+      work_phone:   profile.work_phone   || '',
+      work_address: profile.work_address || '',
+      card_show_work_phone:   profile.card_show_work_phone   ?? false,
+      card_show_work_address: profile.card_show_work_address ?? false,
     });
   },[profile]);
   useEffect(()=>{ if(!user) return; supabase.from('posts_with_meta').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).then(({data})=>setUserPosts(data||[])); },[user]);
@@ -813,6 +877,49 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/yourname"/>
               </div>
 
+              {/* Clinical Profile section — clinician/both only */}
+              {(form.work_mode === 'clinician' || form.work_mode === 'both') && (
+                <div style={{border:`1px solid ${T.bdr}`,borderRadius:12,overflow:'hidden',marginTop:16,marginBottom:4}}>
+                  <button onClick={()=>setShowClinicalFields(s=>!s)}
+                    style={{width:'100%',padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',border:'none',background:T.s2,cursor:'pointer',fontFamily:'inherit'}}>
+                    <div style={{fontSize:13,fontWeight:700}}>🏥 Clinical Profile</div>
+                    <span style={{fontSize:12,color:T.mu,transform:showClinicalFields?'rotate(180deg)':'rotate(0)',transition:'transform .2s',display:'inline-block'}}>▾</span>
+                  </button>
+                  {showClinicalFields&&(
+                    <div style={{padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
+                      <div>
+                        <label style={labelStyle}>Subspeciality</label>
+                        <input value={form.subspeciality||''} onChange={e=>setForm(f=>({...f,subspeciality:e.target.value}))} placeholder="e.g. Interventional Cardiology, Robotic Surgery" style={inputStyle}/>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Years in practice</label>
+                        <input type="number" min="0" max="60" value={form.years_in_practice||''} onChange={e=>setForm(f=>({...f,years_in_practice:e.target.value}))} placeholder="e.g. 18" style={{...inputStyle,width:100}}/>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Primary hospital / clinic</label>
+                        <input value={form.primary_hospital||''} onChange={e=>setForm(f=>({...f,primary_hospital:e.target.value}))} placeholder="e.g. Tokyo University Hospital" style={inputStyle}/>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Patient population</label>
+                        <input value={form.patient_population||''} onChange={e=>setForm(f=>({...f,patient_population:e.target.value}))} placeholder="e.g. Adult cardiology, heart failure focus" style={inputStyle}/>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Additional qualifications <span style={{fontSize:11,color:T.mu,fontWeight:400,marginLeft:6}}>(Zusatzqualifikationen, special certifications)</span></label>
+                        <QualChipInput value={form.additional_quals||[]} onChange={v=>setForm(f=>({...f,additional_quals:v}))} placeholder="Type a qualification and press Enter..."/>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Profile highlight <span style={{fontSize:11,color:T.mu,fontWeight:400,marginLeft:6}}>(shown in your stats row)</span></label>
+                        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                          <input value={form.clinical_highlight_value||''} onChange={e=>setForm(f=>({...f,clinical_highlight_value:e.target.value}))} placeholder="500+" style={{...inputStyle,width:80}}/>
+                          <input value={form.clinical_highlight_label||''} onChange={e=>setForm(f=>({...f,clinical_highlight_label:e.target.value}))} placeholder="TAVI procedures, Fellows trained..." style={{...inputStyle,flex:1}}/>
+                        </div>
+                        <div style={{fontSize:11.5,color:T.mu,marginTop:4}}>Examples: "500+ TAVI procedures" · "12 Fellows trained" · "25 yrs experience"</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Business Card section */}
               <div style={{marginTop:24,paddingTop:20,borderTop:`2px solid ${T.bdr}`}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
@@ -832,6 +939,10 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   <div style={{gridColumn:'span 2'}}>
                     <PF label="Office address" field="card_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005"/>
                   </div>
+                  <PF label="Direct work phone (optional)" field="work_phone" form={form} setForm={setForm} placeholder="+81 3 1234 5678"/>
+                  <div style={{gridColumn:'span 2'}}>
+                    <PF label="Work address (optional)" field="work_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005, Japan"/>
+                  </div>
                 </div>
                 <div style={{fontSize:11,color:T.mu,marginBottom:12,lineHeight:1.5}}>LinkedIn, ORCID, and Twitter/X are set above in your main profile fields.</div>
                 <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Visibility on public card</div>
@@ -842,6 +953,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <VisibilityToggle label="Show personal website" value={form.card_show_website}  onChange={v=>setForm(f=>({...f,card_show_website:v}))}/>
                 <VisibilityToggle label="Show ORCID"      value={form.card_show_orcid}    onChange={v=>setForm(f=>({...f,card_show_orcid:v}))}/>
                 <VisibilityToggle label="Show Twitter / X" value={form.card_show_twitter}  onChange={v=>setForm(f=>({...f,card_show_twitter:v}))}/>
+                <VisibilityToggle label="Show work phone on card" value={form.card_show_work_phone} onChange={v=>setForm(f=>({...f,card_show_work_phone:v}))}/>
+                <VisibilityToggle label="Show work address on card" value={form.card_show_work_address} onChange={v=>setForm(f=>({...f,card_show_work_address:v}))}/>
               </div>
             </div>
           ):(
@@ -861,7 +974,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>{profile.title}</div>
               )}
               {(profile?.identity_tier1||profile?.identity_tier2)&&(
-                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:4}}>
                   {profile?.identity_tier1&&(
                     <span style={{fontSize:11.5,fontWeight:700,padding:'4px 12px',borderRadius:20,background:'#f1f0ff',color:'#5b52cc',border:'1px solid rgba(108,99,255,.2)'}}>
                       {profile.identity_tier1}
@@ -872,6 +985,19 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                       {profile.identity_tier2}
                     </span>
                   )}
+                  {profile?.work_mode && profile.work_mode !== 'researcher' && (() => {
+                    const modeColors = {
+                      clinician: { bg:'#e8f5e9', color:'#2e7d32', border:'rgba(46,125,50,.2)' },
+                      industry:  { bg:'#fff8e1', color:'#f57f17', border:'rgba(245,127,23,.2)' },
+                      both:      { bg:T.v2,      color:T.v,       border:'rgba(108,99,255,.2)' },
+                    };
+                    const c = modeColors[profile.work_mode] || modeColors.both;
+                    return (
+                      <span style={{fontSize:11.5,fontWeight:600,padding:'4px 12px',borderRadius:20,background:c.bg,color:c.color,border:`1px solid ${c.border}`}}>
+                        {WORK_MODE_MAP[profile.work_mode]?.icon} {WORK_MODE_MAP[profile.work_mode]?.label}
+                      </span>
+                    );
+                  })()}
                 </div>
               )}
               <div style={{fontSize:13,color:T.mu,marginBottom:12,display:'flex',gap:12,flexWrap:'wrap'}}>
@@ -885,26 +1011,41 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   👆 Click Edit to add your profile, or Import from LinkedIn to populate everything automatically.
                 </div>
               )}
-              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:9,margin:'14px 0'}}>
-                {[
-                  [followStats.followers,'Followers','followers'],
-                  [followStats.following,'Following','following'],
-                  [pubStats.pubCount||'—','Publications',null],
-                  [pubStats.totalCitations||'—','Citations',null],
-                  [pubStats.hIndex>0?`h${pubStats.hIndex}`:'—','h-index',null],
-                ].map(([v,l,networkKey])=>{
-                  const isActive = networkOpen && networkTab===networkKey;
-                  const clickable = !!networkKey;
-                  return (
-                    <div key={l}
-                      onClick={clickable ? ()=>openNetwork(networkKey) : undefined}
-                      style={{background:isActive?T.v2:T.s2,borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:clickable?'pointer':undefined,border:isActive?`1.5px solid rgba(108,99,255,.3)`:'1.5px solid transparent',transition:'background .15s'}}>
-                      <div style={{fontSize:19,fontWeight:700,fontFamily:"'DM Serif Display',serif",color:isActive?T.v3:T.v}}>{v}</div>
-                      <div style={{fontSize:9.5,color:isActive?T.v:T.mu,textTransform:'uppercase',letterSpacing:'.05em',marginTop:2,fontWeight:600}}>{l}{clickable?' ▾':''}</div>
-                    </div>
-                  );
-                })}
-              </div>
+              {(() => {
+                const isClinician = profile?.work_mode === 'clinician';
+                const statsRow = isClinician ? [
+                  [followStats.followers, 'Followers', 'followers', false],
+                  [followStats.following, 'Following', 'following', false],
+                  profile?.years_in_practice
+                    ? [profile.years_in_practice, 'Yrs Practice', null, false]
+                    : [profile?.primary_hospital||'—', 'Hospital', null, true],
+                  profile?.clinical_highlight_value
+                    ? [profile.clinical_highlight_value, profile.clinical_highlight_label||'Highlight', null, false]
+                    : [userPosts.length, 'Posts', null, false],
+                ] : [
+                  [followStats.followers, 'Followers', 'followers', false],
+                  [followStats.following, 'Following', 'following', false],
+                  [pubStats.pubCount||'—', 'Publications', null, false],
+                  [pubStats.totalCitations||'—', 'Citations', null, false],
+                  [pubStats.hIndex>0?`h${pubStats.hIndex}`:'—', 'h-index', null, false],
+                ];
+                return (
+                  <div style={{display:'grid',gridTemplateColumns:`repeat(${statsRow.length},1fr)`,gap:9,margin:'14px 0'}}>
+                    {statsRow.map(([v,l,networkKey,isText])=>{
+                      const isActive = networkOpen && networkTab===networkKey;
+                      const clickable = !!networkKey;
+                      return (
+                        <div key={l}
+                          onClick={clickable ? ()=>openNetwork(networkKey) : undefined}
+                          style={{background:isActive?T.v2:T.s2,borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:clickable?'pointer':undefined,border:isActive?`1.5px solid rgba(108,99,255,.3)`:'1.5px solid transparent',transition:'background .15s'}}>
+                          <div style={{fontSize:isText?11:19,fontWeight:700,fontFamily:isText?'inherit':"'DM Serif Display',serif",color:isActive?T.v3:T.v,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:80,margin:'0 auto'}}>{v}</div>
+                          <div style={{fontSize:9.5,color:isActive?T.v:T.mu,textTransform:'uppercase',letterSpacing:'.05em',marginTop:2,fontWeight:600}}>{l}{clickable?' ▾':''}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
               {/* My Network panel — inline on desktop, modal on mobile */}
               {networkOpen && isMobile && (
                 <div onClick={()=>setNetworkOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:500,display:'flex',alignItems:'flex-end'}}>

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
-import { T } from '../lib/constants';
+import { T, WORK_MODES } from '../lib/constants';
 import Btn from '../components/Btn';
 
 export default function AccountSettingsScreen({ user, profile, setProfile, onClose, onSignOut }) {
+  const [workModeValue,  setWorkModeValue]  = useState(profile?.work_mode || 'researcher');
+  const [workModeSaving, setWorkModeSaving] = useState(false);
   const [saving,         setSaving]         = useState(false);
   const [saved,          setSaved]          = useState(false);
   const [notifications,  setNotifications]  = useState(profile?.email_notifications ?? true);
@@ -17,6 +19,18 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
   const [newPassword,    setNewPassword]    = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMsg,    setPasswordMsg]    = useState('');
+
+  const saveWorkMode = async () => {
+    setWorkModeSaving(true);
+    const { data } = await supabase
+      .from('profiles')
+      .update({ work_mode: workModeValue })
+      .eq('id', user.id)
+      .select()
+      .single();
+    if (data) setProfile(data);
+    setWorkModeSaving(false);
+  };
 
   const savePreferences = async () => {
     setSaving(true);
@@ -203,6 +217,42 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
           }}>
             ↩ Sign out
           </button>
+
+          {/* Work mode */}
+          <SectionHead label="Your work mode"/>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: T.mu, marginBottom: 12, lineHeight: 1.6 }}>
+              This adjusts how Luminary presents itself to you — your feed defaults, profile emphasis, and post prompts.
+              Your existing content and connections are never affected.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {WORK_MODES.map(mode => (
+                <label key={mode.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '11px 14px', borderRadius: 10, cursor: 'pointer',
+                  border: `1.5px solid ${workModeValue === mode.id ? T.v : T.bdr}`,
+                  background: workModeValue === mode.id ? T.v2 : T.w,
+                }}>
+                  <input type="radio" name="work_mode" value={mode.id}
+                    checked={workModeValue === mode.id}
+                    onChange={() => setWorkModeValue(mode.id)}
+                    style={{ accentColor: T.v }}
+                  />
+                  <span style={{ fontSize: 16 }}>{mode.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{mode.label}</div>
+                    <div style={{ fontSize: 12, color: T.mu }}>{mode.description}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Btn variant="s" onClick={saveWorkMode}
+                disabled={workModeValue === profile?.work_mode || workModeSaving}>
+                {workModeSaving ? 'Saving...' : 'Save'}
+              </Btn>
+            </div>
+          </div>
 
           {/* Email preferences */}
           <SectionHead label="Email preferences"/>

@@ -36,13 +36,15 @@ export function BusinessCardView({ profile, currentUserId }) {
   };
 
   const hasContactDetails = (
-    (profile.card_show_email    && profile.card_email)    ||
-    (profile.card_show_phone    && profile.card_phone)    ||
-    (profile.card_show_address  && profile.card_address)  ||
-    (profile.card_show_linkedin && profile.card_linkedin) ||
-    (profile.card_show_website  && profile.card_website)  ||
-    (profile.card_show_orcid    && profile.orcid)         ||
-    (profile.card_show_twitter  && profile.twitter)
+    (profile.card_show_email        && profile.card_email)        ||
+    (profile.card_show_phone        && profile.card_phone)        ||
+    (profile.card_show_address      && profile.card_address)      ||
+    (profile.card_show_linkedin     && profile.card_linkedin)     ||
+    (profile.card_show_website      && profile.card_website)      ||
+    (profile.card_show_orcid        && profile.orcid)             ||
+    (profile.card_show_twitter      && profile.twitter)           ||
+    (profile.card_show_work_phone   && profile.work_phone)        ||
+    (profile.card_show_work_address && profile.work_address)
   );
 
   const downloadVCard = () => {
@@ -59,8 +61,12 @@ export function BusinessCardView({ profile, currentUserId }) {
         ? `EMAIL;TYPE=WORK:${profile.card_email}` : '',
       (profile.card_show_phone && profile.card_phone)
         ? `TEL;TYPE=WORK:${profile.card_phone}` : '',
+      (profile.card_show_work_phone && profile.work_phone)
+        ? `TEL;TYPE=WORK:${profile.work_phone}` : '',
       (profile.card_show_address && profile.card_address)
         ? `ADR;TYPE=WORK:;;${profile.card_address};;;;` : '',
+      (profile.card_show_work_address && profile.work_address)
+        ? `ADR;TYPE=WORK:;;${profile.work_address};;;;` : '',
       `URL:${window.location.origin}/p/${profile.profile_slug}`,
       'NOTE:Connected via Luminary',
       'END:VCARD',
@@ -129,7 +135,9 @@ export function BusinessCardView({ profile, currentUserId }) {
                 {profile.card_show_linkedin && profile.card_linkedin && <ContactRow icon="💼" label={profile.card_linkedin} href={profile.card_linkedin.startsWith('http')?profile.card_linkedin:`https://${profile.card_linkedin}`}/>}
                 {profile.card_show_website  && profile.card_website  && <ContactRow icon="🌐" label={profile.card_website}  href={profile.card_website.startsWith('http')?profile.card_website:`https://${profile.card_website}`}/>}
                 {profile.card_show_orcid    && profile.orcid         && <ContactRow icon="🔬" label={`orcid.org/${profile.orcid}`} href={`https://orcid.org/${profile.orcid}`}/>}
-                {profile.card_show_twitter  && profile.twitter       && <ContactRow icon="𝕏"  label={`@${profile.twitter.replace('@','')}`} href={`https://x.com/${profile.twitter.replace('@','')}`}/>}
+                {profile.card_show_twitter      && profile.twitter      && <ContactRow icon="𝕏"  label={`@${profile.twitter.replace('@','')}`} href={`https://x.com/${profile.twitter.replace('@','')}`}/>}
+                {profile.card_show_work_phone   && profile.work_phone   && <ContactRow icon="📞" label={profile.work_phone}   href={`tel:${profile.work_phone}`}/>}
+                {profile.card_show_work_address && profile.work_address && <ContactRow icon="📍" label={profile.work_address}/>}
               </div>
             </>
           )}

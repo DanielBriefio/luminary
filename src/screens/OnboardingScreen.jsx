@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { T, TIER1_LIST, getTier2 } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, WORK_MODES } from '../lib/constants';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
 
-// ── Progress bar (setup steps 2–5 = dots 1–4) ────────────────────────────────
+// ── Progress bar (setup steps 3–6 = dots 1–4) ────────────────────────────────
 function ProgressBar({ step }) {
   const total  = 4;
-  const filled = Math.max(0, step - 1); // step2→1, step3→2, step4→3, step5→4
+  const filled = Math.max(0, step - 2); // step3→1, step4→2, step5→3, step6→4
   return (
     <div style={{ display: 'flex', gap: 5, marginBottom: 28 }}>
       {Array.from({ length: total }).map((_, i) => (
@@ -78,23 +78,26 @@ function FeatureCard({ icon, title, desc, badge }) {
 export default function OnboardingScreen({ user, profile, setProfile, onComplete, onGoToProfile }) {
   const [step, setStep] = useState(0);
 
-  // Step 2 state — professional identity
+  // Step 1 state — work mode
+  const [workMode, setWorkMode] = useState('researcher');
+
+  // Step 3 state — professional identity
   const [identityTier1, setIdentityTier1] = useState('');
   const [identityTier2, setIdentityTier2] = useState('');
   const [savingIdentity, setSavingIdentity] = useState(false);
 
-  // Step 3 state — topics
+  // Step 4 state — topics
   const [selectedTopics, setSelectedTopics] = useState([]);
   const [savingTopics,   setSavingTopics]   = useState(false);
 
-  // Step 4 state — follow researchers
+  // Step 5 state — follow researchers
   const [suggested,      setSuggested]      = useState([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [followCount,    setFollowCount]    = useState(0);
 
-  // Load suggested researchers when arriving at step 4
+  // Load suggested researchers when arriving at step 5
   useEffect(() => {
-    if (step !== 4) return;
+    if (step !== 5) return;
     setSuggestLoading(true);
     (async () => {
       const { data } = await supabase
@@ -127,7 +130,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
     onComplete();
   };
 
-  // Step 2: save professional identity and advance
+  // Step 3: save professional identity and advance
   const saveIdentity = async () => {
     setSavingIdentity(true);
     await supabase.from('profiles')
@@ -135,10 +138,10 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
       .eq('id', user.id);
     setProfile(p => ({ ...p, identity_tier1: identityTier1, identity_tier2: identityTier2 }));
     setSavingIdentity(false);
-    setStep(3);
+    setStep(4);
   };
 
-  // Step 3: save topics and advance
+  // Step 4: save topics and advance
   const saveTopics = async () => {
     setSavingTopics(true);
     await supabase.from('profiles')
@@ -146,7 +149,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
       .eq('id', user.id);
     setProfile(p => ({ ...p, topic_interests: selectedTopics }));
     setSavingTopics(false);
-    setStep(4);
+    setStep(5);
   };
 
   // Step 5: import choice — completes onboarding immediately
@@ -194,11 +197,65 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
           </div>
         )}
 
-        {/* ── Step 1: Feature overview ── */}
+        {/* ── Step 1: Work mode ── */}
         {step === 1 && (
           <div>
             <button
               onClick={() => setStep(0)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit', padding: 0, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
+              ← Back
+            </button>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, marginBottom: 6 }}>
+              What best describes your work?
+            </div>
+            <div style={{ fontSize: 13, color: T.mu, marginBottom: 20, lineHeight: 1.6 }}>
+              This helps Luminary show you the most relevant content and people. You can change this anytime in Settings.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+              {WORK_MODES.map(mode => (
+                <button key={mode.id}
+                  onClick={() => setWorkMode(mode.id)}
+                  style={{
+                    padding: '14px 16px', borderRadius: 12,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    textAlign: 'left', display: 'flex',
+                    alignItems: 'center', gap: 14,
+                    border: `2px solid ${workMode === mode.id ? T.v : T.bdr}`,
+                    background: workMode === mode.id ? T.v2 : T.w,
+                    transition: 'all .12s',
+                  }}>
+                  <span style={{ fontSize: 26, flexShrink: 0 }}>{mode.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: workMode === mode.id ? T.v : T.text }}>
+                      {mode.label}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: T.mu }}>{mode.description}</div>
+                  </div>
+                  {workMode === mode.id && (
+                    <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.v} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+            <Btn variant="s" onClick={async () => {
+              await supabase.from('profiles').update({ work_mode: workMode }).eq('id', user.id);
+              setProfile(p => ({ ...p, work_mode: workMode }));
+              setStep(2);
+            }} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
+              Next →
+            </Btn>
+          </div>
+        )}
+
+        {/* ── Step 2: Feature overview ── */}
+        {step === 2 && (
+          <div>
+            <button
+              onClick={() => setStep(1)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit', padding: 0, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
               ← Back
             </button>
@@ -239,14 +296,14 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                 badge="My Profile → Export"
               />
             </div>
-            <Btn variant="s" onClick={() => setStep(2)} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
+            <Btn variant="s" onClick={() => setStep(3)} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
               Set up my profile →
             </Btn>
           </div>
         )}
 
-        {/* ── Steps 2–5 (setup) ── */}
-        {step >= 2 && step <= 5 && (
+        {/* ── Steps 3–6 (setup) ── */}
+        {step >= 3 && step <= 6 && (
           <>
             <ProgressBar step={step} />
 
@@ -257,11 +314,11 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               ← Back
             </button>
 
-            {/* ── Step 2: Professional identity ── */}
-            {step === 2 && (
+            {/* ── Step 3: Professional identity ── */}
+            {step === 3 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
-                  What is your primary field?
+                  {workMode === 'clinician' ? 'What is your clinical speciality?' : 'What is your primary field?'}
                 </div>
                 <div style={{ fontSize: 13, color: T.mu, marginBottom: 20, lineHeight: 1.6 }}>
                   This appears as a badge on your profile. Pick your main discipline.
@@ -315,8 +372,8 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               </>
             )}
 
-            {/* ── Step 3: Topics ── */}
-            {step === 3 && (
+            {/* ── Step 4: Topics ── */}
+            {step === 4 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
                   What topics do you want to follow?
@@ -340,8 +397,8 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               </>
             )}
 
-            {/* ── Step 4: Follow researchers ── */}
-            {step === 4 && (
+            {/* ── Step 5: Follow researchers ── */}
+            {step === 5 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
                   Follow researchers in your field
@@ -381,14 +438,14 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                   </div>
                 )}
 
-                <Btn variant="s" onClick={() => setStep(5)} style={{ width: '100%', padding: '11px', fontSize: 13 }}>
+                <Btn variant="s" onClick={() => setStep(6)} style={{ width: '100%', padding: '11px', fontSize: 13 }}>
                   {followCount > 0 ? `Following ${followCount} researcher${followCount !== 1 ? 's' : ''} →` : 'Next →'}
                 </Btn>
               </>
             )}
 
-            {/* ── Step 5: Import publications ── */}
-            {step === 5 && (
+            {/* ── Step 6: Import publications ── */}
+            {step === 6 && (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
                   Build your publication list

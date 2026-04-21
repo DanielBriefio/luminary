@@ -13,9 +13,15 @@ export const MILESTONES = [
   },
   {
     id: 'identity_badge_set',
-    label: 'Professional identity badge set',
+    label: 'Professional identity set',
     check: (p) => !!(p.identity_tier1 && p.identity_tier2),
     cta: 'Set your field', ctaAction: 'edit_profile',
+    ctaLabels: {
+      researcher: 'Set your research field',
+      clinician:  'Set your clinical speciality',
+      both:       'Set your primary field',
+      industry:   'Set your professional area',
+    },
   },
   {
     id: 'photo_set',
@@ -31,9 +37,15 @@ export const MILESTONES = [
   },
   {
     id: 'publication_added',
-    label: 'At least 1 publication added',
+    label: 'Publication or presentation added',
     check: (p, s) => (s.publicationCount || 0) >= 1,
     cta: 'Add publication', ctaAction: 'publications',
+    ctaLabels: {
+      researcher: 'Add publication',
+      clinician:  'Add a presentation or lecture',
+      both:       'Add publication or presentation',
+      industry:   'Add a publication or presentation',
+    },
   },
   {
     id: 'orcid_linked',

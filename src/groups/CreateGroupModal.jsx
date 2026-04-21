@@ -2,16 +2,27 @@ import { useState } from 'react';
 import { supabase } from '../supabase';
 import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 
+const GROUP_TYPES = [
+  { value: 'research',   label: '🔬 Research Group'  },
+  { value: 'clinical',   label: '🏥 Clinical Team'   },
+  { value: 'department', label: '🏛️ Department'      },
+  { value: 'industry',   label: '💊 Industry Team'   },
+  { value: 'other',      label: '✏️ Other'            },
+];
+
 export default function CreateGroupModal({ user, onGroupCreated, onClose }) {
-  const [name,          setName]          = useState('');
-  const [description,   setDescription]   = useState('');
-  const [researchTopic, setResearchTopic] = useState('');
-  const [tier1,         setTier1]         = useState('');
-  const [tier2,         setTier2]         = useState([]);
-  const [isPublic,      setIsPublic]      = useState(true);
-  const [adminRole,     setAdminRole]     = useState('');
-  const [creating,      setCreating]      = useState(false);
-  const [error,         setError]         = useState('');
+  const [name,           setName]           = useState('');
+  const [description,    setDescription]    = useState('');
+  const [researchTopic,  setResearchTopic]  = useState('');
+  const [groupType,      setGroupType]      = useState('research');
+  const [departmentName, setDepartmentName] = useState('');
+  const [patientPop,     setPatientPop]     = useState('');
+  const [tier1,          setTier1]          = useState('');
+  const [tier2,          setTier2]          = useState([]);
+  const [isPublic,       setIsPublic]       = useState(true);
+  const [adminRole,      setAdminRole]      = useState('');
+  const [creating,       setCreating]       = useState(false);
+  const [error,          setError]          = useState('');
 
   const create = async () => {
     if (!name.trim()) { setError('Group name is required.'); return; }
@@ -20,13 +31,16 @@ export default function CreateGroupModal({ user, onGroupCreated, onClose }) {
       const { data: group, error: ge } = await supabase
         .from('groups')
         .insert({
-          name:           name.trim(),
-          description:    description.trim(),
-          research_topic: researchTopic.trim(),
-          tier1:          tier1,
-          tier2:          tier2,
-          is_public:      isPublic,
-          created_by:     user.id,
+          name:              name.trim(),
+          description:       description.trim(),
+          research_topic:    researchTopic.trim(),
+          group_type:        groupType,
+          department_name:   departmentName.trim(),
+          patient_population: patientPop.trim(),
+          tier1:             tier1,
+          tier2:             tier2,
+          is_public:         isPublic,
+          created_by:        user.id,
         })
         .select()
         .single();
@@ -100,6 +114,40 @@ export default function CreateGroupModal({ user, onGroupCreated, onClose }) {
               placeholder="What does this group work on?"
               style={{ ...inputStyle, resize: 'vertical', minHeight: 70, lineHeight: 1.6 }}/>
           </div>
+
+          {/* Group type */}
+          <div>
+            <label style={labelStyle}>Group type</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {GROUP_TYPES.map(gt => (
+                <button key={gt.value} type="button" onClick={() => setGroupType(gt.value)} style={{
+                  padding: '6px 13px', borderRadius: 20, cursor: 'pointer',
+                  fontSize: 12, fontFamily: 'inherit', fontWeight: 500,
+                  border: `1.5px solid ${groupType === gt.value ? T.v : T.bdr}`,
+                  background: groupType === gt.value ? T.v2 : T.w,
+                  color: groupType === gt.value ? T.v : T.text,
+                }}>
+                  {gt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Clinical/department-specific fields */}
+          {(groupType === 'clinical' || groupType === 'department') && (
+            <>
+              <div>
+                <label style={labelStyle}>Department name <span style={{fontWeight:400,color:T.mu}}>(optional)</span></label>
+                <input value={departmentName} onChange={e => setDepartmentName(e.target.value)}
+                  placeholder="e.g. Department of Cardiology" style={inputStyle}/>
+              </div>
+              <div>
+                <label style={labelStyle}>Patient population <span style={{fontWeight:400,color:T.mu}}>(optional)</span></label>
+                <input value={patientPop} onChange={e => setPatientPop(e.target.value)}
+                  placeholder="e.g. Adult cardiology, paediatric oncology" style={inputStyle}/>
+              </div>
+            </>
+          )}
 
           {/* Taxonomy — Tier 1 */}
           <div>
