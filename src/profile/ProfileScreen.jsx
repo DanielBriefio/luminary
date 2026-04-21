@@ -370,13 +370,11 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       card_email: form.card_email, card_phone: form.card_phone,
       card_address: form.card_address, card_website: form.card_website,
       card_linkedin: form.card_linkedin, work_phone: form.work_phone,
-      work_address: form.work_address,
       card_show_email: form.card_show_email, card_show_phone: form.card_show_phone,
       card_show_address: form.card_show_address, card_show_linkedin: form.card_show_linkedin,
       card_show_website: form.card_show_website, card_show_orcid: form.card_show_orcid,
       card_show_twitter: form.card_show_twitter,
       card_show_work_phone: form.card_show_work_phone,
-      card_show_work_address: form.card_show_work_address,
     };
     const { data } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single();
     if (data) setProfile(data);
@@ -1484,12 +1482,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <PF label="Personal website" field="card_website" form={form} setForm={setForm} placeholder="yourname.com"/>
                     <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/yourname"/>
                     <div style={{gridColumn:'span 2'}}>
-                      <PF label="Office address" field="card_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005"/>
+                      <PF label="Work address" field="card_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005"/>
                     </div>
                     <PF label="Direct work phone (optional)" field="work_phone" form={form} setForm={setForm} placeholder="+81 3 1234 5678"/>
-                    <div style={{gridColumn:'span 2'}}>
-                      <PF label="Work address (optional)" field="work_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005, Japan"/>
-                    </div>
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginTop:4,marginBottom:2}}>Visibility on public card</div>
                   <VisibilityToggle label="Show work email"        value={form.card_show_email}         onChange={v=>setForm(f=>({...f,card_show_email:v}))}/>
@@ -1500,7 +1495,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   <VisibilityToggle label="Show ORCID"             value={form.card_show_orcid}         onChange={v=>setForm(f=>({...f,card_show_orcid:v}))}/>
                   <VisibilityToggle label="Show Twitter / X"       value={form.card_show_twitter}       onChange={v=>setForm(f=>({...f,card_show_twitter:v}))}/>
                   <VisibilityToggle label="Show direct work phone" value={form.card_show_work_phone}    onChange={v=>setForm(f=>({...f,card_show_work_phone:v}))}/>
-                  <VisibilityToggle label="Show work address"      value={form.card_show_work_address}  onChange={v=>setForm(f=>({...f,card_show_work_address:v}))}/>
+
                   <div style={{display:'flex',gap:8,marginTop:4}}>
                     <Btn onClick={()=>setEditingCard(false)}>Cancel</Btn>
                     <Btn variant="s" onClick={saveCard} disabled={cardSaving}>{cardSaving?'Saving...':'Save card details'}</Btn>
@@ -1509,7 +1504,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               ) : (
                 <>
                   {/* Contact details preview */}
-                  {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone||profile?.work_address) ? (
+                  {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone) ? (
                     <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
                       {profile.card_email    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>✉️</span><span style={{flex:1,color:T.text}}>{profile.card_email}</span>{!profile.card_show_email&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.card_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📞</span><span style={{flex:1,color:T.text}}>{profile.card_phone}</span>{!profile.card_show_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
@@ -1519,7 +1514,6 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                       {profile.orcid         && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>🔬</span><span style={{flex:1,color:T.text}}>orcid.org/{profile.orcid}</span>{!profile.card_show_orcid&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.twitter       && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>𝕏</span><span style={{flex:1,color:T.text}}>@{profile.twitter.replace('@','')}</span>{!profile.card_show_twitter&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.card_address  && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📍</span><span style={{flex:1,color:T.text}}>{profile.card_address}</span>{!profile.card_show_address&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.work_address  && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📍</span><span style={{flex:1,color:T.text}}>{profile.work_address} <span style={{color:T.mu,fontSize:11}}>(work)</span></span>{!profile.card_show_work_address&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                     </div>
                   ) : (
                     <div style={{background:T.v2,border:`1px dashed rgba(108,99,255,.3)`,borderRadius:10,padding:'16px 18px',fontSize:12.5,color:T.mu,lineHeight:1.7,marginBottom:16}}>
