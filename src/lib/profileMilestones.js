@@ -17,10 +17,10 @@ export const MILESTONES = [
     check: (p) => !!(p.identity_tier1 && p.identity_tier2),
     cta: 'Set your field', ctaAction: 'edit_profile',
     ctaLabels: {
-      researcher: 'Set your research field',
-      clinician:  'Set your clinical speciality',
-      both:       'Set your primary field',
-      industry:   'Set your professional area',
+      researcher:          'Set your research field',
+      clinician:           'Set your clinical speciality',
+      clinician_scientist: 'Set your primary field',
+      industry:            'Set your professional area',
     },
   },
   {
@@ -31,8 +31,8 @@ export const MILESTONES = [
   },
   {
     id: 'bio_written',
-    label: 'Bio written (50+ words)',
-    check: (p) => (p.bio || '').trim().split(/\s+/).length >= 50,
+    label: 'Bio or summary added',
+    check: (p) => (p.bio || '').trim().split(/\s+/).filter(Boolean).length >= 15,
     cta: 'Write bio', ctaAction: 'edit_profile',
   },
   {
@@ -41,10 +41,10 @@ export const MILESTONES = [
     check: (p, s) => (s.publicationCount || 0) >= 1,
     cta: 'Add publication', ctaAction: 'publications',
     ctaLabels: {
-      researcher: 'Add publication',
-      clinician:  'Add a presentation or lecture',
-      both:       'Add publication or presentation',
-      industry:   'Add a publication or presentation',
+      researcher:          'Add publication',
+      clinician:           'Add a presentation or lecture',
+      clinician_scientist: 'Add publication or presentation',
+      industry:            'Add a publication or presentation',
     },
   },
   {

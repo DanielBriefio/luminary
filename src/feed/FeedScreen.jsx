@@ -106,16 +106,16 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     if (filter === 'all') return posts;
     if (filter === 'myfield') {
       return [...posts].sort((a, b) => {
-        const aMatch = a.author_work_mode === userWorkMode || userWorkMode === 'both';
-        const bMatch = b.author_work_mode === userWorkMode || userWorkMode === 'both';
+        const aMatch = a.author_work_mode === userWorkMode || userWorkMode === 'clinician_scientist';
+        const bMatch = b.author_work_mode === userWorkMode || userWorkMode === 'clinician_scientist';
         if (aMatch && !bMatch) return -1;
         if (!aMatch && bMatch) return 1;
         return 0;
       });
     }
     const modeMap = {
-      research: ['researcher', 'both'],
-      clinical: ['clinician',  'both'],
+      research: ['researcher', 'clinician_scientist'],
+      clinical: ['clinician',  'clinician_scientist'],
       industry: ['industry'],
     };
     const allowed = modeMap[filter] || [];

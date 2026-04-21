@@ -35,7 +35,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
       .eq('user_id', user.id)
       .order('sort_order');
 
-    if (!data?.length && (profile?.work_mode === 'clinician' || profile?.work_mode === 'both')) {
+    if (!data?.length && (profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist')) {
       const { data: folder } = await supabase
         .from('library_folders')
         .insert({ user_id: user.id, name: 'Guidelines & Protocols', sort_order: 0 })
@@ -272,13 +272,13 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
             {!loading && folders.length === 0 && (
               <div style={{textAlign:'center', color:T.mu, padding:'40px 16px'}}>
                 <div style={{fontSize:32, marginBottom:10}}>
-                  {(profile?.work_mode === 'clinician' || profile?.work_mode === 'both') ? '📋' : '📚'}
+                  {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist') ? '📋' : '📚'}
                 </div>
                 <div style={{fontSize:14, fontFamily:"'DM Serif Display',serif", marginBottom:6}}>
                   Your library is empty
                 </div>
                 <div style={{fontSize:12.5, lineHeight:1.6}}>
-                  {(profile?.work_mode === 'clinician' || profile?.work_mode === 'both')
+                  {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist')
                     ? 'Search ClinicalTrials.gov for trials in your area, or find guidelines and key papers via Europe PMC.'
                     : 'Create a folder to get started, then add papers from Europe PMC or by DOI.'}
                 </div>

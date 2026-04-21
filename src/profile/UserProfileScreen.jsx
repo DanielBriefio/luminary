@@ -84,7 +84,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
   const hIndex     = citations.reduce((h, c, i) => c >= (i + 1) ? i + 1 : h, 0);
   const totalCit   = citations.reduce((s, c) => s + c, 0);
 
-  const pubTabLabel = p.work_mode === 'clinician'
+  const pubTabLabel = (p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist')
     ? `Publications & Presentations (${pubCount})`
     : `Publications (${pubCount})`;
 
@@ -139,18 +139,40 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                 </div>
                 {p.title && <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, marginBottom: 3 }}>{p.title}</div>}
                 {(p.identity_tier1 || p.identity_tier2) && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 7 }}>
-                    {p.identity_tier1 && (
-                      <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', border: '1px solid rgba(108,99,255,.2)' }}>
-                        {p.identity_tier1}
-                      </span>
-                    )}
-                    {p.identity_tier2 && (
-                      <span style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.25)` }}>
-                        {p.identity_tier2}
-                      </span>
-                    )}
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Discipline</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                      {p.identity_tier1 && (
+                        <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', border: '1px solid rgba(108,99,255,.2)' }}>
+                          {p.identity_tier1}
+                        </span>
+                      )}
+                      {p.identity_tier2 && (
+                        <span style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.25)` }}>
+                          {p.identity_tier2}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+                {p.work_mode && WORK_MODE_MAP[p.work_mode] && (
+                  <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Sector</span>
+                    {' '}
+                    <span>{WORK_MODE_MAP[p.work_mode].icon} {WORK_MODE_MAP[p.work_mode].label}</span>
                   </div>
+                )}
+                {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist') && (p.additional_quals || []).length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Qualifications</div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                      {p.additional_quals.map(q => (
+                        <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
+                          {q}
+                        </span>
+                      ))}
+                    </div>
+                  </>
                 )}
                 <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   {p.institution && <span>🏛️ {p.institution}</span>}
@@ -164,42 +186,11 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                       style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{p.twitter} ↗</a>
                   )}
                 </div>
-                {/* Work mode badge */}
-                {p.work_mode && WORK_MODE_MAP[p.work_mode] && (
-                  <div style={{ marginBottom: 8 }}>
-                    <span style={{
-                      fontSize: 12, fontWeight: 700,
-                      padding: '4px 12px', borderRadius: 20,
-                      background: p.work_mode === 'clinician' ? '#e8f5e9' : p.work_mode === 'industry' ? '#fff8e1' : p.work_mode === 'both' ? '#e3f2fd' : T.v2,
-                      color: p.work_mode === 'clinician' ? '#2e7d32' : p.work_mode === 'industry' ? '#f57f17' : p.work_mode === 'both' ? '#1565c0' : T.v,
-                    }}>
-                      {WORK_MODE_MAP[p.work_mode].icon} {WORK_MODE_MAP[p.work_mode].label}
-                    </span>
-                  </div>
-                )}
 
-                {/* Clinical identity block — clinician/both mode */}
-                {(p.work_mode === 'clinician' || p.work_mode === 'both') && (
-                  <div style={{ marginBottom: 8 }}>
-                    {p.primary_hospital && (
-                      <div style={{ fontSize: 13, color: T.text, fontWeight: 500, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span>🏥</span> {p.primary_hospital}
-                      </div>
-                    )}
-                    {p.years_in_practice && (
-                      <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 3 }}>
-                        {p.years_in_practice} years in practice
-                      </div>
-                    )}
-                    {(p.additional_quals || []).length > 0 && (
-                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
-                        {p.additional_quals.map(q => (
-                          <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
-                            {q}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                {/* Clinical identity block — years in practice only */}
+                {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist') && p.years_in_practice && (
+                  <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 6 }}>
+                    {p.years_in_practice} years in practice
                   </div>
                 )}
 
@@ -228,7 +219,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
 
             {/* Stats */}
             {(() => {
-              const isClinician = p.work_mode === 'clinician';
+              const isClinician = p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist';
               const statItems = isClinician ? [
                 [posts.length || '—', 'Posts'],
                 [pubCount || '—', 'Publications'],
@@ -282,13 +273,13 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                 )}
 
                 {/* Clinical sections — clinician/both mode */}
-                {(p.work_mode === 'clinician' || p.work_mode === 'both') && p.patient_population && (
+                {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist') && p.patient_population && (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Patient Population</div>
                     <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6 }}>{p.patient_population}</div>
                   </div>
                 )}
-                {(p.work_mode === 'clinician' || p.work_mode === 'both') && (p.additional_quals || []).length > 0 && (
+                {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist') && (p.additional_quals || []).length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Additional Qualifications</div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

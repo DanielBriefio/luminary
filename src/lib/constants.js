@@ -274,21 +274,21 @@ export const getDiscussionPrompts = (tier1) =>
 export const WORK_MODES = [
   {
     id:          'researcher',
-    label:       'Researcher',
+    label:       'Research',
     icon:        '🔬',
     description: 'Lab, clinical trials, publishing',
     statsConfig: ['followers', 'following', 'publications', 'citations'],
   },
   {
     id:          'clinician',
-    label:       'Clinician',
+    label:       'Patient Care',
     icon:        '🏥',
     description: 'I see patients, applying evidence',
     statsConfig: ['followers', 'following', 'experience', 'highlight'],
   },
   {
-    id:          'both',
-    label:       'Both',
+    id:          'clinician_scientist',
+    label:       'Research & Patient Care',
     icon:        '⚕️',
     description: 'Research and clinical practice',
     statsConfig: ['followers', 'following', 'publications', 'highlight'],
@@ -318,7 +318,7 @@ export const COMPOSER_PROMPTS = {
     "Share a technique or approach that works for you...",
     "What does this paper mean for your patients?",
   ],
-  both: [
+  clinician_scientist: [
     "Share what bridges your research and clinical work...",
     "What's the latest in your field?",
     "Share an insight from the bench or bedside...",

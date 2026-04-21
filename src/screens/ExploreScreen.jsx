@@ -37,17 +37,17 @@ function ResearcherCard({ user, currentUserId, onViewUser }) {
             padding: '1px 8px', borderRadius: 20,
             marginTop: 3, marginBottom: 2, display: 'inline-block',
             background:
-              user.work_mode === 'clinician' ? '#e8f5e9' :
-              user.work_mode === 'industry'  ? '#fff8e1' :
-              user.work_mode === 'both'      ? '#e3f2fd' : T.v2,
+              user.work_mode === 'clinician'           ? '#e8f5e9' :
+              user.work_mode === 'industry'            ? '#fff8e1' :
+              user.work_mode === 'clinician_scientist' ? '#e3f2fd' : T.v2,
             color:
-              user.work_mode === 'clinician' ? '#2e7d32' :
-              user.work_mode === 'industry'  ? '#f57f17' :
-              user.work_mode === 'both'      ? '#1565c0' : T.v,
+              user.work_mode === 'clinician'           ? '#2e7d32' :
+              user.work_mode === 'industry'            ? '#f57f17' :
+              user.work_mode === 'clinician_scientist' ? '#1565c0' : T.v,
             border: `1px solid ${
-              user.work_mode === 'clinician' ? 'rgba(46,125,50,.2)' :
-              user.work_mode === 'industry'  ? 'rgba(245,127,23,.2)' :
-              user.work_mode === 'both'      ? 'rgba(21,101,192,.2)' :
+              user.work_mode === 'clinician'           ? 'rgba(46,125,50,.2)' :
+              user.work_mode === 'industry'            ? 'rgba(245,127,23,.2)' :
+              user.work_mode === 'clinician_scientist' ? 'rgba(21,101,192,.2)' :
               'rgba(108,99,255,.2)'}`,
           }}>
             {WORK_MODE_MAP[user.work_mode]?.icon} {WORK_MODE_MAP[user.work_mode]?.label}
@@ -751,7 +751,7 @@ export default function ExploreScreen({
                 { id: 'all',        label: 'All'            },
                 { id: 'researcher', label: '🔬 Researchers' },
                 { id: 'clinician',  label: '🏥 Clinicians'  },
-                { id: 'both',       label: '⚕️ Both'         },
+                { id: 'clinician_scientist', label: '⚕️ Research & Care' },
                 { id: 'industry',   label: '💊 Industry'    },
               ].map(f => (
                 <button key={f.id} onClick={() => setPeopleModeFilter(f.id)} style={{

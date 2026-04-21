@@ -35,6 +35,8 @@ export function BusinessCardView({ profile, currentUserId }) {
     }
   };
 
+  const workAddress = [profile.work_street, profile.work_city, profile.work_postal_code, profile.work_country].filter(Boolean).join(', ') || profile.work_address || '';
+
   const hasContactDetails = (
     (profile.card_show_email        && profile.card_email)        ||
     (profile.card_show_phone        && profile.card_phone)        ||
@@ -44,7 +46,7 @@ export function BusinessCardView({ profile, currentUserId }) {
     (profile.card_show_orcid        && profile.orcid)             ||
     (profile.card_show_twitter      && profile.twitter)           ||
     (profile.card_show_work_phone   && profile.work_phone)        ||
-    (profile.card_show_work_address && profile.work_address)
+    (profile.card_show_work_address && workAddress)
   );
 
   const downloadVCard = () => {
@@ -65,8 +67,8 @@ export function BusinessCardView({ profile, currentUserId }) {
         ? `TEL;TYPE=WORK:${profile.work_phone}` : '',
       (profile.card_show_address && profile.card_address)
         ? `ADR;TYPE=WORK:;;${profile.card_address};;;;` : '',
-      (profile.card_show_work_address && profile.work_address)
-        ? `ADR;TYPE=WORK:;;${profile.work_address};;;;` : '',
+      (profile.card_show_work_address && workAddress)
+        ? `ADR;TYPE=WORK:;;${workAddress};;;;` : '',
       `URL:${window.location.origin}/p/${profile.profile_slug}`,
       'NOTE:Connected via Luminary',
       'END:VCARD',
@@ -118,11 +120,6 @@ export function BusinessCardView({ profile, currentUserId }) {
               {profile.institution && (
                 <div style={{ fontSize:12.5, color:'#666', fontWeight:500 }}>{profile.institution}</div>
               )}
-              {(profile.work_mode === 'clinician' || profile.work_mode === 'both') && profile.primary_hospital && (
-                <div style={{ fontSize:12.5, color:'#888', marginTop:3, display:'flex', alignItems:'center', gap:5 }}>
-                  <span>🏥</span><span>{profile.primary_hospital}</span>
-                </div>
-              )}
               {profile.location && (
                 <div style={{ fontSize:12, color:'#999', marginTop:2 }}>{profile.location}</div>
               )}
@@ -130,22 +127,46 @@ export function BusinessCardView({ profile, currentUserId }) {
           </div>
 
           {/* Contact details */}
-          {hasContactDetails && (
-            <>
-              <div style={{ height:1, background:'linear-gradient(90deg, #667eea22, #764ba244, #667eea22)', marginBottom:20 }}/>
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {profile.card_show_work_phone   && profile.work_phone   && <ContactRow icon="📞" label={profile.work_phone}   href={`tel:${profile.work_phone}`}/>}
-                {profile.card_show_work_address && profile.work_address && <ContactRow icon="📍" label={profile.work_address}/>}
-                {profile.card_show_email    && profile.card_email    && <ContactRow icon="✉️" label={profile.card_email}    href={`mailto:${profile.card_email}`}/>}
-                {profile.card_show_phone    && profile.card_phone    && <ContactRow icon="📞" label={profile.card_phone}    href={`tel:${profile.card_phone}`}/>}
-                {profile.card_show_address  && profile.card_address  && <ContactRow icon="📍" label={profile.card_address}/>}
-                {profile.card_show_linkedin && profile.card_linkedin && <ContactRow icon="💼" label={profile.card_linkedin} href={profile.card_linkedin.startsWith('http')?profile.card_linkedin:`https://${profile.card_linkedin}`}/>}
-                {profile.card_show_website  && profile.card_website  && <ContactRow icon="🌐" label={profile.card_website}  href={profile.card_website.startsWith('http')?profile.card_website:`https://${profile.card_website}`}/>}
-                {profile.card_show_orcid    && profile.orcid         && <ContactRow icon="🔬" label={`orcid.org/${profile.orcid}`} href={`https://orcid.org/${profile.orcid}`}/>}
-                {profile.card_show_twitter  && profile.twitter       && <ContactRow icon="𝕏"  label={`@${profile.twitter.replace('@','')}`} href={`https://x.com/${profile.twitter.replace('@','')}`}/>}
-              </div>
-            </>
-          )}
+          {hasContactDetails && (() => {
+            const hasContact = (profile.card_show_work_phone && profile.work_phone) || (profile.card_show_phone && profile.card_phone) || (profile.card_show_email && profile.card_email);
+            const hasOnline  = (profile.card_show_linkedin && profile.card_linkedin) || (profile.card_show_website && profile.card_website) || (profile.card_show_orcid && profile.orcid) || (profile.card_show_twitter && profile.twitter);
+            const hasAddr    = (profile.card_show_work_address && workAddress) || (profile.card_show_address && profile.card_address);
+            return (
+              <>
+                <div style={{ height:1, background:'linear-gradient(90deg, #667eea22, #764ba244, #667eea22)', marginBottom:16 }}/>
+                {hasContact && (
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:9.5, fontWeight:700, color:'#bbb', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8 }}>Contact</div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+                      {profile.card_show_work_phone && profile.work_phone && <ContactRow icon="📱" label={profile.work_phone} href={`tel:${profile.work_phone}`}/>}
+                      {profile.card_show_phone      && profile.card_phone && <ContactRow icon="☎️" label={profile.card_phone} href={`tel:${profile.card_phone}`}/>}
+                      {profile.card_show_email      && profile.card_email && <ContactRow icon="✉️" label={profile.card_email} href={`mailto:${profile.card_email}`}/>}
+                    </div>
+                  </div>
+                )}
+                {hasOnline && (
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:9.5, fontWeight:700, color:'#bbb', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8 }}>Online</div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+                      {profile.card_show_linkedin && profile.card_linkedin && <ContactRow icon="💼" label={profile.card_linkedin} href={profile.card_linkedin.startsWith('http')?profile.card_linkedin:`https://${profile.card_linkedin}`}/>}
+                      {profile.card_show_website  && profile.card_website  && <ContactRow icon="🌐" label={profile.card_website}  href={profile.card_website.startsWith('http')?profile.card_website:`https://${profile.card_website}`}/>}
+                      {profile.card_show_orcid    && profile.orcid         && <ContactRow icon="🔬" label={`orcid.org/${profile.orcid}`} href={`https://orcid.org/${profile.orcid}`}/>}
+                      {profile.card_show_twitter  && profile.twitter       && <ContactRow icon="𝕏"  label={`@${profile.twitter.replace('@','')}`} href={`https://x.com/${profile.twitter.replace('@','')}`}/>}
+                    </div>
+                  </div>
+                )}
+                {hasAddr && (
+                  <div style={{ marginBottom:4 }}>
+                    <div style={{ fontSize:9.5, fontWeight:700, color:'#bbb', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8 }}>Address</div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+                      {profile.card_show_work_address && workAddress          && <ContactRow icon="📍" label={workAddress}/>}
+                      {profile.card_show_address      && profile.card_address && <ContactRow icon="📍" label={profile.card_address}/>}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Branding */}
           <div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid #f0f0f0', display:'flex', alignItems:'center', justifyContent:'flex-end' }}>

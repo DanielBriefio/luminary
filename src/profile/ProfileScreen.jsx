@@ -347,9 +347,13 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       additional_quals: form.additional_quals,
       clinical_highlight_label: form.clinical_highlight_label,
       clinical_highlight_value: form.clinical_highlight_value,
-      work_phone: form.work_phone,
-      work_address: form.work_address,
-      card_show_work_phone: form.card_show_work_phone,
+      work_phone:        form.work_phone,
+      work_address:      form.work_address,
+      work_street:       form.work_street,
+      work_city:         form.work_city,
+      work_postal_code:  form.work_postal_code,
+      work_country:      form.work_country,
+      card_show_work_phone:   form.card_show_work_phone,
       card_show_work_address: form.card_show_work_address,
     };
     // Try full save first; if some columns don't exist yet, fall back to core only
@@ -370,11 +374,14 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       card_email: form.card_email, card_phone: form.card_phone,
       card_address: form.card_address, card_website: form.card_website,
       card_linkedin: form.card_linkedin, work_phone: form.work_phone,
+      work_street: form.work_street, work_city: form.work_city,
+      work_postal_code: form.work_postal_code, work_country: form.work_country,
       card_show_email: form.card_show_email, card_show_phone: form.card_show_phone,
       card_show_address: form.card_show_address, card_show_linkedin: form.card_show_linkedin,
       card_show_website: form.card_show_website, card_show_orcid: form.card_show_orcid,
       card_show_twitter: form.card_show_twitter,
       card_show_work_phone: form.card_show_work_phone,
+      card_show_work_address: form.card_show_work_address,
     };
     const { data } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single();
     if (data) setProfile(data);
@@ -406,7 +413,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       else if(parts.length===2){ fn=parts[0]; ln=parts[1]; }
       else { fn=parts[0]; ln=parts[parts.length-1]; mn=parts.slice(1,-1).join(' '); }
     }
-    setShowClinicalFields(profile.work_mode === 'clinician' || profile.work_mode === 'both');
+    setShowClinicalFields(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist');
     setForm({
       name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',
       title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',
@@ -436,8 +443,12 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       clinical_highlight_label: profile.clinical_highlight_label || '',
       clinical_highlight_value: profile.clinical_highlight_value || '',
       // work contact
-      work_phone:   profile.work_phone   || '',
-      work_address: profile.work_address || '',
+      work_phone:        profile.work_phone        || '',
+      work_address:      profile.work_address      || '',
+      work_street:       profile.work_street       || '',
+      work_city:         profile.work_city         || '',
+      work_postal_code:  profile.work_postal_code  || '',
+      work_country:      profile.work_country      || '',
       card_show_work_phone:   profile.card_show_work_phone   ?? false,
       card_show_work_address: profile.card_show_work_address ?? false,
     });
@@ -862,7 +873,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                 <PF label="Current role / title" field="title" form={form} setForm={setForm} placeholder="Professor of Cardiology"/>
-                <PF label="Institution" field="institution" form={form} setForm={setForm} placeholder="University of Tokyo"/>
+                <PF label={(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist') ? 'Hospital / Clinic' : 'Institution / Organisation'} field="institution" form={form} setForm={setForm} placeholder={(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist') ? 'e.g. Tokyo University Hospital' : 'University of Tokyo'}/>
                 <PF label="Location" field="location" form={form} setForm={setForm} placeholder="Tokyo, Japan 🇯🇵"/>
               </div>
               {/* Professional identity */}
@@ -898,8 +909,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/yourname"/>
               </div>
 
-              {/* Clinical Profile section — clinician/both only */}
-              {(form.work_mode === 'clinician' || form.work_mode === 'both') && (
+              {/* Clinical Profile section — clinician/clinician_scientist only */}
+              {(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist') && (
                 <div style={{border:`1px solid ${T.bdr}`,borderRadius:12,overflow:'hidden',marginTop:16,marginBottom:4}}>
                   <button onClick={()=>setShowClinicalFields(s=>!s)}
                     style={{width:'100%',padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',border:'none',background:T.s2,cursor:'pointer',fontFamily:'inherit'}}>
@@ -962,41 +973,39 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>{profile.title}</div>
               )}
               {(profile?.identity_tier1||profile?.identity_tier2)&&(
-                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:4}}>
-                  {profile?.identity_tier1&&(
-                    <span style={{fontSize:11.5,fontWeight:700,padding:'4px 12px',borderRadius:20,background:'#f1f0ff',color:'#5b52cc',border:'1px solid rgba(108,99,255,.2)'}}>
-                      {profile.identity_tier1}
-                    </span>
-                  )}
-                  {profile?.identity_tier2&&(
-                    <span style={{fontSize:11.5,fontWeight:600,padding:'4px 12px',borderRadius:20,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.25)`}}>
-                      {profile.identity_tier2}
-                    </span>
-                  )}
-                  {WORK_MODE_MAP[profile?.work_mode] && (() => {
-                    const modeColors = {
-                      researcher:{ bg:T.s3,      color:T.mu,      border:T.bdr },
-                      clinician: { bg:'#e8f5e9', color:'#2e7d32', border:'rgba(46,125,50,.2)' },
-                      industry:  { bg:'#fff8e1', color:'#f57f17', border:'rgba(245,127,23,.2)' },
-                      both:      { bg:T.v2,      color:T.v,       border:'rgba(108,99,255,.2)' },
-                    };
-                    const c = modeColors[profile.work_mode] || modeColors.researcher;
-                    return (
-                      <span style={{fontSize:11.5,fontWeight:600,padding:'4px 12px',borderRadius:20,background:c.bg,color:c.color,border:`1px solid ${c.border}`}}>
-                        {WORK_MODE_MAP[profile.work_mode]?.icon} {WORK_MODE_MAP[profile.work_mode]?.label}
+                <>
+                  <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:4}}>Discipline</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+                    {profile?.identity_tier1&&(
+                      <span style={{fontSize:11.5,fontWeight:700,padding:'4px 12px',borderRadius:20,background:'#f1f0ff',color:'#5b52cc',border:'1px solid rgba(108,99,255,.2)'}}>
+                        {profile.identity_tier1}
                       </span>
-                    );
-                  })()}
+                    )}
+                    {profile?.identity_tier2&&(
+                      <span style={{fontSize:11.5,fontWeight:600,padding:'4px 12px',borderRadius:20,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.25)`}}>
+                        {profile.identity_tier2}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+              {WORK_MODE_MAP[profile?.work_mode] && (
+                <div style={{fontSize:11.5,color:T.mu,marginBottom:6}}>
+                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em'}}>Sector</span>
+                  {' '}
+                  <span>{WORK_MODE_MAP[profile.work_mode]?.icon} {WORK_MODE_MAP[profile.work_mode]?.label}</span>
                 </div>
               )}
-              {/* "Qualified in" chips — clinician/both with additional_quals */}
-              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'both') && (profile?.additional_quals || []).length > 0 && (
-                <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.05em',flexShrink:0}}>Qualified in</span>
-                  {(profile.additional_quals).map(q => (
-                    <span key={q} style={{fontSize:11.5,fontWeight:600,padding:'3px 10px',borderRadius:20,background:'#e8f5e9',color:'#2e7d32',border:'1px solid rgba(46,125,50,.2)'}}>{q}</span>
-                  ))}
-                </div>
+              {/* Qualifications chips — clinician/clinician_scientist with additional_quals */}
+              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist') && (profile?.additional_quals || []).length > 0 && (
+                <>
+                  <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:4}}>Qualifications</div>
+                  <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:6}}>
+                    {(profile.additional_quals).map(q => (
+                      <span key={q} style={{fontSize:11.5,fontWeight:600,padding:'3px 10px',borderRadius:20,background:'#e8f5e9',color:'#2e7d32',border:'1px solid rgba(46,125,50,.2)'}}>{q}</span>
+                    ))}
+                  </div>
+                </>
               )}
               <div style={{fontSize:13,color:T.mu,marginBottom:12,display:'flex',gap:12,flexWrap:'wrap'}}>
                 {profile?.institution&&<span>🏛️ {profile.institution}</span>}
@@ -1004,16 +1013,13 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 {profile?.orcid&&<a href={`https://orcid.org/${profile.orcid}`} target="_blank" rel="noopener noreferrer" style={{color:T.gr,textDecoration:'none',fontWeight:600}}>ORCID ↗</a>}
               </div>
               {profile?.bio&&<div style={{marginBottom:14,maxWidth:620}}><ExpandableBio text={profile.bio}/></div>}
-              {/* Clinical details block — clinician/both */}
-              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'both') && (
-                profile?.subspeciality || profile?.primary_hospital || profile?.patient_population
+              {/* Clinical details block — clinician/clinician_scientist */}
+              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist') && (
+                profile?.subspeciality || profile?.patient_population
               ) && (
                 <div style={{background:T.s2,border:`1px solid ${T.bdr}`,borderRadius:10,padding:'12px 14px',marginBottom:14,display:'flex',flexWrap:'wrap',gap:12,fontSize:12.5,color:T.text}}>
                   {profile.subspeciality && (
                     <span><span style={{color:T.mu,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>Speciality </span>{profile.subspeciality}</span>
-                  )}
-                  {profile.primary_hospital && (
-                    <span>🏥 {profile.primary_hospital}</span>
                   )}
                   {profile.patient_population && (
                     <span><span style={{color:T.mu,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>Patients </span>{profile.patient_population}</span>
@@ -1026,7 +1032,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </div>
               )}
               {(() => {
-                const isClinician = profile?.work_mode === 'clinician';
+                const isClinician = profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist';
                 const statsRow = isClinician ? [
                   [followStats.followers, 'Followers', 'followers', false],
                   [followStats.following, 'Following', 'following', false],
@@ -1478,23 +1484,24 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <div style={{display:'flex',flexDirection:'column',gap:12}}>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                     <PF label="Work email" field="card_email" form={form} setForm={setForm} placeholder="you@institution.com"/>
-                    <PF label="Work phone" field="card_phone" form={form} setForm={setForm} placeholder="+81 3 1234 5678"/>
+                    <PF label="Mobile phone (📱)" field="work_phone" form={form} setForm={setForm} placeholder="+81 90 1234 5678"/>
+                    <PF label="Office phone (☎️)" field="card_phone" form={form} setForm={setForm} placeholder="+81 3 1234 5678"/>
                     <PF label="Personal website" field="card_website" form={form} setForm={setForm} placeholder="yourname.com"/>
                     <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/yourname"/>
-                    <div style={{gridColumn:'span 2'}}>
-                      <PF label="Work address" field="card_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005"/>
-                    </div>
-                    <PF label="Mobile phone" field="work_phone" form={form} setForm={setForm} placeholder="+81 90 1234 5678"/>
+                    <PF label="Street / building" field="work_street" form={form} setForm={setForm} placeholder="1-1 Marunouchi"/>
+                    <PF label="City" field="work_city" form={form} setForm={setForm} placeholder="Tokyo"/>
+                    <PF label="Postal code" field="work_postal_code" form={form} setForm={setForm} placeholder="100-0005"/>
+                    <PF label="Country" field="work_country" form={form} setForm={setForm} placeholder="Japan"/>
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginTop:4,marginBottom:2}}>Visibility on public card</div>
                   <VisibilityToggle label="Show work email"        value={form.card_show_email}         onChange={v=>setForm(f=>({...f,card_show_email:v}))}/>
-                  <VisibilityToggle label="Show work phone"        value={form.card_show_phone}         onChange={v=>setForm(f=>({...f,card_show_phone:v}))}/>
-                  <VisibilityToggle label="Show office address"    value={form.card_show_address}       onChange={v=>setForm(f=>({...f,card_show_address:v}))}/>
+                  <VisibilityToggle label="Show mobile phone (📱)" value={form.card_show_work_phone}    onChange={v=>setForm(f=>({...f,card_show_work_phone:v}))}/>
+                  <VisibilityToggle label="Show office phone (☎️)" value={form.card_show_phone}         onChange={v=>setForm(f=>({...f,card_show_phone:v}))}/>
+                  <VisibilityToggle label="Show address"           value={form.card_show_work_address}  onChange={v=>setForm(f=>({...f,card_show_work_address:v}))}/>
                   <VisibilityToggle label="Show LinkedIn"          value={form.card_show_linkedin}      onChange={v=>setForm(f=>({...f,card_show_linkedin:v}))}/>
                   <VisibilityToggle label="Show personal website"  value={form.card_show_website}       onChange={v=>setForm(f=>({...f,card_show_website:v}))}/>
                   <VisibilityToggle label="Show ORCID"             value={form.card_show_orcid}         onChange={v=>setForm(f=>({...f,card_show_orcid:v}))}/>
                   <VisibilityToggle label="Show Twitter / X"       value={form.card_show_twitter}       onChange={v=>setForm(f=>({...f,card_show_twitter:v}))}/>
-                  <VisibilityToggle label="Show mobile phone" value={form.card_show_work_phone} onChange={v=>setForm(f=>({...f,card_show_work_phone:v}))}/>
 
                   <div style={{display:'flex',gap:8,marginTop:4}}>
                     <Btn onClick={()=>setEditingCard(false)}>Cancel</Btn>
@@ -1504,15 +1511,16 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               ) : (
                 <>
                   {/* Contact details preview */}
-                  {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone) ? (
+                  {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone||profile?.work_street) ? (
                     <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
                       {profile.card_email    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>✉️</span><span style={{flex:1,color:T.text}}>{profile.card_email}</span>{!profile.card_show_email&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.card_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📞</span><span style={{flex:1,color:T.text}}>{profile.card_phone}</span>{!profile.card_show_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.work_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📱</span><span style={{flex:1,color:T.text}}>{profile.work_phone}</span>{!profile.card_show_work_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
+                      {profile.card_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>☎️</span><span style={{flex:1,color:T.text}}>{profile.card_phone}</span>{!profile.card_show_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.card_linkedin && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>💼</span><span style={{flex:1,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile.card_linkedin}</span>{!profile.card_show_linkedin&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.card_website  && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>🌐</span><span style={{flex:1,color:T.text}}>{profile.card_website}</span>{!profile.card_show_website&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.orcid         && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>🔬</span><span style={{flex:1,color:T.text}}>orcid.org/{profile.orcid}</span>{!profile.card_show_orcid&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.twitter       && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>𝕏</span><span style={{flex:1,color:T.text}}>@{profile.twitter.replace('@','')}</span>{!profile.card_show_twitter&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
+                      {(profile.work_street||profile.work_city) && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📍</span><span style={{flex:1,color:T.text}}>{[profile.work_street,profile.work_city,profile.work_postal_code,profile.work_country].filter(Boolean).join(', ')}</span>{!profile.card_show_work_address&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.card_address  && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📍</span><span style={{flex:1,color:T.text}}>{profile.card_address}</span>{!profile.card_show_address&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                     </div>
                   ) : (

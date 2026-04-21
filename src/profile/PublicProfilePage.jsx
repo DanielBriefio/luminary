@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { T, PUB_TYPES } from '../lib/constants';
+import { T, PUB_TYPES, WORK_MODE_MAP } from '../lib/constants';
 import Av from '../components/Av';
 import ExpandableBio from '../components/ExpandableBio';
 import Spinner from '../components/Spinner';
@@ -89,7 +89,7 @@ export default function PublicProfilePage({ slug }) {
   const grt  = vis.grants        !== false ? (profile.grants         || []) : [];
   const showPubs = vis.publications !== false;
 
-  const pubTabLabel = profile.work_mode === 'clinician'
+  const pubTabLabel = (profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist')
     ? `Publications & Presentations (${pubs.length})`
     : `Publications (${pubs.length})`;
 
@@ -156,18 +156,38 @@ export default function PublicProfilePage({ slug }) {
               <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{profile.title}</div>
             )}
             {(profile.identity_tier1 || profile.identity_tier2) && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                {profile.identity_tier1 && (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', border: '1px solid rgba(108,99,255,.2)' }}>
-                    {profile.identity_tier1}
-                  </span>
-                )}
-                {profile.identity_tier2 && (
-                  <span style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.25)` }}>
-                    {profile.identity_tier2}
-                  </span>
-                )}
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Discipline</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {profile.identity_tier1 && (
+                    <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', border: '1px solid rgba(108,99,255,.2)' }}>
+                      {profile.identity_tier1}
+                    </span>
+                  )}
+                  {profile.identity_tier2 && (
+                    <span style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.25)` }}>
+                      {profile.identity_tier2}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+            {profile.work_mode && WORK_MODE_MAP[profile.work_mode] && (
+              <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Sector</span>
+                {' '}
+                <span>{WORK_MODE_MAP[profile.work_mode].icon} {WORK_MODE_MAP[profile.work_mode].label}</span>
               </div>
+            )}
+            {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist') && (profile.additional_quals || []).length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Qualifications</div>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {profile.additional_quals.map(q => (
+                    <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>{q}</span>
+                  ))}
+                </div>
+              </>
             )}
             <div style={{ fontSize: 13, color: T.mu, marginBottom: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {profile.institution && <span>🏛️ {profile.institution}</span>}
@@ -181,28 +201,10 @@ export default function PublicProfilePage({ slug }) {
                   style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{profile.twitter} ↗</a>
               )}
             </div>
-            {/* Clinical identity block — clinician/both mode */}
-            {(profile.work_mode === 'clinician' || profile.work_mode === 'both') && (
-              <div style={{ marginBottom: 12 }}>
-                {profile.primary_hospital && (
-                  <div style={{ fontSize: 13, color: T.text, fontWeight: 500, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>🏥</span> {profile.primary_hospital}
-                  </div>
-                )}
-                {profile.years_in_practice && (
-                  <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 3 }}>
-                    {profile.years_in_practice} years in practice
-                  </div>
-                )}
-                {(profile.additional_quals || []).length > 0 && (
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
-                    {profile.additional_quals.map(q => (
-                      <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
-                        {q}
-                      </span>
-                    ))}
-                  </div>
-                )}
+            {/* Clinical identity block — clinician/clinician_scientist mode */}
+            {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist') && profile.years_in_practice && (
+              <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 6 }}>
+                {profile.years_in_practice} years in practice
               </div>
             )}
 
@@ -223,7 +225,7 @@ export default function PublicProfilePage({ slug }) {
 
             {/* Stats */}
             {(() => {
-              const isClinician = profile.work_mode === 'clinician';
+              const isClinician = profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist';
               const statItems = isClinician ? [
                 ['—', 'Followers'],
                 ['—', 'Following'],
@@ -272,7 +274,7 @@ export default function PublicProfilePage({ slug }) {
           {tab === 'about' && (
             <div>
               {/* Clinical sections — shown for clinician/both mode */}
-              {(profile.work_mode === 'clinician' || profile.work_mode === 'both') && profile.patient_population && (
+              {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist') && profile.patient_population && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
                     Patient Population
@@ -280,7 +282,7 @@ export default function PublicProfilePage({ slug }) {
                   <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6 }}>{profile.patient_population}</div>
                 </div>
               )}
-              {(profile.work_mode === 'clinician' || profile.work_mode === 'both') && (profile.additional_quals || []).length > 0 && (
+              {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist') && (profile.additional_quals || []).length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
                     Additional Qualifications
