@@ -12,7 +12,7 @@ const inputStyle = {
 };
 
 export default function CreateProjectModal({ user, ownerId, isGroupProject = false, onProjectCreated, onClose, preselectedTemplate, onOpenGallery }) {
-  const [step,             setStep]             = useState(1);
+  const [step,             setStep]             = useState(preselectedTemplate ? 2 : 1);
   const [selectedTemplate, setSelectedTemplate] = useState(preselectedTemplate || 'blank');
   const [projectName,      setProjectName]      = useState('');
   const [description,      setDescription]      = useState('');
