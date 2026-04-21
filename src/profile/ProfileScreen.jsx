@@ -329,13 +329,14 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       location: locationStr || form.location,
       bio:form.bio, orcid:form.orcid, twitter:form.twitter, card_linkedin:form.card_linkedin,
       identity_tier1:form.identity_tier1, identity_tier2:form.identity_tier2,
+      topic_interests: form.topic_interests,
     };
     // Card fields — only present after migration_businesscard.sql is run
     const cardUpdates = {
-      card_email:form.card_email, card_phone:form.card_phone, card_address:form.card_address,
+      card_email:form.card_email, card_phone:form.card_phone,
       card_website:form.card_website,
       card_show_email:form.card_show_email, card_show_phone:form.card_show_phone,
-      card_show_address:form.card_show_address, card_show_linkedin:form.card_show_linkedin,
+      card_show_linkedin:form.card_show_linkedin,
       card_show_website:form.card_show_website, card_show_orcid:form.card_show_orcid,
       card_show_twitter:form.card_show_twitter,
     };
@@ -377,10 +378,10 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
     setCardSaving(true);
     const baseUpdates = {
       card_email: form.card_email, card_phone: form.card_phone,
-      card_address: form.card_address, card_website: form.card_website,
+      card_website: form.card_website,
       card_linkedin: form.card_linkedin, work_phone: form.work_phone,
       card_show_email: form.card_show_email, card_show_phone: form.card_show_phone,
-      card_show_address: form.card_show_address, card_show_linkedin: form.card_show_linkedin,
+      card_show_linkedin: form.card_show_linkedin,
       card_show_website: form.card_show_website, card_show_orcid: form.card_show_orcid,
       card_show_twitter: form.card_show_twitter,
       card_show_work_phone: form.card_show_work_phone,
@@ -432,12 +433,10 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       identity_tier2: profile.identity_tier2||'',
       card_email:   profile.card_email   || user?.email || '',
       card_phone:   profile.card_phone   ||'',
-      card_address: profile.card_address ||'',
       card_linkedin:profile.card_linkedin||'',
       card_website: profile.card_website ||'',
       card_show_email:    profile.card_show_email    ??false,
       card_show_phone:    profile.card_show_phone    ??false,
-      card_show_address:  profile.card_show_address  ??false,
       card_show_linkedin: profile.card_show_linkedin ??true,
       card_show_website:  profile.card_show_website  ??true,
       card_show_orcid:    profile.card_show_orcid    ??true,
@@ -464,6 +463,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       work_country:      profile.work_country      || '',
       card_show_work_phone:   profile.card_show_work_phone   ?? false,
       card_show_work_address: profile.card_show_work_address ?? false,
+      topic_interests:        profile.topic_interests        || [],
     });
   },[profile]);
   useEffect(()=>{ if(!user) return; supabase.from('posts_with_meta').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).then(({data})=>setUserPosts(data||[])); },[user]);
@@ -917,6 +917,10 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <textarea value={form.bio} onChange={e=>setForm(f=>({...f,bio:e.target.value}))} placeholder="Brief summary of your research focus and background..."
                   style={{width:'100%',background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 13px',fontSize:13,fontFamily:'inherit',outline:'none',color:T.text,resize:'none',height:90,lineHeight:1.65}}/>
               </div>
+              <div style={{marginBottom:12}}>
+                <label style={labelStyle}>Research interests <span style={{fontSize:11,color:T.mu,fontWeight:400,marginLeft:6}}>(shown on profile, helps personalise your feed)</span></label>
+                <QualChipInput value={form.topic_interests||[]} onChange={v=>setForm(f=>({...f,topic_interests:v}))} placeholder="e.g. CRISPR, Oncology, Clinical Trials..."/>
+              </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
                 <PF label="ORCID" field="orcid" form={form} setForm={setForm} placeholder="0000-0000-0000-0000"/>
                 <PF label="Twitter / X" field="twitter" form={form} setForm={setForm} placeholder="@yourhandle"/>
@@ -990,14 +994,14 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <div style={{fontSize:11.5,color:T.mu,marginBottom:5}}>
                   <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em'}}>Discipline</span>
                   {' '}
-                  <span>{[profile.identity_tier1, profile.identity_tier2].filter(Boolean).join(' · ')}</span>
+                  <span>{profile.identity_tier2 ? `${profile.identity_tier2} (${profile.identity_tier1})` : profile.identity_tier1}</span>
                 </div>
               )}
               {WORK_MODE_MAP[profile?.work_mode] && (
                 <div style={{fontSize:11.5,color:T.mu,marginBottom:5}}>
                   <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em'}}>Sector</span>
                   {' '}
-                  <span>{WORK_MODE_MAP[profile.work_mode]?.icon} {WORK_MODE_MAP[profile.work_mode]?.label}</span>
+                  <span>{WORK_MODE_MAP[profile.work_mode]?.label}</span>
                 </div>
               )}
               {/* Qualifications — clinician / clinician_scientist / both (backward compat) */}
@@ -1010,6 +1014,13 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     ))}
                   </div>
                 </>
+              )}
+              {(profile?.topic_interests?.length > 0) && (
+                <div style={{fontSize:11.5,color:T.mu,marginBottom:5}}>
+                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em'}}>Interests</span>
+                  {' '}
+                  <span>{profile.topic_interests.join(', ')}</span>
+                </div>
               )}
               <div style={{fontSize:13,color:T.mu,marginBottom:12,display:'flex',gap:12,flexWrap:'wrap'}}>
                 {profile?.institution&&<span>🏛️ {profile.institution}</span>}
@@ -1182,7 +1193,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </div>
               )}
 
-              {(wh.length>0||true)&&(
+              {(wh.length>0||editing)&&(
                 <>
                   <SectionHead label="Work Experience"/>
                   {wh.map((p,i)=>(
@@ -1211,7 +1222,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </>
               )}
 
-              {(edu.length>0||true)&&(
+              {(edu.length>0||editing)&&(
                 <>
                   <SectionHead label="Education"/>
                   {edu.map((e,i)=>(
@@ -1238,7 +1249,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </>
               )}
 
-              {(vol.length>0||true)&&(
+              {(vol.length>0||editing)&&(
                 <>
                   <SectionHead label="Volunteering"/>
                   {vol.map((v,i)=>(
@@ -1264,7 +1275,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </>
               )}
 
-              {(org.length>0||true)&&(
+              {(org.length>0||editing)&&(
                 <>
                   <SectionHead label="Organizations &amp; Memberships"/>
                   {org.map((o,i)=>(
@@ -1290,7 +1301,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </>
               )}
 
-              {(grt.length>0||true)&&(
+              {(grt.length>0||editing)&&(
                 <>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',margin:'20px 0 10px',paddingBottom:6,borderBottom:'2px solid '+T.bdr}}>
                     <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em'}}>Grants &amp; Funding</div>
@@ -1337,7 +1348,10 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </>
               )}
 
+              {(lng.length>0||skl.length>0||hon.length>0||pat.length>0||editing)&&(
+                <>
               <SectionHead label="Skills &amp; Achievements"/>
+              {(lng.length>0||editing)&&(
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:T.text}}>Languages</div>
                 <div style={{display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
@@ -1345,6 +1359,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   <AddPill field="languages" array={lng} placeholder="Language" extraField="proficiency" extraPlaceholder="Native"/>
                 </div>
               </div>
+              )}
+              {(skl.length>0||editing)&&(
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:T.text}}>Skills</div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
@@ -1362,7 +1378,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   <AddPill field="skills" array={skl} placeholder="e.g. Real-World Evidence"/>
                 </div>
               </div>
-              {(hon.length>0||true)&&(
+              )}
+              {(hon.length>0||editing)&&(
                 <div style={{marginBottom:8}}>
                   <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:T.text}}>Honors &amp; Awards</div>
                   {hon.map((h,i)=>(
@@ -1386,7 +1403,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     fields={[['title','Award title','Best Paper Award'],['issuer','Issuer','ISMPP'],['date','Date (YYYY-MM)','2022-06']]}/>
                 </div>
               )}
-              {(pat.length>0||true)&&(
+              {(pat.length>0||editing)&&(
                 <div style={{marginBottom:8}}>
                   <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:T.text}}>Patents</div>
                   {pat.map((p,i)=>(
@@ -1411,64 +1428,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     fields={[['title','Title','Patent title'],['number','Patent number','US1234567'],['date','Date','2020-03'],['url','URL','https://...']]}/>
                 </div>
               )}
-
-              <SectionHead label="Research Interests"/>
-              {!editingTopics ? (
-                <div style={{marginBottom:16}}>
-                  {(profile?.topic_interests?.length > 0) ? (() => {
-                    const groups = {};
-                    const custom = [];
-                    (profile.topic_interests||[]).forEach(interest => {
-                      const tier1 = getTier1ForTier2(interest);
-                      if (tier1) { if (!groups[tier1]) groups[tier1]=[]; groups[tier1].push(interest); }
-                      else custom.push(interest);
-                    });
-                    return (
-                      <div style={{marginBottom:10}}>
-                        {Object.entries(groups).map(([t1,interests])=>(
-                          <div key={t1} style={{marginBottom:10}}>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:5}}>{t1}</div>
-                            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                              {interests.map(t=>(
-                                <span key={t} style={{padding:'4px 12px',borderRadius:20,fontSize:12.5,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.2)`,fontWeight:600}}>{t}</span>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                        {custom.length>0&&(
-                          <div style={{marginBottom:10}}>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:5}}>Other interests</div>
-                            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                              {custom.map(t=>(
-                                <span key={t} style={{padding:'4px 12px',borderRadius:20,fontSize:12.5,background:T.s2,color:T.mu,border:`1px solid ${T.bdr}`,fontWeight:500}}>#{t}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })() : (
-                    <div style={{fontSize:12.5,color:T.mu,marginBottom:10}}>No research interests set — add some to personalise your feed.</div>
-                  )}
-                  <Btn onClick={()=>{ setTopicDraft(profile?.topic_interests||[]); setEditingTopics(true); }}>Edit interests</Btn>
-                </div>
-              ) : (
-                <div style={{marginBottom:16}}>
-                  <TopicInterestsPicker
-                    selected={topicDraft}
-                    onChange={setTopicDraft}
-                    minRequired={0}
-                  />
-                  <div style={{display:'flex',gap:8,marginTop:14}}>
-                    <Btn onClick={()=>setEditingTopics(false)}>Cancel</Btn>
-                    <Btn variant="s" onClick={()=>saveTopics(topicDraft)} disabled={savingTopics}>{savingTopics?'Saving…':'Save interests'}</Btn>
-                  </div>
-                  <div style={{fontSize:12,color:T.mu,marginTop:8}}>
-                    {topicDraft.length===0
-                      ?'Saving with no topics selected will disable personalised feed sorting.'
-                      :`${topicDraft.length} topic${topicDraft.length!==1?'s':''} selected`}
-                  </div>
-                </div>
+                </>
               )}
 
             </div>
@@ -1515,7 +1475,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               ) : (
                 <>
                   {/* Contact details preview */}
-                  {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone||profile?.work_street) ? (() => {
+                  {(profile?.card_email||profile?.card_phone||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone||profile?.work_street) ? (() => {
                     const workAddr = [profile.work_street,profile.work_city,profile.work_postal_code,profile.work_country].filter(Boolean).join(', ');
                     const CR = ({icon, label, hidden}) => (
                       <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}>
@@ -1526,7 +1486,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     );
                     const hasContact = profile.card_email || profile.work_phone || profile.card_phone;
                     const hasOnline  = profile.card_linkedin || profile.card_website || profile.orcid || profile.twitter;
-                    const hasAddr    = workAddr || profile.card_address;
+                    const hasAddr    = workAddr;
                     return (
                       <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
                         {hasContact && (
@@ -1554,8 +1514,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                           <div>
                             <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}}>Address</div>
                             <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                              {workAddr         && <CR icon="📍" label={workAddr}           hidden={!profile.card_show_work_address}/>}
-                              {profile.card_address && <CR icon="📍" label={profile.card_address} hidden={!profile.card_show_address}/>}
+                              {workAddr && <CR icon="📍" label={workAddr} hidden={!profile.card_show_work_address}/>}
                             </div>
                           </div>
                         )}

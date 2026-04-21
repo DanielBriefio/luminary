@@ -142,14 +142,21 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                   <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 5 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Discipline</span>
                     {' '}
-                    <span>{[p.identity_tier1, p.identity_tier2].filter(Boolean).join(' · ')}</span>
+                    <span>{p.identity_tier2 ? `${p.identity_tier2} (${p.identity_tier1})` : p.identity_tier1}</span>
                   </div>
                 )}
                 {p.work_mode && WORK_MODE_MAP[p.work_mode] && (
                   <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Sector</span>
                     {' '}
-                    <span>{WORK_MODE_MAP[p.work_mode].icon} {WORK_MODE_MAP[p.work_mode].label}</span>
+                    <span>{WORK_MODE_MAP[p.work_mode].label}</span>
+                  </div>
+                )}
+                {(p.topic_interests || []).length > 0 && (
+                  <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Interests</span>
+                    {' '}
+                    <span>{p.topic_interests.join(', ')}</span>
                   </div>
                 )}
                 {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist' || p.work_mode === 'both') && (p.additional_quals || []).length > 0 && (
@@ -248,20 +255,6 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
 
             {tab === 'about' && (
               <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderTop: 'none', borderRadius: '0 0 14px 14px', padding: '18px 22px', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
-                {/* Research interests — all modes */}
-                {(p.topic_interests || []).length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Research Interests</div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {p.topic_interests.map(t => (
-                        <span key={t} style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.2)`, fontWeight: 600 }}>
-                          #{t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Clinical sections — clinician/both mode */}
                 {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist') && p.patient_population && (
                   <div style={{ marginBottom: 16 }}>

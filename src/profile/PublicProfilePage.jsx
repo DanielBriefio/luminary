@@ -159,14 +159,14 @@ export default function PublicProfilePage({ slug }) {
               <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 5 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Discipline</span>
                 {' '}
-                <span>{[profile.identity_tier1, profile.identity_tier2].filter(Boolean).join(' · ')}</span>
+                <span>{profile.identity_tier2 ? `${profile.identity_tier2} (${profile.identity_tier1})` : profile.identity_tier1}</span>
               </div>
             )}
             {profile.work_mode && WORK_MODE_MAP[profile.work_mode] && (
               <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Sector</span>
                 {' '}
-                <span>{WORK_MODE_MAP[profile.work_mode].icon} {WORK_MODE_MAP[profile.work_mode].label}</span>
+                <span>{WORK_MODE_MAP[profile.work_mode].label}</span>
               </div>
             )}
             {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both') && (profile.additional_quals || []).length > 0 && (
@@ -201,15 +201,10 @@ export default function PublicProfilePage({ slug }) {
             {profile.bio && <div style={{ marginBottom: 14, maxWidth: 620 }}><ExpandableBio text={profile.bio} /></div>}
 
             {profile.topic_interests?.length > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Research Interests</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {profile.topic_interests.map(t => (
-                    <span key={t} style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, border: '1.5px solid rgba(108,99,255,.2)', background: T.v2, color: T.v, fontWeight: 700 }}>
-                      #{t}
-                    </span>
-                  ))}
-                </div>
+              <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Interests</span>
+                {' '}
+                <span>{profile.topic_interests.join(', ')}</span>
               </div>
             )}
 

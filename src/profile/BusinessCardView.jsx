@@ -40,7 +40,6 @@ export function BusinessCardView({ profile, currentUserId }) {
   const hasContactDetails = (
     (profile.card_show_email        && profile.card_email)        ||
     (profile.card_show_phone        && profile.card_phone)        ||
-    (profile.card_show_address      && profile.card_address)      ||
     (profile.card_show_linkedin     && profile.card_linkedin)     ||
     (profile.card_show_website      && profile.card_website)      ||
     (profile.card_show_orcid        && profile.orcid)             ||
@@ -65,8 +64,6 @@ export function BusinessCardView({ profile, currentUserId }) {
         ? `TEL;TYPE=WORK:${profile.card_phone}` : '',
       (profile.card_show_work_phone && profile.work_phone)
         ? `TEL;TYPE=WORK:${profile.work_phone}` : '',
-      (profile.card_show_address && profile.card_address)
-        ? `ADR;TYPE=WORK:;;${profile.card_address};;;;` : '',
       (profile.card_show_work_address && workAddress)
         ? `ADR;TYPE=WORK:;;${workAddress};;;;` : '',
       `URL:${window.location.origin}/p/${profile.profile_slug}`,
@@ -130,7 +127,7 @@ export function BusinessCardView({ profile, currentUserId }) {
           {hasContactDetails && (() => {
             const hasContact = (profile.card_show_work_phone && profile.work_phone) || (profile.card_show_phone && profile.card_phone) || (profile.card_show_email && profile.card_email);
             const hasOnline  = (profile.card_show_linkedin && profile.card_linkedin) || (profile.card_show_website && profile.card_website) || (profile.card_show_orcid && profile.orcid) || (profile.card_show_twitter && profile.twitter);
-            const hasAddr    = (profile.card_show_work_address && workAddress) || (profile.card_show_address && profile.card_address);
+            const hasAddr    = (profile.card_show_work_address && workAddress);
             return (
               <>
                 <div style={{ height:1, background:'linear-gradient(90deg, #667eea22, #764ba244, #667eea22)', marginBottom:16 }}/>
@@ -159,8 +156,7 @@ export function BusinessCardView({ profile, currentUserId }) {
                   <div style={{ marginBottom:4 }}>
                     <div style={{ fontSize:9.5, fontWeight:700, color:'#bbb', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8 }}>Address</div>
                     <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
-                      {profile.card_show_work_address && workAddress          && <ContactRow icon="📍" label={workAddress}/>}
-                      {profile.card_show_address      && profile.card_address && <ContactRow icon="📍" label={profile.card_address}/>}
+                      {profile.card_show_work_address && workAddress && <ContactRow icon="📍" label={workAddress}/>}
                     </div>
                   </div>
                 )}

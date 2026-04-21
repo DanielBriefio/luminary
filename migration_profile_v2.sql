@@ -21,3 +21,8 @@ WHERE work_address IS NOT NULL AND work_address <> '' AND work_street IS NULL;
 UPDATE profiles
 SET work_mode = 'clinician_scientist'
 WHERE work_mode = 'both';
+
+-- 5. Drop legacy card_address fields (replaced by work_street/city/postal_code/country)
+ALTER TABLE profiles
+  DROP COLUMN IF EXISTS card_address,
+  DROP COLUMN IF EXISTS card_show_address;
