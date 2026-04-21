@@ -59,6 +59,8 @@ src/
     pubUtils.js                  — typeIcon, typeLabel
     useWindowSize.js             — useWindowSize hook (isMobile < 768px)
     useSuggestedTopics.js        — topic suggestion logic
+    projectTemplates.js          — PROJECT_TEMPLATES, FAST_TEMPLATES, GALLERY_TEMPLATES, GALLERY_FILTER_CATEGORIES, applyTemplate
+    profileMilestones.js         — MILESTONES, STAGES, STAGE_REWARDS, computeStage (used by ProfileCompletionMeter)
   components/
     Av.jsx                       — Avatar (avatar_color or avatar_url)
     Btn.jsx                      — Button: variant="" grey / "v" violet outline / "s" violet solid
@@ -101,8 +103,9 @@ src/
     ShareProfilePanel.jsx        — Share panel: slug editor, visibility, SVG badge, QR code
     PubRow.jsx                   — Single publication row
     SectionGroup.jsx             — Collapsible profile section group
-    BusinessCardView.jsx         — Business card visualisation
+    BusinessCardView.jsx         — Business card visualisation; work_mode aware (hospital + work_phone/address ordering for clinician/clinician_scientist)
     CardPage.jsx                 — Public card at /c/:slug
+    CardQROverlay.jsx            — QR overlay shown on business card; subtitle adapts to work_mode
     CvExportPanel.jsx            — CV export functionality
   post/
     PublicPostPage.jsx           — Public post at /s/:postId (no auth required; maxWidth 640px)
@@ -121,8 +124,27 @@ src/
     GroupNewPost.jsx             — Post composer: text, paper (EuropePMC), link; auto-tag
     GroupPostCard.jsx            — Group post: like, comment, edit, delete, sticky, repost-to-public
     GroupMembers.jsx             — Members list; admin controls: promote/demote/remove; join requests
-    GroupLibrary.jsx             — Group library: folders, paper search, DOI entry, file upload, .ris/.bib import
+    GroupLibrary.jsx             — Group library: folders, paper search, DOI entry, file upload, .ris/.bib import, clinical trial search
     CreateGroupModal.jsx         — Create group: name, description, research_topic, public/closed toggle
+    GroupProjects.jsx            — Group projects tab: list + create (same gallery flow as ProjectsScreen)
+    GroupProfile.jsx             — Group profile tab: stats, leader, publications, SVG badge, QR, admin edit
+    PublicGroupProfileScreen.jsx — Public group page at /g/:slug (no auth required)
+  projects/
+    ProjectsScreen.jsx           — Personal projects list + header with "Browse templates" + "New project"
+    ProjectScreen.jsx            — Individual project view (folders sidebar + post feed); archive/unarchive; read-only banner when archived
+    ProjectFeed.jsx              — Project post feed; updates last_read_at on mount
+    ProjectPostCard.jsx          — Project post card: like, comment, edit, delete, sticky
+    ProjectMembers.jsx           — Members list; owner can add/remove members
+    CreateProjectModal.jsx       — 2-step modal: template picker → name; accepts preselectedTemplate prop (skips to step 2); handles community template type
+    TemplateGallery.jsx          — Full-screen gallery: Curated/Community tabs + filter chips; CommunityTemplateCard with ratings
+    SaveAsTemplateModal.jsx      — 2-step: metadata + review/edit starter posts → submit to community_templates
+  components/
+    ProfileCompletionMeter.jsx   — Milestone tracker with confetti; stages: Newcomer → Contributor → Scholar → Fellow → Luminary
+    FeedTipCard.jsx              — Dismissible tip card in feed (from FEED_TIPS in constants.js)
+    CardQROverlay.jsx            — QR overlay shown on business card; subtitle adapts to work_mode
+    Footer.jsx                   — Simple footer (used in public pages)
+  library/
+    LibraryClinicalTrialSearch.jsx — ClinicalTrials.gov API v2 search; returns study cards for library import
 ```
 
 > **Note:** `src/screens/GroupsScreen.jsx` is a legacy file — the active groups screen is `src/groups/GroupsScreen.jsx`. The legacy file should not be edited.
@@ -190,7 +212,9 @@ All posts support:
 - **GroupNewPost**: post types text/paper/link; uploads to `post-files` bucket; fire-and-forget auto-tag; notifies all group members (`notif_type: 'group_post'`); stores `paper_citation`
 - **GroupPostCard**: like/comment (group tables); sticky toggle; repost to public `posts` table; owner+admin menu; shows `paper_citation`
 - **GroupMembers**: admin list + member list with promote/demote/remove; pending join requests with approve/reject
-- **GroupLibrary**: same add controls as personal library (Search PMC, DOI, Upload, .ris/.bib import); 3-dot menu per item; "Share this paper"; admin/member can add, admin can delete any item
+- **GroupLibrary**: same add controls as personal library (Search PMC, DOI, Upload, .ris/.bib import, ClinicalTrials.gov search); 3-dot menu per item; "Share this paper"; admin/member can add, admin can delete any item
+- **GroupProfile** (`GroupProfile.jsx` — Profile tab inside GroupScreen): group stats (posts, members, pubs), leader info, collaborators, publications list, SVG badge export, QR code; admin can edit group metadata inline
+- **PublicGroupProfileScreen** (`/g/:slug` — no auth required): public-facing group page with stats, recent posts, publications; for groups with a `group_slug`
 
 ### Notifications (`NotifsScreen`)
 - Types handled: `new_post`, `new_comment`, `paper_comment`, `new_follower`, `group_post`
@@ -201,7 +225,7 @@ All posts support:
 ### My Profile (`ProfileScreen`)
 Tabs: **About**, **Publications**, **Posts**
 
-**About tab** — editable fields: name, title, institution, location, bio, orcid, twitter
+**About tab** — editable fields: name, title, institution, location, bio, topic_interests (chip input), orcid, twitter; discipline shown as `"Tier2 (Tier1)"`; sector shown without emoji; empty sections (Work, Education, etc.) hidden in view mode, shown when `editing === true`
 
 Import menu (top-right):
 - **LinkedIn ZIP** — parses `profile.csv`, `positions.csv`, `education.csv`, `volunteer.csv`, `organizations.csv`, `honors.csv`, `languages.csv`, `skills.csv`, `patents.csv`. Fuzzy dedup with `ConflictResolverModal` for work + education conflicts.
@@ -238,8 +262,12 @@ Profile sections (stored as JSONB arrays in `profiles`):
 
 ### User Profile (`UserProfileScreen`)
 - Auth-required view of another user's profile (tabs: About, Publications, Posts)
-- Follow/unfollow, Message buttons
-- Back navigation returns to previous screen
+- Follow/unfollow, Message buttons; back navigation returns to previous screen
+- **work_mode badge** with colour coding: clinician=green, industry=amber, clinician_scientist=blue, researcher=violet
+- **Clinical identity block**: `primary_hospital`, `years_in_practice`, `additional_quals` chips (shown for clinician/clinician_scientist)
+- **Dynamic stats row**: clinician/clinician_scientist replaces citations/h-index with years_in_practice + clinical_highlight; grid column count adjusts to item count
+- **Topic interests** one-liner in header (below sector line): `INTERESTS topic1, topic2, …`; edited via chip input in main edit form
+- Publications tab label: "Publications & Presentations (N)" for clinician/clinician_scientist mode
 
 ### Paper Detail (`PaperDetailPage`)
 - Works both public (`/paper/:doi`) and auth-required (in-app)
@@ -260,8 +288,22 @@ Profile sections (stored as JSONB arrays in `profiles`):
 - Reads `profiles` by `profile_slug`, respects `profile_visibility` JSONB
 - Shows: avatar, name, title, institution, bio, work history, education, skills, publications
 - Tab: About / Publications
+- **work_mode aware**: clinician/clinician_scientist shows clinical identity block (hospital, years, quals chips) before bio; dynamic stats row replaces citations/h-index with clinical metrics; Publications tab label adapts; patient_population + additional_quals sections shown in About
 
-## Database Schema (live — verified against Supabase 2026-04-19)
+### Projects (`ProjectsScreen`, `GroupProjects`)
+- **ProjectsScreen**: personal projects list; header has "🗂️ Browse templates" + "+ New project"; empty state has "Create your first project"
+- **TemplateGallery**: full-screen discovery screen; two top-level tabs: ⭐ Curated | 👥 Community; curated side has filter chips (All / Research / Clinical / Industry / Collaboration); template cards show icon, description, used-by, key action chips, preview post snippet; "Use template" → CreateProjectModal at step 2; "Preview" → modal with full folder list + example posts
+- **CreateProjectModal**: step 1 = fast-4 template picker + "Browse all templates →" dashed button; step 2 = name + description + create; `preselectedTemplate` prop skips directly to step 2; handles both built-in and community template types
+- **Template types (built-in)**: fast-4 (conference, journal_club, weekly_team_meeting, clinical_training) + 7 gallery-only (research_project, grant_application, advisory_board, literature_review, lab_onboarding, product_launch, regulatory_submission)
+- **Project status**: `active` (default) | `archived` — archive via ··· menu on card; archived projects shown in collapsed "📦 Archived (N)" section at bottom of ProjectsScreen; read-only banner inside archived project
+- **Project pinning**: `is_pinned` column; pin via ··· menu; pinned projects sorted first; 📌 badge on card
+- **Unread badges + activity**: `last_read_at` per member in `project_members`; unread count badge on card; "Last post X ago" + 🟢 Active / ⚪ Quiet indicator; quiet nudge (dismissible) after 5 days of no posts
+- **Save as template**: ··· menu → SaveAsTemplateModal; two-step: metadata + review/edit starter posts; submits to `community_templates` with status='pending'
+- **Community templates** (`community_templates` table): user-submitted; admin approves via SQL; appear in Community tab with submitter attribution + 👍 rating; ratings stored in `community_template_ratings`
+- **ProjectMembers**: member list + add-from-group-members panel; owner can remove members
+- **GroupProjects**: same gallery flow + archiving/pinning available to admin/member roles in group context
+
+## Database Schema (live — verified against Supabase 2026-04-22)
 
 ### `profiles`
 id (FK auth.users), name, title, institution, location, bio, orcid, twitter, website,
@@ -276,9 +318,16 @@ onboarding_completed (bool), signup_method, orcid_verified, orcid_imported_at,
 linkedin_imported_at,
 email_notifications (bool), email_marketing (bool),
 marketing_consent_at, terms_accepted_at, privacy_accepted_at,
-card_email, card_phone, card_address, card_linkedin, card_website,
-card_visible, card_show_email, card_show_phone, card_show_address,
+card_email, card_phone, card_linkedin, card_website,
+card_visible, card_show_email, card_show_phone,
 card_show_linkedin, card_show_website, card_show_orcid, card_show_twitter,
+work_phone, work_address, work_street, work_city, work_postal_code, work_country,
+card_show_work_phone, card_show_work_address,
+location_city, location_country,
+work_mode (TEXT: 'researcher' | 'clinician' | 'industry' | 'clinician_scientist'),
+-- Note: 'clinician_scientist' replaces the legacy 'both' value (migration_profile_v2.sql)
+primary_hospital, years_in_practice, additional_quals, patient_population,
+subspeciality, clinical_highlight_value, clinical_highlight_label,
 created_at
 
 ### `posts`
@@ -288,11 +337,15 @@ paper_citation (TEXT) — formatted citation string stored at post creation,
 link_title, link_url, link_source,
 image_url, file_type, file_name,
 tags (TEXT[]), tier1, tier2 (TEXT[]),
+group_id (uuid, nullable), group_name (TEXT, nullable),
+is_deep_dive (bool),
 created_at
 
 ### `posts_with_meta`
-VIEW: posts + author profile fields + like_count, comment_count
-— includes paper_citation (view was recreated to include this column)
+VIEW: posts + author profile fields + like_count, comment_count, repost_count,
+user_liked (bool), user_reposted (bool),
+author_work_mode, author_slug (profile_slug),
+— includes paper_citation, group_id, group_name, is_deep_dive from posts table
 
 ### `likes`
 id, user_id, post_id, created_at
@@ -305,6 +358,11 @@ id, user_id, post_id, created_at
 
 ### `follows`
 id, follower_id, target_type (user|paper|group), target_id (TEXT), created_at
+
+### `group_follows`
+id, group_id, user_id, created_at — UNIQUE(group_id, user_id)
+- Used for following a group without joining it. Separate from the `follows` table (which handles user/paper/group follows via `target_type`).
+- RLS: gf_select (true), gf_insert (auth.uid() = user_id), gf_delete (auth.uid() = user_id)
 
 ### `publications`
 id, user_id, title, authors, journal, year, doi, pub_type, venue,
@@ -333,6 +391,7 @@ work_history, education, publications, keywords (all TEXT/JSON strings), expires
 
 ### `groups`
 id, name, description, research_topic, avatar_url, cover_url,
+slug (TEXT UNIQUE — auto-generated by `group_slug_trigger` on INSERT, calls `generate_group_slug()`),
 is_public (bool, default true) — **use this for public/closed logic**,
 is_private (bool, legacy — do not use),
 owner_id (uuid, legacy — nullable, do not use for new logic),
@@ -340,10 +399,17 @@ created_by (uuid FK profiles — use this),
 institution (legacy), field_tags (TEXT[], legacy),
 created_at, updated_at
 
+### `group_invites`
+id, group_id, created_by, token (TEXT UNIQUE, auto-generated 12-char lowercase hex),
+expires_at (default now()+7 days), max_uses (default 10), use_count (default 0),
+created_at
+- Token-based invite links scoped to a single group. Distinct from `invite_codes` (platform-wide signup gate — different table, different purpose).
+- RLS: ginv_select (group member), ginv_insert (group admin), ginv_delete (created_by)
+
 ### `group_members`
 id, group_id, user_id,
 role (TEXT: 'admin' | 'member' | 'alumni' — stored as text, not enum),
-display_role (TEXT), joined_at, created_at
+display_role (TEXT), joined_at, last_read_at (timestamptz, default now()), created_at
 - Legacy 'owner' role was migrated → 'admin'
 
 ### `group_join_requests`
@@ -359,6 +425,11 @@ tags (TEXT[]), tier1, tier2 (TEXT[]),
 content_iv, content_encrypted (bool),
 is_sticky (bool), is_announcement (bool), is_reposted_public (bool),
 edited_at, created_at
+
+### `groups_with_stats`
+VIEW: groups + member_count, admin_count, alumni_count, active_member_count,
+publication_count (library_items flagged is_group_publication=true in group folders)
+— not documented previously; present in live DB
 
 ### `group_posts_with_meta`
 VIEW: group_posts + author_name, author_title, author_institution,
@@ -389,6 +460,68 @@ added_at, created_at
 ### `saved_posts`
 id, user_id, post_id (nullable), group_post_id (nullable), saved_at
 
+### `projects`
+id, user_id (nullable — NULL for group projects, equals created_by for personal projects),
+group_id (nullable — NULL for personal projects),
+created_by (uuid FK profiles — always set; the person who created it; used in RLS insert check),
+name, description,
+icon (TEXT), cover_color (TEXT),
+status (TEXT: 'active' | 'archived'), is_pinned (bool),
+created_at, updated_at
+- Personal project: user_id = created_by, group_id = NULL
+- Group project: user_id = NULL, group_id = group, created_by = creator
+- RLS select uses user_id for personal access, group_id for group access
+
+### `project_members`
+id, project_id, user_id, role (TEXT: 'owner' | 'member'),
+last_read_at (timestamptz), joined_at, created_at
+
+### `project_folders`
+id, project_id, name, sort_order, created_at
+
+### `project_posts`
+id, project_id, folder_id (nullable), user_id,
+content, post_type, is_sticky (bool), is_starter (bool),
+content_iv (TEXT), content_encrypted (bool),
+paper_doi, paper_title, paper_journal, paper_authors, paper_abstract, paper_year,
+paper_citation (TEXT),
+link_url, link_title,
+image_url, file_type, file_name,
+tags (TEXT[]), tier1 (TEXT), tier2 (TEXT[]),
+edited_at (timestamptz),
+created_at, updated_at
+
+### `project_posts_with_meta`
+VIEW: project_posts + author profile fields (name, title, institution, avatar_color,
+avatar_url, identity_tier2) + like_count, comment_count,
+folder_name (from project_folders),
+project_name, project_icon, project_color, project_group_id (from projects)
+
+### `project_post_likes`
+id, post_id, user_id, created_at
+
+### `project_post_comments`
+id, post_id, user_id, content (NOT NULL), created_at
+
+### `community_templates`
+id, submitted_by (FK profiles), status (TEXT: 'pending'|'approved'|'rejected'),
+name, description, used_by, filter_category, icon, color,
+folders (JSONB), starter_posts (JSONB), preview_posts (JSONB),
+rating_count (int), created_at, updated_at
+— RLS: anyone sees approved; submitter sees own pending; submitter can update while pending
+
+### `community_template_ratings`
+id, template_id (FK community_templates), user_id (FK profiles),
+created_at — UNIQUE(template_id, user_id)
+
+### `waitlist`
+id (uuid PK), full_name (TEXT NOT NULL), email (TEXT NOT NULL),
+institution (TEXT, nullable), role_title (TEXT, nullable),
+referral_source (TEXT, nullable), is_priority (bool, default false),
+created_at (timestamptz)
+- No RLS policies — likely written to by a public landing page outside this repo
+- Do not add RLS without understanding the external write path
+
 ## RLS — Groups (key policies)
 
 All group RLS uses SECURITY DEFINER helper functions to avoid infinite recursion:
@@ -398,7 +531,12 @@ All group RLS uses SECURITY DEFINER helper functions to avoid infinite recursion
 - `get_public_group_ids()` — groups where is_public = true
 - `get_my_member_post_ids()` — post ids in groups where I am admin or member
 
-Key policy: `groups_select` allows `is_public = true OR created_by = auth.uid() OR id in (get_my_group_ids())`. The `created_by` check is critical — it allows the creator to read back the group immediately after insert, before the group_members row is added.
+Key policies (as of DB snapshot 2026-04-22):
+- `groups_select`: `auth.uid() IS NOT NULL` — any authenticated user can read any group
+- `groups_insert`: `auth.uid() IS NOT NULL`
+- `groups_update`: `id IN (get_my_admin_group_ids())`
+
+Note: earlier documentation said `groups_select` used `is_public = true OR created_by = auth.uid() OR id in (get_my_group_ids())` — this was the intended policy but the live DB uses the simpler `auth.uid() IS NOT NULL`. The `get_public_group_ids()` and related helper functions still exist and are used by other policies.
 
 ## RLS — library_items (key policies)
 
@@ -479,3 +617,5 @@ Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level s
 - **library_items.folder_id** is nullable — NULL means Unsorted (added from Explore); always query with `.is('folder_id', null)` for inbox, not `.eq('folder_id', null)`
 - **Responsive**: No media queries exist yet. All styles are inline JS. `useWindowSize` hook in `src/lib/useWindowSize.js` returns `{ isMobile }` (< 768px).
 - **sessionStorage.prefill_paper** — used to pass paper metadata from Library/Explore "Share this paper" into NewPostScreen; keys: `doi, title, journal, year, authors, abstract, citation`
+- **work_mode** adapts UI but never restricts access; check `work_mode === 'clinician' || work_mode === 'clinician_scientist'` for clinical-specific display; `WORK_MODE_MAP` in `constants.js` maps id → `{ icon, label }`
+- **projectTemplates.js** exports: `PROJECT_TEMPLATES` (all templates keyed by type), `FAST_TEMPLATES` (fast-4 array), `GALLERY_TEMPLATES` (galleryOnly array), `GALLERY_FILTER_CATEGORIES` (filter tab defs), `applyTemplate(template, name, projectId, userId)` → `{ folders, posts }`; `galleryOnly: true` templates are excluded from the fast-4 picker
