@@ -58,6 +58,7 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
       ...p,
       folder_name:    folderMap[p.folder_id] || null,
       _isSticky:      p.is_sticky || false,
+      _postTitle:     p.title || '',
       _editedContent: p.content?.replace(/<[^>]+>/g, '') || '',
     })));
     setLoadingPosts(false);
@@ -82,6 +83,7 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
       id: `new_${Date.now()}`,
       folder_name: null,
       _isSticky: false,
+      _postTitle: '',
       _editedContent: '',
     }]);
   };
@@ -97,11 +99,14 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
       .order('sort_order');
 
     const starterPosts = draftPosts
-      .filter(p => p._editedContent?.trim())
+      .filter(p => p._editedContent?.trim() || p._postTitle?.trim())
       .map(p => ({
         folder:    p.folder_name || null,
         is_sticky: p._isSticky || false,
-        content:   `<p>${p._editedContent.trim()}</p>`,
+        title:     p._postTitle?.trim() || null,
+        content:   p._postTitle?.trim()
+          ? `<p><strong>${p._postTitle.trim()}</strong></p><p>${p._editedContent?.trim() || ''}</p>`
+          : `<p>${p._editedContent.trim()}</p>`,
       }));
 
     const previewPosts = draftPosts.slice(0, 2)
@@ -273,7 +278,19 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
                       fontSize: 11.5, color: T.mu, fontWeight: 600,
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     }}>
-                      <span>📁 {post.folder_name || 'No folder'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
+                        <span style={{ flexShrink: 0 }}>📁</span>
+                        <input
+                          value={post.folder_name || ''}
+                          onChange={e => updateDraftPost(i, { folder_name: e.target.value })}
+                          placeholder="Folder name…"
+                          style={{
+                            background: 'transparent', border: 'none', outline: 'none',
+                            fontFamily: 'inherit', fontSize: 11.5, color: T.mu,
+                            fontWeight: 600, width: '100%', minWidth: 0,
+                          }}
+                        />
+                      </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontWeight: 400 }}>
                           <input
@@ -289,6 +306,17 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
                         </button>
                       </div>
                     </div>
+                    <input
+                      value={post._postTitle || ''}
+                      onChange={e => updateDraftPost(i, { _postTitle: e.target.value })}
+                      placeholder="Post title (optional)"
+                      style={{
+                        width: '100%', padding: '8px 12px', border: 'none',
+                        borderBottom: `1px solid ${T.bdr}`, outline: 'none',
+                        fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+                        background: T.w, boxSizing: 'border-box', color: T.text,
+                      }}
+                    />
                     <textarea
                       value={post._editedContent || ''}
                       onChange={e => updateDraftPost(i, { _editedContent: e.target.value })}
@@ -298,7 +326,7 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
                         fontFamily: 'inherit', fontSize: 13, lineHeight: 1.55,
                         resize: 'vertical', background: T.w, boxSizing: 'border-box',
                       }}
-                      placeholder="Edit this post content before sharing as a template…"
+                      placeholder="Post content…"
                     />
                   </div>
                 ))}
