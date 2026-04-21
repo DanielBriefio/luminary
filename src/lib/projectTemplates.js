@@ -143,9 +143,106 @@ export const PROJECT_TEMPLATES = {
     ],
   },
 
+  weekly_team_meeting: {
+    type:        'weekly_team_meeting',
+    label:       'Weekly Team Meeting',
+    icon:        '📅',
+    color:       '#0284c7',
+    description: 'Keep your clinical or research team aligned week to week.',
+    usedBy:      'Clinical teams, lab groups, departments',
+    galleryOnly: true,
+    folders: [
+      { name: 'Agenda',           sort_order: 0 },
+      { name: 'Case Discussions', sort_order: 1 },
+      { name: 'Action Items',     sort_order: 2 },
+      { name: 'Decisions Made',   sort_order: 3 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Agenda',
+        is_sticky: true,
+        content: `<h3>📅 Welcome to {projectName}</h3>
+<p>Use this space to prepare for and document your weekly meetings.</p>
+<ul>
+<li>Post this week's agenda items in <em>Agenda</em></li>
+<li>Add cases you want to discuss in <em>Case Discussions</em></li>
+<li>Capture follow-ups in <em>Action Items</em></li>
+<li>Record key decisions in <em>Decisions Made</em></li>
+</ul>`,
+      },
+      {
+        folder:  'Agenda',
+        content: `<p>📋 <strong>This week's agenda</strong></p>
+<p>Add agenda items here before the meeting. Anyone can contribute.</p>`,
+      },
+      {
+        folder:  'Case Discussions',
+        content: `<p>🔍 <strong>Cases to discuss this week</strong></p>
+<p>Add cases you'd like the team's input on. Include relevant background and your specific question.</p>`,
+      },
+      {
+        folder:  'Action Items',
+        content: `<p>✅ <strong>Follow-up from last meeting</strong></p>
+<p>List action items with owners and deadlines. Update status as things are completed.</p>`,
+      },
+    ],
+  },
+
+  clinical_training: {
+    type:        'clinical_training',
+    label:       'Clinical Training',
+    icon:        '🎓',
+    color:       '#7c3aed',
+    description: 'Organise a new technique, certification or training programme.',
+    usedBy:      'Clinical teams, training departments, lab groups',
+    galleryOnly: true,
+    folders: [
+      { name: 'Background Reading', sort_order: 0 },
+      { name: 'Protocol & Steps',   sort_order: 1 },
+      { name: 'Training Log',       sort_order: 2 },
+      { name: 'Questions & Notes',  sort_order: 3 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Background Reading',
+        is_sticky: true,
+        content: `<h3>🎓 Welcome to {projectName}</h3>
+<p>Use this space to organise your training — from background reading to hands-on practice.</p>
+<ul>
+<li>Share key papers and resources in <em>Background Reading</em></li>
+<li>Document the protocol or steps in <em>Protocol & Steps</em></li>
+<li>Track progress and sessions in <em>Training Log</em></li>
+<li>Capture questions and insights in <em>Questions & Notes</em></li>
+</ul>`,
+      },
+      {
+        folder:  'Background Reading',
+        content: `<p>📄 <strong>Key papers and resources</strong></p>
+<p>Share the papers, guidelines or resources everyone should read before starting. Use the paper post type to add them with DOI.</p>`,
+      },
+      {
+        folder:  'Protocol & Steps',
+        content: `<p>📝 <strong>The protocol</strong></p>
+<p>Document the technique or procedure step by step. Others can comment with questions or refinements.</p>`,
+      },
+      {
+        folder:  'Training Log',
+        content: `<p>📊 <strong>Training session log</strong></p>
+<p>Record each training session here — date, who was involved, what was covered, and any observations.</p>`,
+      },
+      {
+        folder:  'Questions & Notes',
+        content: `<p>❓ <strong>Questions and observations</strong></p>
+<p>Post questions as you train. Anyone with experience can answer. No question is too basic.</p>`,
+      },
+    ],
+  },
+
 };
 
-export const TEMPLATE_LIST = Object.values(PROJECT_TEMPLATES);
+export const FAST_TEMPLATES    = Object.values(PROJECT_TEMPLATES).filter(t => !t.galleryOnly);
+export const GALLERY_TEMPLATES = Object.values(PROJECT_TEMPLATES).filter(t =>  t.galleryOnly);
+export const TEMPLATE_LIST     = Object.values(PROJECT_TEMPLATES);
 
 export function applyTemplate(template, projectName, projectId, userId) {
   const folders = template.folders.map(f => ({

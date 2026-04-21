@@ -5,17 +5,19 @@ import { timeAgo } from '../lib/utils';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import Av from '../components/Av';
-import LibraryFolderSidebar from './LibraryFolderSidebar';
-import LibraryPaperSearch   from './LibraryPaperSearch';
-import LibraryItemCard      from './LibraryItemCard';
-import LibraryRisImporter   from './LibraryRisImporter';
+import LibraryFolderSidebar          from './LibraryFolderSidebar';
+import LibraryPaperSearch             from './LibraryPaperSearch';
+import LibraryItemCard                from './LibraryItemCard';
+import LibraryRisImporter             from './LibraryRisImporter';
+import LibraryClinicalTrialSearch     from './LibraryClinicalTrialSearch';
 
-export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavigateToPost }) {
+export default function LibraryScreen({ user, profile, onSaveToggled, onViewGroup, onNavigateToPost }) {
   const [folders,        setFolders]        = useState([]);
   const [activeFolderID, setActiveFolderID] = useState(null);
   const [items,          setItems]          = useState([]);
   const [inboxItems,     setInboxItems]     = useState([]);
   const [savedPosts,     setSavedPosts]     = useState([]);
+  const [searchSource,   setSearchSource]   = useState('epmc');
   const [showSearch,     setShowSearch]     = useState(false);
   const [showDOI,        setShowDOI]        = useState(false);
   const [showRisImport,  setShowRisImport]  = useState(false);
@@ -32,6 +34,17 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
       .select('*')
       .eq('user_id', user.id)
       .order('sort_order');
+
+    if (!data?.length && (profile?.work_mode === 'clinician' || profile?.work_mode === 'both')) {
+      const { data: folder } = await supabase
+        .from('library_folders')
+        .insert({ user_id: user.id, name: 'Guidelines & Protocols', sort_order: 0 })
+        .select().single();
+      if (folder) { setFolders([folder]); setActiveFolderID(folder.id); }
+      setLoading(false);
+      return;
+    }
+
     setFolders(data || []);
     if (overrideActiveId) setActiveFolderID(overrideActiveId);
     else if (data?.length) setActiveFolderID(data[0].id);
@@ -258,25 +271,41 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
 
             {!loading && folders.length === 0 && (
               <div style={{textAlign:'center', color:T.mu, padding:'40px 16px'}}>
-                <div style={{fontSize:32, marginBottom:10}}>📚</div>
+                <div style={{fontSize:32, marginBottom:10}}>
+                  {(profile?.work_mode === 'clinician' || profile?.work_mode === 'both') ? '📋' : '📚'}
+                </div>
                 <div style={{fontSize:14, fontFamily:"'DM Serif Display',serif", marginBottom:6}}>
                   Your library is empty
                 </div>
                 <div style={{fontSize:12.5, lineHeight:1.6}}>
-                  Create a folder to get started, then add papers from Europe PMC or by DOI.
+                  {(profile?.work_mode === 'clinician' || profile?.work_mode === 'both')
+                    ? 'Search ClinicalTrials.gov for trials in your area, or find guidelines and key papers via Europe PMC.'
+                    : 'Create a folder to get started, then add papers from Europe PMC or by DOI.'}
                 </div>
               </div>
             )}
 
             {activeFolderID && activeFolderID !== '__inbox__' && (
               <>
-                <div style={{display:'flex', gap:8, marginBottom:14, flexWrap:'wrap'}}>
-                  <Btn onClick={() => { setShowSearch(s => !s); setShowDOI(false); setShowRisImport(false); }}>
-                    🔍 Search Europe PMC
-                  </Btn>
-                  <Btn onClick={() => { setShowDOI(s => !s); setShowSearch(false); setShowRisImport(false); }}>
-                    🔗 Enter DOI
-                  </Btn>
+                {/* Source selector */}
+                <div style={{display:'flex', gap:6, marginBottom:12, flexWrap:'wrap'}}>
+                  {[
+                    { id: 'epmc',   label: '🔬 Europe PMC'         },
+                    { id: 'trials', label: '🧪 ClinicalTrials.gov'  },
+                    { id: 'doi',    label: '🔗 Enter DOI'           },
+                  ].map(s => (
+                    <button key={s.id}
+                      onClick={() => { setSearchSource(s.id); setShowSearch(s.id==='epmc'); setShowDOI(s.id==='doi'); setShowRisImport(false); }}
+                      style={{
+                        padding:'6px 12px', borderRadius:20, cursor:'pointer',
+                        fontSize:12.5, fontWeight:600, fontFamily:'inherit',
+                        border:`1.5px solid ${searchSource===s.id&&(showSearch||showDOI||s.id==='trials')?T.v:T.bdr}`,
+                        background:searchSource===s.id&&(showSearch||showDOI||s.id==='trials')?T.v2:T.w,
+                        color:searchSource===s.id&&(showSearch||showDOI||s.id==='trials')?T.v:T.mu,
+                      }}>
+                      {s.label}
+                    </button>
+                  ))}
                   <Btn onClick={() => { setShowRisImport(s => !s); setShowSearch(false); setShowDOI(false); }}>
                     📑 Import .ris / .bib
                   </Btn>
@@ -298,6 +327,13 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
                   <div style={{marginBottom:14, padding:14, background:T.w,
                     borderRadius:12, border:`1px solid ${T.bdr}`}}>
                     <LibraryPaperSearch onSelect={addPaperToFolder}/>
+                  </div>
+                )}
+
+                {searchSource === 'trials' && !showSearch && !showDOI && !showRisImport && (
+                  <div style={{marginBottom:14, padding:14, background:T.w,
+                    borderRadius:12, border:`1px solid ${T.bdr}`}}>
+                    <LibraryClinicalTrialSearch onSelect={addPaperToFolder}/>
                   </div>
                 )}
 
@@ -332,7 +368,7 @@ export default function LibraryScreen({ user, onSaveToggled, onViewGroup, onNavi
                   />
                 )}
 
-                {items.length === 0 && !showSearch && !showDOI && !showRisImport && (
+                {items.length === 0 && !showSearch && !showDOI && !showRisImport && searchSource !== 'trials' && (
                   <div style={{textAlign:'center', color:T.mu, padding:'28px 16px', fontSize:13}}>
                     <div style={{fontSize:24, marginBottom:8}}>📭</div>
                     This folder is empty. Add papers above.

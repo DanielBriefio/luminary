@@ -3,15 +3,17 @@ import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
-import LibraryFolderSidebar from '../library/LibraryFolderSidebar';
-import LibraryPaperSearch   from '../library/LibraryPaperSearch';
-import LibraryItemCard      from '../library/LibraryItemCard';
-import LibraryRisImporter   from '../library/LibraryRisImporter';
+import LibraryFolderSidebar          from '../library/LibraryFolderSidebar';
+import LibraryPaperSearch             from '../library/LibraryPaperSearch';
+import LibraryItemCard                from '../library/LibraryItemCard';
+import LibraryRisImporter             from '../library/LibraryRisImporter';
+import LibraryClinicalTrialSearch     from '../library/LibraryClinicalTrialSearch';
 
 export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, onNavigateToPost }) {
   const [folders,        setFolders]        = useState([]);
   const [activeFolderID, setActiveFolderID] = useState(null);
   const [items,          setItems]          = useState([]);
+  const [searchSource,   setSearchSource]   = useState('epmc');
   const [showSearch,     setShowSearch]     = useState(false);
   const [showDOI,        setShowDOI]        = useState(false);
   const [showRisImport,  setShowRisImport]  = useState(false);
@@ -195,13 +197,24 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
 
       <div style={{flex:1, overflowY:'auto', padding:16}}>
         {activeFolderID && canAdd && (
-          <div style={{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}>
-            <Btn onClick={() => { setShowSearch(s => !s); setShowDOI(false); setShowRisImport(false); }}>
-              🔍 Search Europe PMC
-            </Btn>
-            <Btn onClick={() => { setShowDOI(s => !s); setShowSearch(false); setShowRisImport(false); }}>
-              🔗 Enter DOI
-            </Btn>
+          <div style={{display:'flex', gap:6, marginBottom:12, flexWrap:'wrap'}}>
+            {[
+              { id: 'epmc',   label: '🔬 Europe PMC'         },
+              { id: 'trials', label: '🧪 ClinicalTrials.gov'  },
+              { id: 'doi',    label: '🔗 Enter DOI'           },
+            ].map(s => (
+              <button key={s.id}
+                onClick={() => { setSearchSource(s.id); setShowSearch(s.id==='epmc'); setShowDOI(s.id==='doi'); setShowRisImport(false); }}
+                style={{
+                  padding:'6px 12px', borderRadius:20, cursor:'pointer',
+                  fontSize:12.5, fontWeight:600, fontFamily:'inherit',
+                  border:`1.5px solid ${searchSource===s.id&&(showSearch||showDOI||s.id==='trials')?T.v:T.bdr}`,
+                  background:searchSource===s.id&&(showSearch||showDOI||s.id==='trials')?T.v2:T.w,
+                  color:searchSource===s.id&&(showSearch||showDOI||s.id==='trials')?T.v:T.mu,
+                }}>
+                {s.label}
+              </button>
+            ))}
             <Btn onClick={() => { setShowRisImport(s => !s); setShowSearch(false); setShowDOI(false); }}>
               📑 Import .ris / .bib
             </Btn>
@@ -225,6 +238,13 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
           <div style={{marginBottom:16, padding:14, background:T.w,
             borderRadius:12, border:`1px solid ${T.bdr}`}}>
             <LibraryPaperSearch onSelect={addPaperToFolder}/>
+          </div>
+        )}
+
+        {searchSource === 'trials' && !showSearch && !showDOI && !showRisImport && activeFolderID && canAdd && (
+          <div style={{marginBottom:16, padding:14, background:T.w,
+            borderRadius:12, border:`1px solid ${T.bdr}`}}>
+            <LibraryClinicalTrialSearch onSelect={addPaperToFolder}/>
           </div>
         )}
 
@@ -260,7 +280,7 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
           />
         )}
 
-        {activeFolderID && items.length === 0 && !showSearch && !showDOI && !showRisImport && (
+        {activeFolderID && items.length === 0 && !showSearch && !showDOI && !showRisImport && searchSource !== 'trials' && (
           <div style={{textAlign:'center', color:T.mu, padding:'32px 20px', fontSize:13}}>
             <div style={{fontSize:28, marginBottom:8}}>📭</div>
             {canAdd ? 'This folder is empty. Add papers above.' : 'No papers in this folder yet.'}

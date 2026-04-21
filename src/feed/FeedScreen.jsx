@@ -351,9 +351,15 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     return false;
   });
 
-  const emptyMsg = fp === 'fol'
-    ? { icon: '👥', title: "Follow people & papers to build your feed", body: "Use the + Follow button on any post or paper to start seeing their updates here." }
-    : { icon: '🌱', title: "The feed is quiet", body: "Be the first Founding Fellow to post. Share a paper, a finding, or a tip to get the community started." };
+  const getEmptyMsg = () => {
+    if (fp === 'fol') return { icon: '👥', title: "Follow people & papers to build your feed", body: "Use the + Follow button on any post or paper to start seeing their updates here." };
+    switch (profile?.work_mode) {
+      case 'clinician': return { icon: '🏥', title: 'No posts yet', body: 'Share a clinical insight, a guideline update, or a technique that changed your practice. Your peers will learn from it.' };
+      case 'industry':  return { icon: '💊', title: 'No posts yet', body: "Share a perspective on evidence translation, real-world data, or what's changing in your field." };
+      default:          return { icon: '🔬', title: 'No posts yet', body: 'Share a paper, a finding, or a question with the community.' };
+    }
+  };
+  const emptyMsg = getEmptyMsg();
 
   return (
     <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
