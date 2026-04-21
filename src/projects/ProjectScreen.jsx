@@ -77,8 +77,14 @@ export default function ProjectScreen({ projectId, user, onBack, group, onBackTo
   };
 
   const archiveProject = async () => {
+    if (!window.confirm('Archive this project? It will be read-only. You can unarchive it anytime.')) return;
     await supabase.from('projects').update({ status: 'archived' }).eq('id', projectId);
     onBack();
+  };
+
+  const unarchiveProject = async () => {
+    await supabase.from('projects').update({ status: 'active' }).eq('id', projectId);
+    setProject(p => ({ ...p, status: 'active' }));
   };
 
   const deleteProject = async () => {
@@ -243,6 +249,27 @@ export default function ProjectScreen({ projectId, user, onBack, group, onBackTo
 
       {/* Content area */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: T.bg }}>
+        {project.status === 'archived' && (
+          <div style={{
+            padding: '10px 16px', background: T.am2,
+            borderBottom: `1px solid rgba(245,158,11,.2)`,
+            fontSize: 12.5, color: '#92400e',
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', gap: 12, flexShrink: 0,
+          }}>
+            <span>📦 This project is archived — read only.</span>
+            {isOwner && (
+              <button onClick={unarchiveProject} style={{
+                fontSize: 11.5, fontWeight: 700, color: T.am,
+                border: `1px solid ${T.am}`, background: 'white',
+                borderRadius: 20, padding: '2px 10px',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                Unarchive
+              </button>
+            )}
+          </div>
+        )}
         {activeSection === 'feed' && (
           <ProjectFeed
             project={project}

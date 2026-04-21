@@ -11,20 +11,70 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
-export default function CreateProjectModal({ user, ownerId, isGroupProject = false, onProjectCreated, onClose, preselectedTemplate, onOpenGallery }) {
+export default function CreateProjectModal({
+  user, ownerId, isGroupProject = false, onProjectCreated, onClose,
+  preselectedTemplate, communityTemplateSource, onOpenGallery,
+}) {
   const [step,             setStep]             = useState(preselectedTemplate ? 2 : 1);
   const [selectedTemplate, setSelectedTemplate] = useState(preselectedTemplate || 'blank');
   const [projectName,      setProjectName]      = useState('');
   const [description,      setDescription]      = useState('');
-  const [creating,         setCreating]         = useState('');
+  const [creating,         setCreating]         = useState(false);
   const [error,            setError]            = useState('');
+
+  const isCommunity = selectedTemplate === 'community';
+
+  const getTemplateDisplay = () => {
+    if (isCommunity && communityTemplateSource) {
+      return {
+        icon:  communityTemplateSource.icon  || '✏️',
+        label: communityTemplateSource.name  || 'Community template',
+        color: communityTemplateSource.color || T.v,
+      };
+    }
+    const t = PROJECT_TEMPLATES[selectedTemplate];
+    return t ? { icon: t.icon, label: t.label, color: t.color } : { icon: '✏️', label: 'Blank', color: T.v };
+  };
+
+  const applyCommunityTemplate = async (projectId) => {
+    const src = communityTemplateSource;
+    const folders      = JSON.parse(src.folders      || '[]');
+    const starterPosts = JSON.parse(src.starter_posts || '[]');
+
+    let folderIdMap = {};
+    if (folders.length) {
+      const { data: createdFolders } = await supabase
+        .from('project_folders')
+        .insert(folders.map((f, i) => ({
+          project_id: projectId,
+          name:       f.name,
+          sort_order: f.sort_order ?? i,
+        })))
+        .select();
+      (createdFolders || []).forEach(f => { folderIdMap[f.name] = f.id; });
+    }
+
+    if (starterPosts.length) {
+      await supabase.from('project_posts').insert(
+        starterPosts.map(sp => ({
+          project_id: projectId,
+          user_id:    user.id,
+          post_type:  'text',
+          is_starter: true,
+          is_sticky:  sp.is_sticky || false,
+          content:    sp.content || '',
+          folder_id:  sp.folder ? (folderIdMap[sp.folder] || null) : null,
+        }))
+      );
+    }
+  };
 
   const createProject = async () => {
     if (!projectName.trim() || creating) return;
     setCreating(true); setError('');
 
     try {
-      const template = PROJECT_TEMPLATES[selectedTemplate];
+      const tpl = getTemplateDisplay();
 
       const { data: project, error: projErr } = await supabase
         .from('projects')
@@ -33,8 +83,8 @@ export default function CreateProjectModal({ user, ownerId, isGroupProject = fal
           name:          projectName.trim(),
           description:   description.trim(),
           template_type: selectedTemplate,
-          icon:          template.icon,
-          cover_color:   template.color,
+          icon:          tpl.icon,
+          cover_color:   tpl.color,
           created_by:    user.id,
         })
         .select()
@@ -48,23 +98,28 @@ export default function CreateProjectModal({ user, ownerId, isGroupProject = fal
         role:       'owner',
       });
 
-      const { folders, posts } = applyTemplate(template, projectName.trim(), project.id, user.id);
+      if (isCommunity && communityTemplateSource) {
+        await applyCommunityTemplate(project.id);
+      } else {
+        const template = PROJECT_TEMPLATES[selectedTemplate];
+        const { folders, posts } = applyTemplate(template, projectName.trim(), project.id, user.id);
 
-      let folderIdMap = {};
-      if (folders.length) {
-        const { data: createdFolders } = await supabase
-          .from('project_folders')
-          .insert(folders)
-          .select();
-        (createdFolders || []).forEach(f => { folderIdMap[f.name] = f.id; });
-      }
+        let folderIdMap = {};
+        if (folders.length) {
+          const { data: createdFolders } = await supabase
+            .from('project_folders')
+            .insert(folders)
+            .select();
+          (createdFolders || []).forEach(f => { folderIdMap[f.name] = f.id; });
+        }
 
-      if (posts.length) {
-        const toInsert = posts.map(p => {
-          const { _folderName, ...rest } = p;
-          return { ...rest, folder_id: _folderName ? (folderIdMap[_folderName] || null) : null };
-        });
-        await supabase.from('project_posts').insert(toInsert);
+        if (posts.length) {
+          const toInsert = posts.map(p => {
+            const { _folderName, ...rest } = p;
+            return { ...rest, is_starter: true, folder_id: _folderName ? (folderIdMap[_folderName] || null) : null };
+          });
+          await supabase.from('project_posts').insert(toInsert);
+        }
       }
 
       onProjectCreated(project.id);
@@ -73,6 +128,8 @@ export default function CreateProjectModal({ user, ownerId, isGroupProject = fal
       setCreating(false);
     }
   };
+
+  const tplDisplay = getTemplateDisplay();
 
   return (
     <div onClick={onClose} style={{
@@ -134,15 +191,17 @@ export default function CreateProjectModal({ user, ownerId, isGroupProject = fal
               padding: '10px 14px', background: T.s2, borderRadius: 10,
               marginBottom: 16, fontSize: 13,
             }}>
-              <span style={{ fontSize: 22 }}>{PROJECT_TEMPLATES[selectedTemplate].icon}</span>
+              <span style={{ fontSize: 22 }}>{tplDisplay.icon}</span>
               <div>
-                <div style={{ fontWeight: 700 }}>{PROJECT_TEMPLATES[selectedTemplate].label}</div>
-                <button onClick={() => setStep(1)} style={{
-                  fontSize: 11.5, color: T.v, border: 'none', background: 'transparent',
-                  cursor: 'pointer', fontFamily: 'inherit', padding: 0,
-                }}>
-                  Change template
-                </button>
+                <div style={{ fontWeight: 700 }}>{tplDisplay.label}</div>
+                {!isCommunity && (
+                  <button onClick={() => setStep(1)} style={{
+                    fontSize: 11.5, color: T.v, border: 'none', background: 'transparent',
+                    cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+                  }}>
+                    Change template
+                  </button>
+                )}
               </div>
             </div>
 
@@ -167,13 +226,11 @@ export default function CreateProjectModal({ user, ownerId, isGroupProject = fal
             )}
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <Btn onClick={() => setStep(1)} style={{ flex: 1 }}>← Back</Btn>
+              {!isCommunity && <Btn onClick={() => setStep(1)} style={{ flex: 1 }}>← Back</Btn>}
               <Btn variant="s" onClick={createProject}
                 disabled={!projectName.trim() || creating}
-                style={{ flex: 2 }}>
-                {creating
-                  ? 'Creating…'
-                  : `Create ${selectedTemplate === 'blank' ? 'project' : PROJECT_TEMPLATES[selectedTemplate]?.label}`}
+                style={{ flex: isCommunity ? 1 : 2 }}>
+                {creating ? 'Creating…' : `Create ${selectedTemplate === 'blank' ? 'project' : tplDisplay.label}`}
               </Btn>
             </div>
           </>

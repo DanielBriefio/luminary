@@ -74,6 +74,16 @@ export default function ProjectFeed({ project, user, myRole, activeFolderId, fol
     setSelectedFolderPost(activeFolderId || '');
   }, [activeFolderId]);
 
+  // Track when user last read this project (for unread badge)
+  useEffect(() => {
+    if (!project?.id || !user) return;
+    supabase
+      .from('project_members')
+      .update({ last_read_at: new Date().toISOString() })
+      .eq('project_id', project.id)
+      .eq('user_id', user.id);
+  }, [project?.id]); // eslint-disable-line
+
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     let query = supabase
@@ -210,7 +220,7 @@ export default function ProjectFeed({ project, user, myRole, activeFolderId, fol
     }
   };
 
-  const canPost = myRole === 'owner' || myRole === 'member';
+  const canPost = (myRole === 'owner' || myRole === 'member') && project.status !== 'archived';
   const activeFolder = folders.find(f => f.id === activeFolderId);
   const paperSelected = !!(paperTitle);
 

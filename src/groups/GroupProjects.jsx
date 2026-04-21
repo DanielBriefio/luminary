@@ -8,11 +8,12 @@ import CreateProjectModal from '../projects/CreateProjectModal';
 import TemplateGallery from '../projects/TemplateGallery';
 
 export default function GroupProjects({ groupId, user, myRole, onSelectProject }) {
-  const [projects,            setProjects]            = useState([]);
-  const [loading,             setLoading]             = useState(true);
-  const [showCreate,          setShowCreate]          = useState(false);
-  const [showGallery,         setShowGallery]         = useState(false);
-  const [preselectedTemplate, setPreselectedTemplate] = useState(null);
+  const [projects,              setProjects]              = useState([]);
+  const [loading,               setLoading]               = useState(true);
+  const [showCreate,            setShowCreate]            = useState(false);
+  const [showGallery,           setShowGallery]           = useState(false);
+  const [preselectedTemplate,   setPreselectedTemplate]   = useState(null);
+  const [communityTemplateData, setCommunityTemplateData] = useState(null);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -21,6 +22,7 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
       .select('*')
       .eq('group_id', groupId)
       .eq('status', 'active')
+      .order('is_pinned', { ascending: false })
       .order('updated_at', { ascending: false });
     setProjects(data || []);
     setLoading(false);
@@ -29,14 +31,24 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
   useEffect(() => { fetchProjects(); }, [groupId]); // eslint-disable-line
 
   const canCreate = myRole === 'admin' || myRole === 'member';
+  const isAdmin   = myRole === 'admin';
+
+  const togglePin = async (project) => {
+    await supabase.from('projects')
+      .update({ is_pinned: !project.is_pinned })
+      .eq('id', project.id);
+    fetchProjects();
+  };
 
   if (showGallery) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TemplateGallery
-          onSelectTemplate={templateType => {
+          user={user}
+          onSelectTemplate={(type, communityObj) => {
             setShowGallery(false);
-            setPreselectedTemplate(templateType);
+            setPreselectedTemplate(type);
+            setCommunityTemplateData(communityObj || null);
             setShowCreate(true);
           }}
           onBack={() => setShowGallery(false)}
@@ -53,8 +65,9 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
           ownerId={groupId}
           isGroupProject={true}
           preselectedTemplate={preselectedTemplate}
-          onProjectCreated={id => { setShowCreate(false); setPreselectedTemplate(null); onSelectProject?.(id); fetchProjects(); }}
-          onClose={() => { setShowCreate(false); setPreselectedTemplate(null); }}
+          communityTemplateSource={communityTemplateData}
+          onProjectCreated={id => { setShowCreate(false); setPreselectedTemplate(null); setCommunityTemplateData(null); onSelectProject?.(id); fetchProjects(); }}
+          onClose={() => { setShowCreate(false); setPreselectedTemplate(null); setCommunityTemplateData(null); }}
           onOpenGallery={() => { setShowCreate(false); setShowGallery(true); }}
         />
       )}
@@ -83,7 +96,12 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {projects.map(p => (
-            <GroupProjectCard key={p.id} project={p} onClick={() => onSelectProject?.(p.id)}/>
+            <GroupProjectCard
+              key={p.id}
+              project={p}
+              onClick={() => onSelectProject?.(p.id)}
+              onTogglePin={isAdmin ? togglePin : null}
+            />
           ))}
         </div>
       )}
@@ -91,22 +109,60 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
   );
 }
 
-function GroupProjectCard({ project, onClick }) {
+function GroupProjectCard({ project, onClick, onTogglePin }) {
+  const [showMenu, setShowMenu] = useState(false);
+
+  const menuBtnStyle = {
+    width: '100%', padding: '9px 14px', border: 'none',
+    background: 'transparent', cursor: 'pointer',
+    fontFamily: 'inherit', fontSize: 13, textAlign: 'left',
+    display: 'flex', alignItems: 'center', gap: 8,
+  };
+
   return (
-    <button onClick={onClick} style={{
-      background: '#fff', border: `1px solid ${T.bdr}`, borderRadius: 14,
-      padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-      overflow: 'hidden', transition: 'box-shadow .15s',
-    }}
+    <div
+      onClick={onClick}
+      style={{
+        background: '#fff', border: `1px solid ${T.bdr}`, borderRadius: 14,
+        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+        overflow: 'hidden', transition: 'box-shadow .15s',
+      }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,.10)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
     >
       <div style={{ height: 5, background: project.cover_color || T.v }}/>
       <div style={{ padding: '12px 14px' }}>
-        <div style={{ fontSize: 24, marginBottom: 4 }}>{project.icon}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 24 }}>{project.icon}</span>
+            {project.is_pinned && <span style={{ fontSize: 12, opacity: 0.6 }}>📌</span>}
+          </div>
+          {onTogglePin && (
+            <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => setShowMenu(m => !m)} style={{
+                fontSize: 15, color: T.mu, border: 'none', background: 'transparent',
+                cursor: 'pointer', lineHeight: 1, padding: '2px 4px',
+              }}>···</button>
+              {showMenu && (
+                <>
+                  <div onClick={() => setShowMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 9 }}/>
+                  <div style={{
+                    position: 'absolute', top: 26, right: 0, background: T.w,
+                    borderRadius: 10, zIndex: 10, boxShadow: '0 4px 20px rgba(0,0,0,.12)',
+                    border: `1px solid ${T.bdr}`, minWidth: 150, overflow: 'hidden',
+                  }}>
+                    <button onClick={() => { onTogglePin(project); setShowMenu(false); }} style={menuBtnStyle}>
+                      {project.is_pinned ? '📌 Unpin' : '📌 Pin to top'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2, lineHeight: 1.3 }}>{project.name}</div>
         <div style={{ fontSize: 10.5, color: T.v, fontWeight: 600, marginBottom: 4, textTransform: 'capitalize' }}>
-          {project.template_type?.replace('_', ' ')}
+          {project.template_type?.replace(/_/g, ' ')}
         </div>
         {project.description && (
           <div style={{
@@ -119,6 +175,6 @@ function GroupProjectCard({ project, onClick }) {
         )}
         <div style={{ fontSize: 10.5, color: T.mu }}>Updated {timeAgo(project.updated_at)}</div>
       </div>
-    </button>
+    </div>
   );
 }
