@@ -89,7 +89,7 @@ export default function PublicProfilePage({ slug }) {
   const grt  = vis.grants        !== false ? (profile.grants         || []) : [];
   const showPubs = vis.publications !== false;
 
-  const pubTabLabel = (profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist')
+  const pubTabLabel = (profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both')
     ? `Publications & Presentations (${pubs.length})`
     : `Publications (${pubs.length})`;
 
@@ -156,21 +156,11 @@ export default function PublicProfilePage({ slug }) {
               <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{profile.title}</div>
             )}
             {(profile.identity_tier1 || profile.identity_tier2) && (
-              <>
-                <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Discipline</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-                  {profile.identity_tier1 && (
-                    <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: '#f1f0ff', color: '#5b52cc', border: '1px solid rgba(108,99,255,.2)' }}>
-                      {profile.identity_tier1}
-                    </span>
-                  )}
-                  {profile.identity_tier2 && (
-                    <span style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: T.v2, color: T.v, border: `1px solid rgba(108,99,255,.25)` }}>
-                      {profile.identity_tier2}
-                    </span>
-                  )}
-                </div>
-              </>
+              <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 5 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Discipline</span>
+                {' '}
+                <span>{[profile.identity_tier1, profile.identity_tier2].filter(Boolean).join(' · ')}</span>
+              </div>
             )}
             {profile.work_mode && WORK_MODE_MAP[profile.work_mode] && (
               <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
@@ -179,7 +169,7 @@ export default function PublicProfilePage({ slug }) {
                 <span>{WORK_MODE_MAP[profile.work_mode].icon} {WORK_MODE_MAP[profile.work_mode].label}</span>
               </div>
             )}
-            {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist') && (profile.additional_quals || []).length > 0 && (
+            {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both') && (profile.additional_quals || []).length > 0 && (
               <>
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Qualifications</div>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -225,7 +215,7 @@ export default function PublicProfilePage({ slug }) {
 
             {/* Stats */}
             {(() => {
-              const isClinician = profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist';
+              const isClinician = profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both';
               const statItems = isClinician ? [
                 ['—', 'Followers'],
                 ['—', 'Following'],

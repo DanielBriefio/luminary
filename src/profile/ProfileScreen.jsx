@@ -320,11 +320,13 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
   const save=async()=>{
     setSaving(true);
     const composedName = [form.first_name, form.middle_name, form.last_name].filter(Boolean).join(' ');
+    const locationStr = [form.location_city, form.location_country].filter(Boolean).join(', ');
     // Core fields — always exist in DB
     const coreUpdates = {
       name_prefix:form.name_prefix, first_name:form.first_name, middle_name:form.middle_name,
       last_name:form.last_name, name_suffix:form.name_suffix, name:composedName||undefined,
-      title:form.title, institution:form.institution, location:form.location,
+      title:form.title, institution:form.institution,
+      location: locationStr || form.location,
       bio:form.bio, orcid:form.orcid, twitter:form.twitter, card_linkedin:form.card_linkedin,
       identity_tier1:form.identity_tier1, identity_tier2:form.identity_tier2,
     };
@@ -347,35 +349,36 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       additional_quals: form.additional_quals,
       clinical_highlight_label: form.clinical_highlight_label,
       clinical_highlight_value: form.clinical_highlight_value,
-      work_phone:        form.work_phone,
-      work_address:      form.work_address,
-      work_street:       form.work_street,
-      work_city:         form.work_city,
-      work_postal_code:  form.work_postal_code,
-      work_country:      form.work_country,
+      work_phone:   form.work_phone,
+      work_address: form.work_address,
       card_show_work_phone:   form.card_show_work_phone,
       card_show_work_address: form.card_show_work_address,
     };
-    // Try full save first; if some columns don't exist yet, fall back to core only
-    const { data, error } = await supabase.from('profiles').update({...coreUpdates,...cardUpdates,...workModeUpdates}).eq('id',user.id).select().single();
-    if(error){
-      const { data:d2, error:e2 } = await supabase.from('profiles').update(coreUpdates).eq('id',user.id).select().single();
-      if(e2){ alert('Save failed: '+e2.message); setSaving(false); return; }
-      if(d2) setProfile(d2);
-    } else {
-      if(data) setProfile(data);
-    }
+    // New address/location columns added in migration_profile_v2.sql
+    const newColUpdates = {
+      work_street: form.work_street, work_city: form.work_city,
+      work_postal_code: form.work_postal_code, work_country: form.work_country,
+      location_city: form.location_city, location_country: form.location_country,
+    };
+    // Try 1: full save including new columns
+    const { data, error } = await supabase.from('profiles').update({...coreUpdates,...cardUpdates,...workModeUpdates,...newColUpdates}).eq('id',user.id).select().single();
+    if (!error) { if(data) setProfile(data); setEditing(false); setSaving(false); return; }
+    // Try 2: without new columns (all clinical/work fields still included)
+    const { data:d2, error:e2 } = await supabase.from('profiles').update({...coreUpdates,...cardUpdates,...workModeUpdates}).eq('id',user.id).select().single();
+    if (!e2) { if(d2) setProfile(d2); setEditing(false); setSaving(false); return; }
+    // Try 3: core only
+    const { data:d3, error:e3 } = await supabase.from('profiles').update(coreUpdates).eq('id',user.id).select().single();
+    if(e3){ alert('Save failed: '+e3.message); setSaving(false); return; }
+    if(d3) setProfile(d3);
     setEditing(false); setSaving(false);
   };
 
   const saveCard = async () => {
     setCardSaving(true);
-    const updates = {
+    const baseUpdates = {
       card_email: form.card_email, card_phone: form.card_phone,
       card_address: form.card_address, card_website: form.card_website,
       card_linkedin: form.card_linkedin, work_phone: form.work_phone,
-      work_street: form.work_street, work_city: form.work_city,
-      work_postal_code: form.work_postal_code, work_country: form.work_country,
       card_show_email: form.card_show_email, card_show_phone: form.card_show_phone,
       card_show_address: form.card_show_address, card_show_linkedin: form.card_show_linkedin,
       card_show_website: form.card_show_website, card_show_orcid: form.card_show_orcid,
@@ -383,8 +386,15 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       card_show_work_phone: form.card_show_work_phone,
       card_show_work_address: form.card_show_work_address,
     };
-    const { data } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single();
-    if (data) setProfile(data);
+    const newColUpdates = {
+      work_street: form.work_street, work_city: form.work_city,
+      work_postal_code: form.work_postal_code, work_country: form.work_country,
+    };
+    // Try with new columns first, fall back to base if migration not yet run
+    const { data, error } = await supabase.from('profiles').update({...baseUpdates,...newColUpdates}).eq('id', user.id).select().single();
+    if (!error && data) { setProfile(data); setCardSaving(false); setEditingCard(false); return; }
+    const { data: d2 } = await supabase.from('profiles').update(baseUpdates).eq('id', user.id).select().single();
+    if (d2) setProfile(d2);
     setCardSaving(false);
     setEditingCard(false);
   };
@@ -413,7 +423,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       else if(parts.length===2){ fn=parts[0]; ln=parts[1]; }
       else { fn=parts[0]; ln=parts[parts.length-1]; mn=parts.slice(1,-1).join(' '); }
     }
-    setShowClinicalFields(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist');
+    setShowClinicalFields(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both');
     setForm({
       name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',
       title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',
@@ -442,6 +452,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       additional_quals:       profile.additional_quals       || [],
       clinical_highlight_label: profile.clinical_highlight_label || '',
       clinical_highlight_value: profile.clinical_highlight_value || '',
+      // location split
+      location_city:     profile.location_city     || '',
+      location_country:  profile.location_country  || '',
       // work contact
       work_phone:        profile.work_phone        || '',
       work_address:      profile.work_address      || '',
@@ -874,7 +887,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                 <PF label="Current role / title" field="title" form={form} setForm={setForm} placeholder="Professor of Cardiology"/>
                 <PF label={(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist') ? 'Hospital / Clinic' : 'Institution / Organisation'} field="institution" form={form} setForm={setForm} placeholder={(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist') ? 'e.g. Tokyo University Hospital' : 'University of Tokyo'}/>
-                <PF label="Location" field="location" form={form} setForm={setForm} placeholder="Tokyo, Japan 🇯🇵"/>
+                <PF label="City" field="location_city" form={form} setForm={setForm} placeholder="Tokyo"/>
+                <PF label="Country" field="location_country" form={form} setForm={setForm} placeholder="Japan"/>
               </div>
               {/* Professional identity */}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
@@ -909,8 +923,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/yourname"/>
               </div>
 
-              {/* Clinical Profile section — clinician/clinician_scientist only */}
-              {(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist') && (
+              {/* Clinical Profile section — clinician/clinician_scientist/both */}
+              {(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist' || form.work_mode === 'both') && (
                 <div style={{border:`1px solid ${T.bdr}`,borderRadius:12,overflow:'hidden',marginTop:16,marginBottom:4}}>
                   <button onClick={()=>setShowClinicalFields(s=>!s)}
                     style={{width:'100%',padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',border:'none',background:T.s2,cursor:'pointer',fontFamily:'inherit'}}>
@@ -973,31 +987,21 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>{profile.title}</div>
               )}
               {(profile?.identity_tier1||profile?.identity_tier2)&&(
-                <>
-                  <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:4}}>Discipline</div>
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
-                    {profile?.identity_tier1&&(
-                      <span style={{fontSize:11.5,fontWeight:700,padding:'4px 12px',borderRadius:20,background:'#f1f0ff',color:'#5b52cc',border:'1px solid rgba(108,99,255,.2)'}}>
-                        {profile.identity_tier1}
-                      </span>
-                    )}
-                    {profile?.identity_tier2&&(
-                      <span style={{fontSize:11.5,fontWeight:600,padding:'4px 12px',borderRadius:20,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.25)`}}>
-                        {profile.identity_tier2}
-                      </span>
-                    )}
-                  </div>
-                </>
+                <div style={{fontSize:11.5,color:T.mu,marginBottom:5}}>
+                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em'}}>Discipline</span>
+                  {' '}
+                  <span>{[profile.identity_tier1, profile.identity_tier2].filter(Boolean).join(' · ')}</span>
+                </div>
               )}
               {WORK_MODE_MAP[profile?.work_mode] && (
-                <div style={{fontSize:11.5,color:T.mu,marginBottom:6}}>
+                <div style={{fontSize:11.5,color:T.mu,marginBottom:5}}>
                   <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em'}}>Sector</span>
                   {' '}
                   <span>{WORK_MODE_MAP[profile.work_mode]?.icon} {WORK_MODE_MAP[profile.work_mode]?.label}</span>
                 </div>
               )}
-              {/* Qualifications chips — clinician/clinician_scientist with additional_quals */}
-              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist') && (profile?.additional_quals || []).length > 0 && (
+              {/* Qualifications — clinician / clinician_scientist / both (backward compat) */}
+              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist' || profile?.work_mode === 'both') && (profile?.additional_quals || []).length > 0 && (
                 <>
                   <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:4}}>Qualifications</div>
                   <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:6}}>
@@ -1009,12 +1013,12 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               )}
               <div style={{fontSize:13,color:T.mu,marginBottom:12,display:'flex',gap:12,flexWrap:'wrap'}}>
                 {profile?.institution&&<span>🏛️ {profile.institution}</span>}
-                {profile?.location&&<span>📍 {profile.location}</span>}
+                {(() => { const loc = [profile?.location_city, profile?.location_country].filter(Boolean).join(', ') || profile?.location; return loc ? <span>📍 {loc}</span> : null; })()}
                 {profile?.orcid&&<a href={`https://orcid.org/${profile.orcid}`} target="_blank" rel="noopener noreferrer" style={{color:T.gr,textDecoration:'none',fontWeight:600}}>ORCID ↗</a>}
               </div>
               {profile?.bio&&<div style={{marginBottom:14,maxWidth:620}}><ExpandableBio text={profile.bio}/></div>}
-              {/* Clinical details block — clinician/clinician_scientist */}
-              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist') && (
+              {/* Clinical details block — clinician/clinician_scientist/both */}
+              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist' || profile?.work_mode === 'both') && (
                 profile?.subspeciality || profile?.patient_population
               ) && (
                 <div style={{background:T.s2,border:`1px solid ${T.bdr}`,borderRadius:10,padding:'12px 14px',marginBottom:14,display:'flex',flexWrap:'wrap',gap:12,fontSize:12.5,color:T.text}}>
@@ -1032,7 +1036,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </div>
               )}
               {(() => {
-                const isClinician = profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist';
+                const isClinician = profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist' || profile?.work_mode === 'both';
                 const statsRow = isClinician ? [
                   [followStats.followers, 'Followers', 'followers', false],
                   [followStats.following, 'Following', 'following', false],
@@ -1511,19 +1515,53 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               ) : (
                 <>
                   {/* Contact details preview */}
-                  {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone||profile?.work_street) ? (
-                    <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
-                      {profile.card_email    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>✉️</span><span style={{flex:1,color:T.text}}>{profile.card_email}</span>{!profile.card_show_email&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.work_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📱</span><span style={{flex:1,color:T.text}}>{profile.work_phone}</span>{!profile.card_show_work_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.card_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>☎️</span><span style={{flex:1,color:T.text}}>{profile.card_phone}</span>{!profile.card_show_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.card_linkedin && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>💼</span><span style={{flex:1,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile.card_linkedin}</span>{!profile.card_show_linkedin&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.card_website  && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>🌐</span><span style={{flex:1,color:T.text}}>{profile.card_website}</span>{!profile.card_show_website&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.orcid         && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>🔬</span><span style={{flex:1,color:T.text}}>orcid.org/{profile.orcid}</span>{!profile.card_show_orcid&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.twitter       && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>𝕏</span><span style={{flex:1,color:T.text}}>@{profile.twitter.replace('@','')}</span>{!profile.card_show_twitter&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {(profile.work_street||profile.work_city) && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📍</span><span style={{flex:1,color:T.text}}>{[profile.work_street,profile.work_city,profile.work_postal_code,profile.work_country].filter(Boolean).join(', ')}</span>{!profile.card_show_work_address&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.card_address  && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📍</span><span style={{flex:1,color:T.text}}>{profile.card_address}</span>{!profile.card_show_address&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                    </div>
-                  ) : (
+                  {(profile?.card_email||profile?.card_phone||profile?.card_address||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone||profile?.work_street) ? (() => {
+                    const workAddr = [profile.work_street,profile.work_city,profile.work_postal_code,profile.work_country].filter(Boolean).join(', ');
+                    const CR = ({icon, label, hidden}) => (
+                      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}>
+                        <span style={{width:18,textAlign:'center'}}>{icon}</span>
+                        <span style={{flex:1,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
+                        {hidden&&<span style={{color:T.mu,fontSize:11,flexShrink:0}}>hidden</span>}
+                      </div>
+                    );
+                    const hasContact = profile.card_email || profile.work_phone || profile.card_phone;
+                    const hasOnline  = profile.card_linkedin || profile.card_website || profile.orcid || profile.twitter;
+                    const hasAddr    = workAddr || profile.card_address;
+                    return (
+                      <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+                        {hasContact && (
+                          <div style={{marginBottom:12}}>
+                            <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}}>Contact</div>
+                            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                              {profile.card_email && <CR icon="✉️" label={profile.card_email} hidden={!profile.card_show_email}/>}
+                              {profile.work_phone && <CR icon="📱" label={profile.work_phone} hidden={!profile.card_show_work_phone}/>}
+                              {profile.card_phone && <CR icon="☎️" label={profile.card_phone} hidden={!profile.card_show_phone}/>}
+                            </div>
+                          </div>
+                        )}
+                        {hasOnline && (
+                          <div style={{marginBottom:12}}>
+                            <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}}>Online</div>
+                            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                              {profile.card_linkedin && <CR icon="💼" label={profile.card_linkedin} hidden={!profile.card_show_linkedin}/>}
+                              {profile.card_website  && <CR icon="🌐" label={profile.card_website}  hidden={!profile.card_show_website}/>}
+                              {profile.orcid         && <CR icon="🔬" label={`orcid.org/${profile.orcid}`} hidden={!profile.card_show_orcid}/>}
+                              {profile.twitter       && <CR icon="𝕏"  label={`@${profile.twitter.replace('@','')}`} hidden={!profile.card_show_twitter}/>}
+                            </div>
+                          </div>
+                        )}
+                        {hasAddr && (
+                          <div>
+                            <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}}>Address</div>
+                            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                              {workAddr         && <CR icon="📍" label={workAddr}           hidden={!profile.card_show_work_address}/>}
+                              {profile.card_address && <CR icon="📍" label={profile.card_address} hidden={!profile.card_show_address}/>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })() : (
                     <div style={{background:T.v2,border:`1px dashed rgba(108,99,255,.3)`,borderRadius:10,padding:'16px 18px',fontSize:12.5,color:T.mu,lineHeight:1.7,marginBottom:16}}>
                       No contact details added yet. Add your work email, phone, LinkedIn, and more so they appear when someone scans your QR code.
                     </div>

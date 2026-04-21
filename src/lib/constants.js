@@ -302,9 +302,10 @@ export const WORK_MODES = [
   },
 ];
 
-export const WORK_MODE_MAP = Object.fromEntries(
-  WORK_MODES.map(m => [m.id, m])
-);
+export const WORK_MODE_MAP = {
+  ...Object.fromEntries(WORK_MODES.map(m => [m.id, m])),
+  both: { id: 'clinician_scientist', label: 'Research & Patient Care', icon: '⚕️', description: 'Research and clinical practice' },
+};
 
 export const COMPOSER_PROMPTS = {
   researcher: [
