@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
-import { T, TIER1_LIST, getTier2 } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, WORK_MODE_MAP } from '../lib/constants';
 
 import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
@@ -21,8 +21,15 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   const [filterTier1,  setFilterTier1]  = useState([]);
   const [filterTier2,  setFilterTier2]  = useState([]);
   const [showFilter,   setShowFilter]   = useState(false);
+  const [modeFilter, setModeFilter] = useState(() =>
+    localStorage.getItem('luminary_mode_filter') || 'myfield'
+  );
+  const [showModeTooltip, setShowModeTooltip] = useState(
+    () => !localStorage.getItem('luminary_mode_tooltip_seen')
+  );
 
   useEffect(()=>{ localStorage.setItem('luminary_feed_mode',feedMode); },[feedMode]);
+  useEffect(()=>{ localStorage.setItem('luminary_mode_filter',modeFilter); },[modeFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +99,26 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  const applyModeFilter = useCallback((posts, filter, userWorkMode) => {
+    if (filter === 'all') return posts;
+    if (filter === 'myfield') {
+      return [...posts].sort((a, b) => {
+        const aMatch = a.author_work_mode === userWorkMode || userWorkMode === 'both';
+        const bMatch = b.author_work_mode === userWorkMode || userWorkMode === 'both';
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        return 0;
+      });
+    }
+    const modeMap = {
+      research: ['researcher', 'both'],
+      clinical: ['clinician',  'both'],
+      industry: ['industry'],
+    };
+    const allowed = modeMap[filter] || [];
+    return posts.filter(p => !p.author_work_mode || allowed.includes(p.author_work_mode));
   }, []);
 
   const withSlugs = useCallback(async (data) => {
@@ -283,9 +310,13 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       }
     }
 
-    setPosts(withSlugData);
+    const filtered = fp === 'sug'
+      ? applyModeFilter(withSlugData, modeFilter, profile?.work_mode || 'researcher')
+      : withSlugData;
+
+    setPosts(filtered);
     setLoading(false);
-  }, [user, profile, tab, fp, feedMode, withSlugs]);
+  }, [user, profile, tab, fp, feedMode, modeFilter, withSlugs, applyModeFilter]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
@@ -363,6 +394,62 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         </div>
       </div>
 
+      {fp === 'sug' && (
+        <div style={{
+          display: 'flex', gap: 5, padding: '8px 16px',
+          borderBottom: `1px solid ${T.bdr}`,
+          background: T.w, overflowX: 'auto',
+          scrollbarWidth: 'none', msOverflowStyle: 'none',
+          flexShrink: 0,
+        }}>
+          {[
+            { id: 'all',      label: '🌐 All'     },
+            { id: 'myfield',  label: '⭐ My Field' },
+            { id: 'research', label: '🔬 Research' },
+            { id: 'clinical', label: '🏥 Clinical' },
+            { id: 'industry', label: '💊 Industry' },
+          ].map(f => (
+            <button key={f.id} onClick={() => setModeFilter(f.id)} style={{
+              padding: '5px 13px', borderRadius: 20, cursor: 'pointer',
+              fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', flexShrink: 0,
+              border: `1.5px solid ${modeFilter === f.id ? T.v : T.bdr}`,
+              background: modeFilter === f.id ? T.v2 : T.w,
+              color: modeFilter === f.id ? T.v : T.mu,
+              transition: 'all .12s',
+            }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {fp === 'sug' && showModeTooltip && modeFilter === 'myfield' && (
+        <div style={{
+          margin: '8px 16px 0', padding: '9px 12px',
+          background: T.v2, borderRadius: 9,
+          border: `1px solid rgba(108,99,255,.15)`,
+          display: 'flex', alignItems: 'flex-start', gap: 8,
+          fontSize: 12.5, color: T.v, flexShrink: 0,
+        }}>
+          <span style={{ flexShrink: 0 }}>⭐</span>
+          <span style={{ flex: 1 }}>
+            <strong>My Field</strong> surfaces more posts from{' '}
+            {WORK_MODE_MAP[profile?.work_mode]?.label || 'researchers'}{' '}
+            like you, while still showing the full community.
+            Use Research, Clinical or Industry to filter strictly.
+          </span>
+          <button onClick={() => {
+            setShowModeTooltip(false);
+            localStorage.setItem('luminary_mode_tooltip_seen', '1');
+          }} style={{
+            fontSize: 12, color: T.v, border: 'none', background: 'transparent',
+            cursor: 'pointer', flexShrink: 0, opacity: 0.7,
+          }}>
+            Got it
+          </button>
+        </div>
+      )}
+
       {showFilter && (
         <div style={{background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:'10px 18px',flexShrink:0}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -412,11 +499,29 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                 </div>
               )}
               {loading ? <Spinner/> : filteredPosts.length === 0 ? (
-                <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:36,textAlign:"center",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
-                  <div style={{fontSize:36,marginBottom:12}}>{emptyMsg.icon}</div>
-                  <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:8}}>{emptyMsg.title}</div>
-                  <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
-                </div>
+                fp === 'sug' && modeFilter !== 'all' && modeFilter !== 'myfield' ? (
+                  <div style={{textAlign:'center',padding:'48px 20px',color:T.mu}}>
+                    <div style={{fontSize:36,marginBottom:12}}>
+                      {modeFilter==='research'?'🔬':modeFilter==='clinical'?'🏥':'💊'}
+                    </div>
+                    <div style={{fontSize:15,fontFamily:"'DM Serif Display',serif",marginBottom:8}}>
+                      No {modeFilter} posts yet
+                    </div>
+                    <div style={{fontSize:13,marginBottom:16,lineHeight:1.6}}>
+                      Be the first — or switch to{' '}
+                      <button onClick={()=>setModeFilter('all')} style={{
+                        color:T.v,fontWeight:700,border:'none',background:'transparent',
+                        cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',padding:0,
+                      }}>All posts</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:36,textAlign:"center",boxShadow:"0 2px 12px rgba(108,99,255,.07)"}}>
+                    <div style={{fontSize:36,marginBottom:12}}>{emptyMsg.icon}</div>
+                    <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:8}}>{emptyMsg.title}</div>
+                    <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
+                  </div>
+                )
               ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
             </div>
             {!isMobile && (

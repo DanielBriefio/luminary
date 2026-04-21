@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
-import { T, TAXONOMY, TIER1_LIST } from '../lib/constants';
+import { T, TAXONOMY, TIER1_LIST, WORK_MODE_MAP } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import PostCard from '../feed/PostCard';
 import Av from '../components/Av';
@@ -31,6 +31,28 @@ function ResearcherCard({ user, currentUserId, onViewUser }) {
         >
           {user.name}
         </div>
+        {user.work_mode && (
+          <span style={{
+            fontSize: 10.5, fontWeight: 600,
+            padding: '1px 8px', borderRadius: 20,
+            marginTop: 3, marginBottom: 2, display: 'inline-block',
+            background:
+              user.work_mode === 'clinician' ? '#e8f5e9' :
+              user.work_mode === 'industry'  ? '#fff8e1' :
+              user.work_mode === 'both'      ? '#e3f2fd' : T.v2,
+            color:
+              user.work_mode === 'clinician' ? '#2e7d32' :
+              user.work_mode === 'industry'  ? '#f57f17' :
+              user.work_mode === 'both'      ? '#1565c0' : T.v,
+            border: `1px solid ${
+              user.work_mode === 'clinician' ? 'rgba(46,125,50,.2)' :
+              user.work_mode === 'industry'  ? 'rgba(245,127,23,.2)' :
+              user.work_mode === 'both'      ? 'rgba(21,101,192,.2)' :
+              'rgba(108,99,255,.2)'}`,
+          }}>
+            {WORK_MODE_MAP[user.work_mode]?.icon} {WORK_MODE_MAP[user.work_mode]?.label}
+          </span>
+        )}
         {user.title && (
           <div style={{ fontSize: 12, color: T.v, fontWeight: 600 }}>{user.title}</div>
         )}
@@ -304,9 +326,10 @@ export default function ExploreScreen({
   const [postResults, setPostResults]     = useState([]);
   const [postSearching, setPostSearching] = useState(false);
 
-  // Researchers tab state
+  // People tab state
   const [resResults, setResResults]     = useState([]);
   const [resSearching, setResSearching] = useState(false);
+  const [peopleModeFilter, setPeopleModeFilter] = useState('all');
 
   // Papers tab state
   const [paperResults, setPaperResults]     = useState({ posts: [], profiles: [], epmc: [] });
@@ -381,14 +404,26 @@ export default function ExploreScreen({
     setPostSearching(false);
   }, []);
 
-  const searchResearchers = useCallback(async (query) => {
-    if (!query.trim()) { setResResults([]); return; }
+  const searchResearchers = useCallback(async (query, workModeFilter = 'all') => {
+    if (!query.trim() && workModeFilter === 'all') { setResResults([]); return; }
     setResSearching(true);
-    const { data } = await supabase
+    let q = supabase
       .from('profiles')
-      .select('id, name, title, institution, location, avatar_url, avatar_color, bio, topic_interests')
-      .or(`name.ilike.%${query}%,institution.ilike.%${query}%,title.ilike.%${query}%`)
-      .limit(20);
+      .select('id, name, title, institution, location, avatar_url, avatar_color, bio, topic_interests, work_mode');
+
+    if (query.trim()) {
+      q = q.or(`name.ilike.%${query}%,institution.ilike.%${query}%,title.ilike.%${query}%`);
+    }
+
+    if (workModeFilter && workModeFilter !== 'all') {
+      if (workModeFilter === 'researcher') {
+        q = q.or('work_mode.eq.researcher,work_mode.is.null');
+      } else {
+        q = q.eq('work_mode', workModeFilter);
+      }
+    }
+
+    const { data } = await q.limit(20);
     setResResults(data || []);
     setResSearching(false);
   }, []);
@@ -505,13 +540,13 @@ export default function ExploreScreen({
 
   useEffect(() => {
     const t = setTimeout(() => {
-      if (exploreTab === 'posts')       searchPosts(q, tier1Filter);
-      if (exploreTab === 'researchers') searchResearchers(q);
-      if (exploreTab === 'papers')      searchPapers(q);
-      if (exploreTab === 'groups')      searchGroups(q, groupTier1Filter);
+      if (exploreTab === 'posts')   searchPosts(q, tier1Filter);
+      if (exploreTab === 'people')  searchResearchers(q, peopleModeFilter);
+      if (exploreTab === 'papers')  searchPapers(q);
+      if (exploreTab === 'groups')  searchGroups(q, groupTier1Filter);
     }, 400);
     return () => clearTimeout(t);
-  }, [q, tier1Filter, groupTier1Filter, exploreTab, searchPosts, searchResearchers, searchPapers, searchGroups]);
+  }, [q, tier1Filter, groupTier1Filter, peopleModeFilter, exploreTab, searchPosts, searchResearchers, searchPapers, searchGroups]);
 
   // Run search immediately if initialQuery is provided
   useEffect(() => {
@@ -536,10 +571,10 @@ export default function ExploreScreen({
   // ── Render ───────────────────────────────────────────────────────────────
 
   const tabs = [
-    { id: 'posts',       label: 'Posts' },
-    { id: 'researchers', label: 'Researchers' },
-    { id: 'papers',      label: 'Papers' },
-    { id: 'groups',      label: 'Groups' },
+    { id: 'posts',  label: 'Posts'  },
+    { id: 'people', label: 'People' },
+    { id: 'papers', label: 'Papers' },
+    { id: 'groups', label: 'Groups' },
   ];
 
   return (
@@ -707,17 +742,38 @@ export default function ExploreScreen({
           </>
         )}
 
-        {/* ═══ Researchers tab ════════════════════════════════════════════ */}
-        {exploreTab === 'researchers' && (
+        {/* ═══ People tab ═════════════════════════════════════════════════ */}
+        {exploreTab === 'people' && (
           <>
-            {!q.trim() && (
+            {/* Work mode filter chips */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              {[
+                { id: 'all',        label: 'All'            },
+                { id: 'researcher', label: '🔬 Researchers' },
+                { id: 'clinician',  label: '🏥 Clinicians'  },
+                { id: 'both',       label: '⚕️ Both'         },
+                { id: 'industry',   label: '💊 Industry'    },
+              ].map(f => (
+                <button key={f.id} onClick={() => setPeopleModeFilter(f.id)} style={{
+                  padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                  fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+                  border: `1.5px solid ${peopleModeFilter === f.id ? T.v : T.bdr}`,
+                  background: peopleModeFilter === f.id ? T.v2 : T.w,
+                  color: peopleModeFilter === f.id ? T.v : T.mu,
+                }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {!q.trim() && peopleModeFilter === 'all' && (
               <div style={{
                 background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14,
                 padding: 24, textAlign: 'center', boxShadow: '0 2px 12px rgba(108,99,255,.07)',
               }}>
                 <div style={{ fontSize: 28, marginBottom: 12 }}>👩‍🔬</div>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 8 }}>
-                  Find researchers
+                  Find people
                 </div>
                 <div style={{ fontSize: 13, color: T.mu }}>
                   Search by name, institution, or area of expertise.
@@ -725,7 +781,7 @@ export default function ExploreScreen({
               </div>
             )}
 
-            {q.trim() && (
+            {(q.trim() || peopleModeFilter !== 'all') && (
               <>
                 <div style={{
                   fontSize: 12, fontWeight: 700, color: T.mu, textTransform: 'uppercase',
@@ -733,14 +789,14 @@ export default function ExploreScreen({
                 }}>
                   {resSearching
                     ? 'Searching…'
-                    : `${resResults.length} researcher${resResults.length !== 1 ? 's' : ''} found`}
+                    : `${resResults.length} ${resResults.length !== 1 ? 'people' : 'person'} found`}
                 </div>
                 {resSearching
                   ? <Spinner />
                   : resResults.length === 0
                     ? (
                       <div style={{ color: T.mu, fontSize: 13, textAlign: 'center', padding: 20 }}>
-                        No results for "{q}" — try different keywords or check the spelling.
+                        No results{q.trim() ? ` for "${q}"` : ''} — try different keywords or adjust the filter.
                       </div>
                     )
                     : resResults.map(u => (
