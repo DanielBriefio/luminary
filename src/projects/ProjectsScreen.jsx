@@ -6,12 +6,15 @@ import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import CreateProjectModal from './CreateProjectModal';
 import ProjectScreen from './ProjectScreen';
+import TemplateGallery from './TemplateGallery';
 
 export default function ProjectsScreen({ user }) {
-  const [projects,       setProjects]       = useState([]);
-  const [loading,        setLoading]        = useState(true);
-  const [showCreate,     setShowCreate]     = useState(false);
-  const [activeProject,  setActiveProject]  = useState(null);
+  const [projects,            setProjects]            = useState([]);
+  const [loading,             setLoading]             = useState(true);
+  const [showCreate,          setShowCreate]          = useState(false);
+  const [showGallery,         setShowGallery]         = useState(false);
+  const [preselectedTemplate, setPreselectedTemplate] = useState(null);
+  const [activeProject,       setActiveProject]       = useState(null);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -37,6 +40,21 @@ export default function ProjectsScreen({ user }) {
     );
   }
 
+  if (showGallery) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <TemplateGallery
+          onSelectTemplate={templateType => {
+            setShowGallery(false);
+            setPreselectedTemplate(templateType);
+            setShowCreate(true);
+          }}
+          onBack={() => setShowGallery(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
       {showCreate && (
@@ -44,14 +62,19 @@ export default function ProjectsScreen({ user }) {
           user={user}
           ownerId={user.id}
           isGroupProject={false}
-          onProjectCreated={id => { setShowCreate(false); setActiveProject(id); }}
-          onClose={() => setShowCreate(false)}
+          preselectedTemplate={preselectedTemplate}
+          onProjectCreated={id => { setShowCreate(false); setPreselectedTemplate(null); setActiveProject(id); }}
+          onClose={() => { setShowCreate(false); setPreselectedTemplate(null); }}
+          onOpenGallery={() => { setShowCreate(false); setShowGallery(true); }}
         />
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24 }}>Projects</div>
-        <Btn variant="s" onClick={() => setShowCreate(true)}>+ New project</Btn>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Btn onClick={() => setShowGallery(true)}>🗂️ Browse templates</Btn>
+          <Btn variant="s" onClick={() => setShowCreate(true)}>+ New project</Btn>
+        </div>
       </div>
 
       {loading ? (

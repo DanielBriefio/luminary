@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
-import { FAST_TEMPLATES, GALLERY_TEMPLATES, PROJECT_TEMPLATES, applyTemplate } from '../lib/projectTemplates';
+import { FAST_TEMPLATES, PROJECT_TEMPLATES, applyTemplate } from '../lib/projectTemplates';
 import Btn from '../components/Btn';
 
 const inputStyle = {
@@ -11,10 +11,9 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
-export default function CreateProjectModal({ user, ownerId, isGroupProject = false, onProjectCreated, onClose }) {
+export default function CreateProjectModal({ user, ownerId, isGroupProject = false, onProjectCreated, onClose, preselectedTemplate, onOpenGallery }) {
   const [step,             setStep]             = useState(1);
-  const [selectedTemplate, setSelectedTemplate] = useState('blank');
-  const [showGallery,      setShowGallery]      = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(preselectedTemplate || 'blank');
   const [projectName,      setProjectName]      = useState('');
   const [description,      setDescription]      = useState('');
   const [creating,         setCreating]         = useState('');
@@ -111,42 +110,15 @@ export default function CreateProjectModal({ user, ownerId, isGroupProject = fal
               ))}
             </div>
 
-            {!showGallery ? (
-              <button onClick={() => setShowGallery(true)} style={{
+            {onOpenGallery && (
+              <button onClick={onOpenGallery} style={{
                 width: '100%', marginBottom: 16, padding: '8px',
                 border: `1px dashed ${T.bdr}`, borderRadius: 9,
                 background: 'transparent', cursor: 'pointer',
                 fontSize: 12.5, color: T.mu, fontFamily: 'inherit',
               }}>
-                Browse more templates ↓
+                🗂️ Browse all templates →
               </button>
-            ) : (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.mu,
-                  textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
-                  More templates
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {GALLERY_TEMPLATES.map(t => (
-                    <button key={t.type} onClick={() => setSelectedTemplate(t.type)} style={{
-                      padding: '10px 14px', borderRadius: 10,
-                      cursor: 'pointer', fontFamily: 'inherit',
-                      textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12,
-                      border: `1.5px solid ${selectedTemplate === t.type ? t.color : T.bdr}`,
-                      background: selectedTemplate === t.type ? `${t.color}12` : T.w,
-                    }}>
-                      <span style={{ fontSize: 20, flexShrink: 0 }}>{t.icon}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{t.label}</div>
-                        <div style={{ fontSize: 11.5, color: T.mu }}>{t.description}</div>
-                      </div>
-                      {selectedTemplate === t.type && (
-                        <span style={{ color: t.color, fontSize: 14 }}>✓</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
             )}
 
             <Btn variant="s" onClick={() => setStep(2)} style={{ width: '100%' }}>

@@ -144,13 +144,19 @@ export const PROJECT_TEMPLATES = {
   },
 
   weekly_team_meeting: {
-    type:        'weekly_team_meeting',
-    label:       'Weekly Team Meeting',
-    icon:        '📅',
-    color:       '#0284c7',
-    description: 'Keep your clinical or research team aligned week to week.',
-    usedBy:      'Clinical teams, lab groups, departments',
-    galleryOnly: true,
+    type:           'weekly_team_meeting',
+    label:          'Weekly Team Meeting',
+    icon:           '📅',
+    color:          '#0284c7',
+    filterCategory: 'clinical',
+    description:    'Keep your clinical or research team aligned week to week.',
+    usedBy:         'Clinical teams, lab groups, departments',
+    galleryOnly:    true,
+    keyActions:     ['Share agendas', 'Discuss cases', 'Track actions'],
+    previewPosts: [
+      { author: 'Dr. J. Park', content: 'Week 12 agenda: (1) Q3 audit results, (2) new oncology pathway, (3) rotas for December. Please review the audit summary before we meet.', folder: 'Agenda', likes: 3, comments: 4 },
+      { author: 'Dr. S. Ali', content: 'Case for discussion Thursday: 68yr F, COPD + newly diagnosed T2DM, on metformin but HbA1c still 74. Thoughts on next step?', folder: 'Case Discussions', likes: 5, comments: 7 },
+    ],
     folders: [
       { name: 'Agenda',           sort_order: 0 },
       { name: 'Case Discussions', sort_order: 1 },
@@ -189,13 +195,19 @@ export const PROJECT_TEMPLATES = {
   },
 
   clinical_training: {
-    type:        'clinical_training',
-    label:       'Clinical Training',
-    icon:        '🎓',
-    color:       '#7c3aed',
-    description: 'Organise a new technique, certification or training programme.',
-    usedBy:      'Clinical teams, training departments, lab groups',
-    galleryOnly: true,
+    type:           'clinical_training',
+    label:          'Clinical Training',
+    icon:           '🎓',
+    color:          '#7c3aed',
+    filterCategory: 'clinical',
+    description:    'Organise a new technique, certification or training programme.',
+    usedBy:         'Clinical teams, training departments, lab groups',
+    galleryOnly:    true,
+    keyActions:     ['Share protocols', 'Log sessions', 'Ask questions'],
+    previewPosts: [
+      { author: 'Dr. M. Chen (Supervisor)', content: 'ERCP training log — trainee completed cases 11-15 this week. Cannulation success rate now 78%. Progressing well on the steep part of the curve.', folder: 'Training Log', likes: 4, comments: 2 },
+      { author: 'Dr. A. Fernandez (Trainee)', content: 'Question: in Case 13 the patient had a Billroth II anatomy. The guidewire kept going into the afferent limb. What\'s the best approach?', folder: 'Questions & Notes', likes: 1, comments: 5 },
+    ],
     folders: [
       { name: 'Background Reading', sort_order: 0 },
       { name: 'Protocol & Steps',   sort_order: 1 },
@@ -238,11 +250,321 @@ export const PROJECT_TEMPLATES = {
     ],
   },
 
+  research_project: {
+    type:           'research_project',
+    label:          'Research Project',
+    icon:           '🔬',
+    color:          '#0891b2',
+    filterCategory: 'research',
+    description:    'Run a focused research project from hypothesis to results.',
+    usedBy:         'Lab groups, PhD students, research teams',
+    keyActions:     ['Share findings', 'Discuss methods', 'Track progress'],
+    galleryOnly:    true,
+    folders: [
+      { name: 'Hypothesis & Background', sort_order: 0 },
+      { name: 'Methods',                 sort_order: 1 },
+      { name: 'Results & Data',          sort_order: 2 },
+      { name: 'Analysis',                sort_order: 3 },
+      { name: 'Manuscript Draft',        sort_order: 4 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Hypothesis & Background',
+        is_sticky: true,
+        content: `<h3>🔬 Welcome to {projectName}</h3>
+<p>Use this project to track your research from first idea to final manuscript.</p>
+<ul>
+<li>Define your hypothesis and background in this folder</li>
+<li>Document methods as you develop them</li>
+<li>Share results and data as they come in</li>
+<li>Build toward your manuscript draft together</li>
+</ul>`,
+      },
+      {
+        folder:  'Hypothesis & Background',
+        content: `<p>💡 <strong>Our research question</strong></p>
+<p>State the hypothesis clearly here. What are we testing, and why does it matter? Team members can comment and refine.</p>`,
+      },
+      {
+        folder:  'Methods',
+        content: `<p>📐 <strong>Methods — working draft</strong></p>
+<p>Document the experimental design, inclusion/exclusion criteria, and key protocols here. Flag open methodological questions for the team.</p>`,
+      },
+      {
+        folder:  'Results & Data',
+        content: `<p>📊 <strong>First results</strong></p>
+<p>Share your initial findings here — even preliminary or unexpected ones. Early discussion often changes the direction of the analysis.</p>`,
+      },
+    ],
+    previewPosts: [
+      { author: 'Dr. A. Müller', content: 'Hypothesis confirmed in the first cohort (n=47). Surprisingly, the effect was stronger in the female subgroup — worth pre-specifying for the main analysis.', folder: 'Results & Data', likes: 8, comments: 5 },
+      { author: 'Dr. K. Tanaka', content: "Agreed. I'd also flag the age distribution — median 67 is older than our target population for the manuscript.", folder: 'Results & Data', likes: 3, comments: 2 },
+    ],
+  },
+
+  grant_application: {
+    type:           'grant_application',
+    label:          'Grant Application',
+    icon:           '🎓',
+    color:          '#7c3aed',
+    filterCategory: 'research',
+    description:    'Coordinate a grant submission from first draft to submission.',
+    usedBy:         'PIs, research administrators, academic teams',
+    keyActions:     ['Draft sections', 'Share feedback', 'Track deadlines'],
+    galleryOnly:    true,
+    folders: [
+      { name: 'Specific Aims',             sort_order: 0 },
+      { name: 'Background & Significance', sort_order: 1 },
+      { name: 'Research Strategy',         sort_order: 2 },
+      { name: 'Budget',                    sort_order: 3 },
+      { name: 'Biosketches',               sort_order: 4 },
+      { name: 'Submission',                sort_order: 5 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Specific Aims',
+        is_sticky: true,
+        content: `<h3>🎓 Welcome to {projectName}</h3>
+<p><strong>Funding agency:</strong> [add here]</p>
+<p><strong>Submission deadline:</strong> [add date]</p>
+<p><strong>Requested amount:</strong> [add here]</p>
+<p><strong>PI:</strong> [add name]</p>
+<p>Use the folders to coordinate each section of the application.</p>`,
+      },
+      {
+        folder:  'Specific Aims',
+        content: `<p>📝 <strong>Specific Aims — draft v1</strong></p>
+<p>The Specific Aims page is the most important page of the grant. Share your draft here early — team feedback at this stage saves weeks later.</p>`,
+      },
+      {
+        folder:  'Research Strategy',
+        content: `<p>🔍 <strong>Open questions before we write</strong></p>
+<p>What methodological or conceptual gaps do we need to address before drafting the Research Strategy? Flag them here.</p>`,
+      },
+      {
+        folder:  'Submission',
+        content: `<p>✅ <strong>Submission checklist</strong></p>
+<p>All sections complete · Budget approved · All biosketches submitted · IRB documentation ready · Institution sign-off obtained · Submitted to agency.</p>`,
+      },
+    ],
+    previewPosts: [
+      { author: 'Prof. S. Chen', content: 'Specific Aims page — version 3. Major change: repositioned the innovation section earlier based on reviewer feedback from the pilot. Please review before Friday.', folder: 'Specific Aims', likes: 4, comments: 7 },
+      { author: 'Dr. R. Patel', content: 'The budget justification for the sequencing core needs updating — costs went up 15% since last year.', folder: 'Budget', likes: 2, comments: 3 },
+    ],
+  },
+
+  advisory_board: {
+    type:           'advisory_board',
+    label:          'Advisory Board',
+    icon:           '🤝',
+    color:          '#0284c7',
+    filterCategory: 'industry',
+    description:    'Plan and run an external expert advisory board meeting.',
+    usedBy:         'Medical Affairs, clinical development, pharma teams',
+    keyActions:     ['Share pre-reads', 'Capture insights', 'Assign follow-ups'],
+    galleryOnly:    true,
+    folders: [
+      { name: 'Agenda',          sort_order: 0 },
+      { name: 'Pre-reads',       sort_order: 1 },
+      { name: 'Member Profiles', sort_order: 2 },
+      { name: 'Meeting Notes',   sort_order: 3 },
+      { name: 'Action Items',    sort_order: 4 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Agenda',
+        is_sticky: true,
+        content: `<h3>🤝 Welcome to {projectName}</h3>
+<p><strong>Meeting date:</strong> [add date]</p>
+<p><strong>Format:</strong> [in-person / virtual / hybrid]</p>
+<p><strong>Location / platform:</strong> [add details]</p>
+<p>Use this project to coordinate before, during, and after the meeting.</p>`,
+      },
+      {
+        folder:  'Agenda',
+        content: `<p>📋 <strong>Draft agenda</strong></p>
+<p>Share the agenda here for internal review before it goes to advisors. Include timing for each topic and which team member owns each session.</p>`,
+      },
+      {
+        folder:  'Pre-reads',
+        content: `<p>📄 <strong>Materials for advisors</strong></p>
+<p>Upload or link the pre-read package here. Note which materials are essential vs background, and any specific questions you want advisors to come prepared to discuss.</p>`,
+      },
+      {
+        folder:  'Action Items',
+        content: `<p>✅ <strong>Post-meeting action items</strong></p>
+<p>Document all commitments made during the meeting — owner, deadline, and status. Update this post as items are completed.</p>`,
+      },
+    ],
+    previewPosts: [
+      { author: 'Sarah K. (Medical Affairs)', content: 'KOL feedback on the evidence gap was consistent across all 5 advisors — they all flagged the absence of real-world data in Japan. Added to the evidence generation plan.', folder: 'Meeting Notes', likes: 6, comments: 4 },
+      { author: 'James T.', content: 'Action: Prof. Yamamoto agreed to review the protocol design for the Japan RWE study. Follow-up by end of Q2.', folder: 'Action Items', likes: 2, comments: 1 },
+    ],
+  },
+
+  literature_review: {
+    type:           'literature_review',
+    label:          'Literature Review',
+    icon:           '📚',
+    color:          '#059669',
+    filterCategory: 'research',
+    description:    'Conduct a structured literature review from search to synthesis.',
+    usedBy:         'Researchers, clinical fellows, systematic review teams',
+    keyActions:     ['Add papers', 'Discuss inclusion', 'Synthesise findings'],
+    galleryOnly:    true,
+    folders: [
+      { name: 'Search Strategy', sort_order: 0 },
+      { name: 'Included Papers', sort_order: 1 },
+      { name: 'Excluded Papers', sort_order: 2 },
+      { name: 'Data Extraction', sort_order: 3 },
+      { name: 'Summary',         sort_order: 4 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Search Strategy',
+        is_sticky: true,
+        content: `<h3>📚 Welcome to {projectName}</h3>
+<p><strong>Review question:</strong> [PICO or equivalent]</p>
+<p><strong>Databases to search:</strong> Europe PMC, PubMed, Cochrane, [add others]</p>
+<p><strong>Date range:</strong> [add]</p>
+<p><strong>Target journal:</strong> [add if known]</p>`,
+      },
+      {
+        folder:  'Search Strategy',
+        content: `<p>🔍 <strong>Search strings</strong></p>
+<p>Document the exact search strings used in each database here so the review is reproducible. Include the date each search was run.</p>`,
+      },
+      {
+        folder:  'Included Papers',
+        content: `<p>✓ <strong>Inclusion criteria</strong></p>
+<p>Document what makes a paper eligible for inclusion. Post papers you're unsure about here for team discussion before final decision.</p>`,
+      },
+      {
+        folder:  'Summary',
+        content: `<p>📝 <strong>Key themes emerging</strong></p>
+<p>As you read through the included papers, post emerging themes and patterns here. This becomes the backbone of the Discussion section.</p>`,
+      },
+    ],
+    previewPosts: [
+      { author: 'Dr. L. Hoffmann', content: 'Screened 847 abstracts. 64 meet inclusion criteria, 12 are borderline — added to Included Papers folder with notes. The heterogeneity in outcome measures is going to be a challenge for meta-analysis.', folder: 'Included Papers', likes: 5, comments: 3 },
+    ],
+  },
+
+  lab_onboarding: {
+    type:           'lab_onboarding',
+    label:          'Lab / Team Onboarding',
+    icon:           '👋',
+    color:          '#d97706',
+    filterCategory: 'collaboration',
+    description:    'Get a new team member up to speed quickly.',
+    usedBy:         'Lab groups, clinical teams, department heads',
+    keyActions:     ['Share essentials', 'Answer questions', 'Track progress'],
+    galleryOnly:    true,
+    folders: [
+      { name: 'Welcome & Orientation', sort_order: 0 },
+      { name: 'Key Papers',            sort_order: 1 },
+      { name: 'Protocols & Methods',   sort_order: 2 },
+      { name: 'Tools & Resources',     sort_order: 3 },
+      { name: 'First Tasks',           sort_order: 4 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Welcome & Orientation',
+        is_sticky: true,
+        content: `<h3>👋 Welcome to {projectName}</h3>
+<p>This project has everything you need to get started. Work through the folders at your own pace — ask questions in any post by leaving a comment.</p>
+<ul>
+<li>Start in <em>Welcome & Orientation</em> for context on the team and its work</li>
+<li>Read the <em>Key Papers</em> that underpin what we do</li>
+<li>Review <em>Protocols & Methods</em> before your first experiment</li>
+<li>Check <em>First Tasks</em> for what to tackle in your first two weeks</li>
+</ul>`,
+      },
+      {
+        folder:  'Welcome & Orientation',
+        content: `<p>🏢 <strong>About our team</strong></p>
+<p>Introduce the team, the research focus, and how we work together. What are the current active projects? What's the overall goal we're working toward?</p>`,
+      },
+      {
+        folder:  'Key Papers',
+        content: `<p>📄 <strong>The 5 papers everyone on this team has read</strong></p>
+<p>Add the foundational papers for your work using the paper post type. These are the papers that explain why we do what we do.</p>`,
+      },
+      {
+        folder:  'First Tasks',
+        content: `<p>✅ <strong>Your first two weeks</strong></p>
+<p>List concrete tasks for the new team member's first two weeks. Be specific — "Read these 3 papers and post a 3-sentence summary of each" is better than "get familiar with the literature."</p>`,
+      },
+    ],
+    previewPosts: [
+      { author: 'Prof. H. Nakamura (PI)', content: "Welcome to the lab! Your first task is to read the three papers in Key Papers and leave a comment on each with your main takeaway. Then let's meet Thursday to discuss.", folder: 'Welcome & Orientation', likes: 7, comments: 3 },
+      { author: 'New team member', content: 'Read the first paper — the methodology section raised a question about the cell culture conditions. Is our protocol the same as described in Supplementary Table 2?', folder: 'Protocols & Methods', likes: 2, comments: 4 },
+    ],
+  },
+
+  product_launch: {
+    type:           'product_launch',
+    label:          'Product Launch',
+    icon:           '🚀',
+    color:          '#dc2626',
+    filterCategory: 'industry',
+    description:    'Coordinate a medical product launch across teams.',
+    usedBy:         'Medical Affairs, market access, pharma and MedTech teams',
+    keyActions:     ['Align strategy', 'Share materials', 'Track milestones'],
+    galleryOnly:    true,
+    folders: [
+      { name: 'Scientific Platform',   sort_order: 0 },
+      { name: 'Key Messages',          sort_order: 1 },
+      { name: 'Publication Plan',      sort_order: 2 },
+      { name: 'Stakeholder Materials', sort_order: 3 },
+      { name: 'Launch Checklist',      sort_order: 4 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Scientific Platform',
+        is_sticky: true,
+        content: `<h3>🚀 Welcome to {projectName}</h3>
+<p><strong>Product:</strong> [add name]</p>
+<p><strong>Indication:</strong> [add]</p>
+<p><strong>Target launch date:</strong> [add]</p>
+<p><strong>Key markets:</strong> [add]</p>
+<p>Use this project to coordinate the cross-functional launch team.</p>`,
+      },
+      {
+        folder:  'Scientific Platform',
+        content: `<p>🔬 <strong>Scientific platform — draft</strong></p>
+<p>The scientific narrative that underpins all launch materials. Share the draft here for cross-functional review — Medical Affairs, Market Access, and Commercial should all align on this before anything else is written.</p>`,
+      },
+      {
+        folder:  'Key Messages',
+        content: `<p>💬 <strong>Core messages by audience</strong></p>
+<p>Document the key messages for each stakeholder group: HCPs, payers, patients. Flag any message where Medical Affairs and Commercial have different perspectives — better to resolve early.</p>`,
+      },
+      {
+        folder:  'Launch Checklist',
+        content: `<p>✅ <strong>Launch readiness checklist</strong></p>
+<p>Scientific platform approved · Key messages aligned · Publication plan in place · Medical information responses ready · Training materials completed · Regulatory sign-off obtained.</p>`,
+      },
+    ],
+    previewPosts: [
+      { author: 'Dr. M. Santos (Medical Affairs)', content: 'Updated scientific platform after the Phase 3 subgroup data came in. The Japan-specific data changes our positioning story for the APAC region significantly — needs discussion before we brief the field team.', folder: 'Scientific Platform', likes: 9, comments: 6 },
+      { author: 'T. Williams (Market Access)', content: '"Insufficient real-world data" is going to come up in every HTA. We need this addressed in the publication plan now, not after launch.', folder: 'Key Messages', likes: 5, comments: 4 },
+    ],
+  },
+
 };
 
 export const FAST_TEMPLATES    = Object.values(PROJECT_TEMPLATES).filter(t => !t.galleryOnly);
 export const GALLERY_TEMPLATES = Object.values(PROJECT_TEMPLATES).filter(t =>  t.galleryOnly);
 export const TEMPLATE_LIST     = Object.values(PROJECT_TEMPLATES);
+
+export const GALLERY_FILTER_CATEGORIES = [
+  { id: 'all',           label: 'All'              },
+  { id: 'research',      label: '🔬 Research'      },
+  { id: 'clinical',      label: '🏥 Clinical'      },
+  { id: 'industry',      label: '💊 Industry'      },
+  { id: 'collaboration', label: '🤝 Collaboration' },
+];
 
 export function applyTemplate(template, projectName, projectId, userId) {
   const folders = template.folders.map(f => ({

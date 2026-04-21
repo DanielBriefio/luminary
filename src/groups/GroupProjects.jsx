@@ -5,11 +5,14 @@ import { timeAgo } from '../lib/utils';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import CreateProjectModal from '../projects/CreateProjectModal';
+import TemplateGallery from '../projects/TemplateGallery';
 
 export default function GroupProjects({ groupId, user, myRole, onSelectProject }) {
-  const [projects,   setProjects]   = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
+  const [projects,            setProjects]            = useState([]);
+  const [loading,             setLoading]             = useState(true);
+  const [showCreate,          setShowCreate]          = useState(false);
+  const [showGallery,         setShowGallery]         = useState(false);
+  const [preselectedTemplate, setPreselectedTemplate] = useState(null);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -27,6 +30,21 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
 
   const canCreate = myRole === 'admin' || myRole === 'member';
 
+  if (showGallery) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <TemplateGallery
+          onSelectTemplate={templateType => {
+            setShowGallery(false);
+            setPreselectedTemplate(templateType);
+            setShowCreate(true);
+          }}
+          onBack={() => setShowGallery(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
       {showCreate && (
@@ -34,15 +52,20 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
           user={user}
           ownerId={groupId}
           isGroupProject={true}
-          onProjectCreated={id => { setShowCreate(false); onSelectProject?.(id); fetchProjects(); }}
-          onClose={() => setShowCreate(false)}
+          preselectedTemplate={preselectedTemplate}
+          onProjectCreated={id => { setShowCreate(false); setPreselectedTemplate(null); onSelectProject?.(id); fetchProjects(); }}
+          onClose={() => { setShowCreate(false); setPreselectedTemplate(null); }}
+          onOpenGallery={() => { setShowCreate(false); setShowGallery(true); }}
         />
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20 }}>Projects</div>
         {canCreate && (
-          <Btn variant="s" onClick={() => setShowCreate(true)}>+ New project</Btn>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Btn onClick={() => setShowGallery(true)}>🗂️ Browse templates</Btn>
+            <Btn variant="s" onClick={() => setShowCreate(true)}>+ New project</Btn>
+          </div>
         )}
       </div>
 
