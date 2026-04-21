@@ -473,7 +473,7 @@ created_by (uuid FK profiles — always set; the person who created it; used in 
 name, description,
 icon (TEXT), cover_color (TEXT),
 status (TEXT: 'active' | 'archived'), is_pinned (bool),
-template_type (TEXT, nullable — slug of the template used to create the project, e.g. 'conference', 'research_project'),
+template_type (TEXT, default 'blank' — slug of the template used to create the project, e.g. 'conference', 'research_project'; 'blank' means no template),
 created_at, updated_at
 - Personal project: user_id = created_by, group_id = NULL
 - Group project: user_id = NULL, group_id = group, created_by = creator
@@ -539,12 +539,10 @@ All group RLS uses SECURITY DEFINER helper functions to avoid infinite recursion
 - `get_public_group_ids()` — groups where is_public = true
 - `get_my_member_post_ids()` — post ids in groups where I am admin or member
 
-Key policies (as of DB snapshot 2026-04-22):
-- `groups_select`: `auth.uid() IS NOT NULL` — any authenticated user can read any group
+Key policies (as of DB snapshot 2026-04-22, groups_select fixed post-snapshot):
+- `groups_select`: `is_public = true OR created_by = auth.uid() OR id IN (get_my_group_ids())` — restored intended policy (was briefly wide-open as `auth.uid() IS NOT NULL`)
 - `groups_insert`: `auth.uid() IS NOT NULL`
 - `groups_update`: `id IN (get_my_admin_group_ids())`
-
-Note: earlier documentation said `groups_select` used `is_public = true OR created_by = auth.uid() OR id in (get_my_group_ids())` — this was the intended policy but the live DB uses the simpler `auth.uid() IS NOT NULL`. The `get_public_group_ids()` and related helper functions still exist and are used by other policies.
 
 ## RLS — library_items (key policies)
 
