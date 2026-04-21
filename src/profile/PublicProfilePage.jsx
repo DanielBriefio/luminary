@@ -285,11 +285,17 @@ export default function PublicProfilePage({ slug }) {
               {wh.length > 0 && <>
                 <SH label="Work Experience" />
                 {wh.map((p, i) => (
-                  <Row key={i} logo="🏢">
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>{p.title}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: T.v, marginBottom: 1 }}>{[p.company, p.location].filter(Boolean).join(' · ')}</div>
-                    {(p.start || p.end) && <div style={{ fontSize: 11, color: T.mu }}>{formatDateRange(p.start, p.end)}</div>}
-                    {p.description && <div style={{ fontSize: 12, color: T.mu, lineHeight: 1.6, marginTop: 3 }}>{p.description}</div>}
+                  <Row key={i} logoChar={((p.company || p.title || '?')[0] || '?').toUpperCase()}>
+                    <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3, marginBottom: 2, color: T.text }}>{p.title}</div>
+                    {(p.company || p.location) && (
+                      <div style={{ fontSize: 13, marginBottom: 1 }}>
+                        {p.company && <span style={{ color: T.v, fontWeight: 600 }}>{p.company}</span>}
+                        {p.company && p.location && <span style={{ color: T.mu }}> · </span>}
+                        {p.location && <span style={{ color: T.mu }}>{p.location}</span>}
+                      </div>
+                    )}
+                    {(p.start || p.end) && <div style={{ fontSize: 12, color: T.mu }}>{formatDateRange(p.start, p.end)}</div>}
+                    <ExpandableDesc text={p.description} />
                   </Row>
                 ))}
               </>}
@@ -435,11 +441,43 @@ function SH({ label }) {
   );
 }
 
-function Row({ logo, children }) {
+function Row({ logo, logoChar, children }) {
+  if (logoChar !== undefined) {
+    return (
+      <div style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: '1px solid ' + T.bdr, alignItems: 'flex-start' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, background: '#e5e7eb', color: '#6b7280', userSelect: 'none' }}>
+          {logoChar}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: 'flex', gap: 13, padding: '13px 0', borderBottom: '1px solid ' + T.bdr, alignItems: 'flex-start' }}>
       <div style={{ width: 40, height: 40, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, border: '1px solid ' + T.bdr, background: T.s2 }}>{logo}</div>
       <div style={{ flex: 1 }}>{children}</div>
+    </div>
+  );
+}
+
+function ExpandableDesc({ text }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text) return null;
+  const long = text.length > 120;
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{
+        fontSize: 13, color: T.mu, lineHeight: 1.55,
+        ...(long && !expanded ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}),
+      }}>
+        {text}
+      </div>
+      {long && (
+        <button onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+          style={{ fontSize: 11.5, color: T.v, fontWeight: 600, border: 'none', background: 'none', padding: '2px 0 0', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.2 }}>
+          {expanded ? 'less' : '… more'}
+        </button>
+      )}
     </div>
   );
 }

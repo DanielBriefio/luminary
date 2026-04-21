@@ -71,6 +71,28 @@ function QualChipInput({ value, onChange, placeholder }) {
   );
 }
 
+function ExpandableDesc({ text }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text) return null;
+  const long = text.length > 120;
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{
+        fontSize: 13, color: T.mu, lineHeight: 1.55,
+        ...(long && !expanded ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}),
+      }}>
+        {text}
+      </div>
+      {long && (
+        <button onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+          style={{ fontSize: 11.5, color: T.v, fontWeight: 600, border: 'none', background: 'none', padding: '2px 0 0', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.2 }}>
+          {expanded ? 'less' : '… more'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function VisibilityToggle({ label, value, onChange }) {
   return (
     <label style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom:`1px solid ${T.bdr}`, cursor:'pointer' }}>
@@ -538,7 +560,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
     <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:"uppercase",letterSpacing:".07em",margin:"20px 0 10px",paddingBottom:6,borderBottom:"2px solid "+T.bdr}}>{label}</div>
   );
 
-  function EditableRow({ item, index, field, array, logo, renderView, renderEdit }) {
+  function EditableRow({ item, index, field, array, logo, logoChar, renderView, renderEdit }) {
     const [editing, setEditing] = useState(false);
     const [form, setForm]       = useState({...item});
     const [saving, setSaving]   = useState(false);
@@ -557,8 +579,28 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       setEditing(false); setSaving(false);
     };
     const deleteRow = async () => { await saveSection(field, array.filter((_,i)=>i!==index)); };
+    const menu = (
+      <div ref={menuRef} style={{position:"relative",flexShrink:0}}>
+        <button onClick={()=>setShowMenu(v=>!v)}
+          style={{width:26,height:26,borderRadius:"50%",border:"1px solid "+T.bdr,background:T.w,cursor:"pointer",color:T.mu,fontSize:14,fontWeight:700,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",letterSpacing:1}}>
+          ···
+        </button>
+        {showMenu&&(
+          <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:T.w,border:"1px solid "+T.bdr,borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,.1)",zIndex:50,minWidth:120,overflow:"hidden"}}>
+            <button onClick={()=>{setShowMenu(false);setEditing(true);}}
+              style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",borderBottom:"1px solid "+T.bdr,background:"transparent",cursor:"pointer",color:T.text}}>
+              Edit
+            </button>
+            <button onClick={()=>{setShowMenu(false);deleteRow();}}
+              style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",background:"transparent",cursor:"pointer",color:T.ro}}>
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    );
     if (editing) return (
-      <div style={{padding:"13px 0",borderBottom:"1px solid "+T.bdr}}>
+      <div style={{padding:"12px 0",borderBottom:"1px solid "+T.bdr}}>
         {renderEdit(form, f=>setForm(prev=>({...prev,...f})))}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:10}}>
           <Btn onClick={()=>{setEditing(false);setForm({...item});}}>Cancel</Btn>
@@ -566,31 +608,27 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
         </div>
       </div>
     );
-    return (
-      <div style={{padding:"13px 0",borderBottom:"1px solid "+T.bdr}}>
-        {/* Logo + three-dots header row */}
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-          <div style={{width:36,height:36,borderRadius:9,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,border:"1px solid "+T.bdr,background:T.s2}}>{logo}</div>
-          <div ref={menuRef} style={{marginLeft:"auto",position:"relative"}}>
-            <button onClick={()=>setShowMenu(v=>!v)}
-              style={{width:28,height:28,borderRadius:"50%",border:"1px solid "+T.bdr,background:T.w,cursor:"pointer",color:T.mu,fontSize:15,fontWeight:700,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",letterSpacing:1}}>
-              ···
-            </button>
-            {showMenu&&(
-              <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:T.w,border:"1px solid "+T.bdr,borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,.1)",zIndex:50,minWidth:120,overflow:"hidden"}}>
-                <button onClick={()=>{setShowMenu(false);setEditing(true);}}
-                  style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",borderBottom:"1px solid "+T.bdr,background:"transparent",cursor:"pointer",color:T.text}}>
-                  Edit
-                </button>
-                <button onClick={()=>{setShowMenu(false);deleteRow();}}
-                  style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:13,fontFamily:"inherit",border:"none",background:"transparent",cursor:"pointer",color:T.ro}}>
-                  Delete
-                </button>
-              </div>
-            )}
+    if (logoChar !== undefined) {
+      return (
+        <div style={{display:"flex",gap:12,padding:"12px 0",borderBottom:"1px solid "+T.bdr,alignItems:"flex-start"}}>
+          <div style={{width:36,height:36,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,background:"#e5e7eb",color:"#6b7280",userSelect:"none"}}>
+            {logoChar}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
+              <div style={{flex:1,minWidth:0}}>{renderView(item)}</div>
+              {menu}
+            </div>
           </div>
         </div>
-        {/* Content — full width */}
+      );
+    }
+    return (
+      <div style={{padding:"13px 0",borderBottom:"1px solid "+T.bdr}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+          <div style={{width:36,height:36,borderRadius:9,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,border:"1px solid "+T.bdr,background:T.s2}}>{logo}</div>
+          <div style={{marginLeft:"auto"}}>{menu}</div>
+        </div>
         <div>{renderView(item)}</div>
       </div>
     );
@@ -1197,13 +1235,20 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <>
                   <SectionHead label="Work Experience"/>
                   {wh.map((p,i)=>(
-                    <EditableRow key={i} item={p} index={i} field="work_history" array={wh} logo="🏢"
+                    <EditableRow key={i} item={p} index={i} field="work_history" array={wh}
+                      logoChar={((p.company||p.title||'?')[0]||'?').toUpperCase()}
                       renderView={p=>(
                         <>
-                          <div style={{fontSize:13,fontWeight:700,marginBottom:1}}>{p.title}</div>
-                          <div style={{fontSize:12,fontWeight:600,color:T.v,marginBottom:1}}>{[p.company,p.location].filter(Boolean).join(' · ')}</div>
-                          {(p.start||p.end)&&<div style={{fontSize:11,color:T.mu}}>{formatDateRange(p.start,p.end)}</div>}
-                          {p.description&&<div style={{fontSize:12,color:T.mu,lineHeight:1.6,marginTop:3}}>{p.description.slice(0,200)}{p.description.length>200?'…':''}</div>}
+                          <div style={{fontSize:14,fontWeight:700,lineHeight:1.3,marginBottom:2,color:T.text}}>{p.title}</div>
+                          {(p.company||p.location)&&(
+                            <div style={{fontSize:13,marginBottom:1}}>
+                              {p.company&&<span style={{color:T.v,fontWeight:600}}>{p.company}</span>}
+                              {p.company&&p.location&&<span style={{color:T.mu}}> · </span>}
+                              {p.location&&<span style={{color:T.mu}}>{p.location}</span>}
+                            </div>
+                          )}
+                          {(p.start||p.end)&&<div style={{fontSize:12,color:T.mu}}>{formatDateRange(p.start,p.end)}</div>}
+                          <ExpandableDesc text={p.description}/>
                         </>
                       )}
                       renderEdit={(f,set)=>(
