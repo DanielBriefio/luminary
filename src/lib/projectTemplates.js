@@ -502,6 +502,61 @@ export const PROJECT_TEMPLATES = {
     ],
   },
 
+  regulatory_submission: {
+    type:           'regulatory_submission',
+    label:          'Regulatory Submission',
+    icon:           '📋',
+    color:          '#dc2626',
+    filterCategory: 'industry',
+    description:    'Coordinate a regulatory submission using CTD structure.',
+    usedBy:         'Regulatory Affairs, Medical Affairs, pharma teams',
+    keyActions:     ['Draft modules', 'Track reviews', 'Manage submission'],
+    galleryOnly:    true,
+    folders: [
+      { name: 'Module 1: Administrative', sort_order: 0 },
+      { name: 'Module 2: Summaries',      sort_order: 1 },
+      { name: 'Module 3: Quality',        sort_order: 2 },
+      { name: 'Module 4: Nonclinical',    sort_order: 3 },
+      { name: 'Module 5: Clinical',       sort_order: 4 },
+      { name: 'Submission Checklist',     sort_order: 5 },
+    ],
+    starterPosts: [
+      {
+        folder:    'Module 1: Administrative',
+        is_sticky: true,
+        content: `<h3>📋 Welcome to {projectName}</h3>
+<p>This project follows the <strong>Common Technical Document (CTD) structure</strong> used for regulatory submissions worldwide.</p>
+<ul>
+<li><strong>Module 1</strong> — Administrative: cover letters, forms, regional documents</li>
+<li><strong>Module 2</strong> — Summaries: quality, nonclinical, and clinical overviews</li>
+<li><strong>Module 3</strong> — Quality (CMC): drug substance, drug product, stability</li>
+<li><strong>Module 4</strong> — Nonclinical: pharmacology, PK, toxicology study reports</li>
+<li><strong>Module 5</strong> — Clinical: clinical study reports and literature references</li>
+</ul>
+<p>Post working drafts, flag open items, and track review status in the relevant module folder. Use the <em>Submission Checklist</em> to confirm readiness before filing.</p>`,
+      },
+      {
+        folder:  'Module 2: Summaries',
+        content: `<p>📝 <strong>Summaries draft</strong></p>
+<p>Post working versions of the Quality Overall Summary (QOS), Nonclinical Overview, and Clinical Overview here for team review. Note the version number and any sections still pending sign-off.</p>`,
+      },
+      {
+        folder:  'Module 5: Clinical',
+        content: `<p>📄 <strong>Clinical study reports</strong></p>
+<p>Add the key studies supporting the submission here using the paper post type. Include the CSR reference number, study phase, and whether the study is pivotal or supportive.</p>`,
+      },
+      {
+        folder:  'Submission Checklist',
+        content: `<p>✅ <strong>Pre-submission checklist</strong></p>
+<p>All modules complete · Agency formatting requirements met · Cover letter drafted · Regional annexes prepared · Internal sign-off obtained · Submission date confirmed.</p>`,
+      },
+    ],
+    previewPosts: [
+      { author: 'Dr. K. Hoffmann (Regulatory Affairs)', folder: 'Module 5: Clinical', content: 'Module 5 index updated — 47 clinical study reports included. The Japan-specific bridging study is now in section 5.3.5.4. Flagging for Medical Affairs review before we lock.', likes: 4, comments: 3 },
+      { author: 'T. Nakamura (CMC Lead)', folder: 'Module 3: Quality', content: 'Module 3 draft ready for QA review. Main open item is the updated stability data — expecting final readout Friday.', likes: 2, comments: 5 },
+    ],
+  },
+
   product_launch: {
     type:           'product_launch',
     label:          'Product Launch',
