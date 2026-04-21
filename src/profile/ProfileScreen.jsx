@@ -1484,7 +1484,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <div style={{gridColumn:'span 2'}}>
                       <PF label="Work address" field="card_address" form={form} setForm={setForm} placeholder="1-1 Marunouchi, Tokyo 100-0005"/>
                     </div>
-                    <PF label="Direct work phone (optional)" field="work_phone" form={form} setForm={setForm} placeholder="+81 3 1234 5678"/>
+                    <PF label="Mobile phone" field="work_phone" form={form} setForm={setForm} placeholder="+81 90 1234 5678"/>
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginTop:4,marginBottom:2}}>Visibility on public card</div>
                   <VisibilityToggle label="Show work email"        value={form.card_show_email}         onChange={v=>setForm(f=>({...f,card_show_email:v}))}/>
@@ -1494,7 +1494,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   <VisibilityToggle label="Show personal website"  value={form.card_show_website}       onChange={v=>setForm(f=>({...f,card_show_website:v}))}/>
                   <VisibilityToggle label="Show ORCID"             value={form.card_show_orcid}         onChange={v=>setForm(f=>({...f,card_show_orcid:v}))}/>
                   <VisibilityToggle label="Show Twitter / X"       value={form.card_show_twitter}       onChange={v=>setForm(f=>({...f,card_show_twitter:v}))}/>
-                  <VisibilityToggle label="Show direct work phone" value={form.card_show_work_phone}    onChange={v=>setForm(f=>({...f,card_show_work_phone:v}))}/>
+                  <VisibilityToggle label="Show mobile phone" value={form.card_show_work_phone} onChange={v=>setForm(f=>({...f,card_show_work_phone:v}))}/>
 
                   <div style={{display:'flex',gap:8,marginTop:4}}>
                     <Btn onClick={()=>setEditingCard(false)}>Cancel</Btn>
@@ -1508,7 +1508,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                     <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
                       {profile.card_email    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>✉️</span><span style={{flex:1,color:T.text}}>{profile.card_email}</span>{!profile.card_show_email&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.card_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📞</span><span style={{flex:1,color:T.text}}>{profile.card_phone}</span>{!profile.card_show_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
-                      {profile.work_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📞</span><span style={{flex:1,color:T.text}}>{profile.work_phone} <span style={{color:T.mu,fontSize:11}}>(direct)</span></span>{!profile.card_show_work_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
+                      {profile.work_phone    && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>📱</span><span style={{flex:1,color:T.text}}>{profile.work_phone}</span>{!profile.card_show_work_phone&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.card_linkedin && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>💼</span><span style={{flex:1,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile.card_linkedin}</span>{!profile.card_show_linkedin&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.card_website  && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>🌐</span><span style={{flex:1,color:T.text}}>{profile.card_website}</span>{!profile.card_show_website&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}
                       {profile.orcid         && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}><span style={{width:18,textAlign:'center'}}>🔬</span><span style={{flex:1,color:T.text}}>orcid.org/{profile.orcid}</span>{!profile.card_show_orcid&&<span style={{color:T.mu,fontSize:11}}>hidden</span>}</div>}

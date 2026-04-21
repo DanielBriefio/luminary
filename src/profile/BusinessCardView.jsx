@@ -136,7 +136,7 @@ export function BusinessCardView({ profile, currentUserId }) {
                 {profile.card_show_website  && profile.card_website  && <ContactRow icon="🌐" label={profile.card_website}  href={profile.card_website.startsWith('http')?profile.card_website:`https://${profile.card_website}`}/>}
                 {profile.card_show_orcid    && profile.orcid         && <ContactRow icon="🔬" label={`orcid.org/${profile.orcid}`} href={`https://orcid.org/${profile.orcid}`}/>}
                 {profile.card_show_twitter      && profile.twitter      && <ContactRow icon="𝕏"  label={`@${profile.twitter.replace('@','')}`} href={`https://x.com/${profile.twitter.replace('@','')}`}/>}
-                {profile.card_show_work_phone   && profile.work_phone   && <ContactRow icon="📞" label={profile.work_phone}   href={`tel:${profile.work_phone}`}/>}
+                {profile.card_show_work_phone   && profile.work_phone   && <ContactRow icon="📱" label={profile.work_phone}   href={`tel:${profile.work_phone}`}/>}
                 {profile.card_show_work_address && profile.work_address && <ContactRow icon="📍" label={profile.work_address}/>}
               </div>
             </>
