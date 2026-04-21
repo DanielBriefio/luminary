@@ -386,6 +386,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       else if(parts.length===2){ fn=parts[0]; ln=parts[1]; }
       else { fn=parts[0]; ln=parts[parts.length-1]; mn=parts.slice(1,-1).join(' '); }
     }
+    setShowClinicalFields(profile.work_mode === 'clinician' || profile.work_mode === 'both');
     setForm({
       name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',
       title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',
@@ -904,8 +905,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                         <input value={form.patient_population||''} onChange={e=>setForm(f=>({...f,patient_population:e.target.value}))} placeholder="e.g. Adult cardiology, heart failure focus" style={inputStyle}/>
                       </div>
                       <div>
-                        <label style={labelStyle}>Additional qualifications <span style={{fontSize:11,color:T.mu,fontWeight:400,marginLeft:6}}>(Zusatzqualifikationen, special certifications)</span></label>
-                        <QualChipInput value={form.additional_quals||[]} onChange={v=>setForm(f=>({...f,additional_quals:v}))} placeholder="Type a qualification and press Enter..."/>
+                        <label style={labelStyle}>Additional qualifications</label>
+                        <QualChipInput value={form.additional_quals||[]} onChange={v=>setForm(f=>({...f,additional_quals:v}))} placeholder="e.g. Endoscopy, Palliative Care, Traditional Chinese Medicine, TAVI, Robotic Surgery..."/>
                       </div>
                       <div>
                         <label style={labelStyle}>Profile highlight <span style={{fontSize:11,color:T.mu,fontWeight:400,marginLeft:6}}>(shown in your stats row)</span></label>
@@ -985,13 +986,14 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                       {profile.identity_tier2}
                     </span>
                   )}
-                  {profile?.work_mode && profile.work_mode !== 'researcher' && (() => {
+                  {WORK_MODE_MAP[profile?.work_mode] && (() => {
                     const modeColors = {
+                      researcher:{ bg:T.s3,      color:T.mu,      border:T.bdr },
                       clinician: { bg:'#e8f5e9', color:'#2e7d32', border:'rgba(46,125,50,.2)' },
                       industry:  { bg:'#fff8e1', color:'#f57f17', border:'rgba(245,127,23,.2)' },
                       both:      { bg:T.v2,      color:T.v,       border:'rgba(108,99,255,.2)' },
                     };
-                    const c = modeColors[profile.work_mode] || modeColors.both;
+                    const c = modeColors[profile.work_mode] || modeColors.researcher;
                     return (
                       <span style={{fontSize:11.5,fontWeight:600,padding:'4px 12px',borderRadius:20,background:c.bg,color:c.color,border:`1px solid ${c.border}`}}>
                         {WORK_MODE_MAP[profile.work_mode]?.icon} {WORK_MODE_MAP[profile.work_mode]?.label}
@@ -1000,12 +1002,37 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   })()}
                 </div>
               )}
+              {/* "Qualified in" chips — clinician/both with additional_quals */}
+              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'both') && (profile?.additional_quals || []).length > 0 && (
+                <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                  <span style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.05em',flexShrink:0}}>Qualified in</span>
+                  {(profile.additional_quals).map(q => (
+                    <span key={q} style={{fontSize:11.5,fontWeight:600,padding:'3px 10px',borderRadius:20,background:'#e8f5e9',color:'#2e7d32',border:'1px solid rgba(46,125,50,.2)'}}>{q}</span>
+                  ))}
+                </div>
+              )}
               <div style={{fontSize:13,color:T.mu,marginBottom:12,display:'flex',gap:12,flexWrap:'wrap'}}>
                 {profile?.institution&&<span>🏛️ {profile.institution}</span>}
                 {profile?.location&&<span>📍 {profile.location}</span>}
                 {profile?.orcid&&<a href={`https://orcid.org/${profile.orcid}`} target="_blank" rel="noopener noreferrer" style={{color:T.gr,textDecoration:'none',fontWeight:600}}>ORCID ↗</a>}
               </div>
               {profile?.bio&&<div style={{marginBottom:14,maxWidth:620}}><ExpandableBio text={profile.bio}/></div>}
+              {/* Clinical details block — clinician/both */}
+              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'both') && (
+                profile?.subspeciality || profile?.primary_hospital || profile?.patient_population
+              ) && (
+                <div style={{background:T.s2,border:`1px solid ${T.bdr}`,borderRadius:10,padding:'12px 14px',marginBottom:14,display:'flex',flexWrap:'wrap',gap:12,fontSize:12.5,color:T.text}}>
+                  {profile.subspeciality && (
+                    <span><span style={{color:T.mu,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>Speciality </span>{profile.subspeciality}</span>
+                  )}
+                  {profile.primary_hospital && (
+                    <span>🏥 {profile.primary_hospital}</span>
+                  )}
+                  {profile.patient_population && (
+                    <span><span style={{color:T.mu,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>Patients </span>{profile.patient_population}</span>
+                  )}
+                </div>
+              )}
               {!profile?.name&&(
                 <div style={{background:T.v2,border:`1px solid rgba(108,99,255,.2)`,borderRadius:10,padding:'12px 16px',marginBottom:12,fontSize:12.5,color:T.v,fontWeight:600}}>
                   👆 Click Edit to add your profile, or Import from LinkedIn to populate everything automatically.

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T, TIER1_LIST, getTier2, DISCUSSION_PROMPTS, ZERO_COMMENT_PROMPTS, getDiscussionPrompts, WORK_MODE_MAP } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, DISCUSSION_PROMPTS, ZERO_COMMENT_PROMPTS, getDiscussionPrompts } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import { useWindowSize } from '../lib/useWindowSize';
 import Av from '../components/Av';
@@ -287,11 +287,6 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
               {post.author_identity_tier2&&(
                 <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:T.v2,color:T.v,border:`1px solid rgba(108,99,255,.2)`}}>
                   {post.author_identity_tier2}
-                </span>
-              )}
-              {!isMobile && post.author_work_mode && post.author_work_mode !== 'researcher' && (
-                <span title={WORK_MODE_MAP[post.author_work_mode]?.label} style={{fontSize:12,opacity:0.7}}>
-                  {WORK_MODE_MAP[post.author_work_mode]?.icon}
                 </span>
               )}
             </div>
