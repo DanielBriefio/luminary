@@ -439,7 +439,7 @@ function TemplatePreviewModal({ tpl, tab, onClose, onApprove, onReject }) {
                     overflow: 'hidden', display: '-webkit-box',
                     WebkitLineClamp: 4, WebkitBoxOrient: 'vertical',
                   }}>
-                    {post.content || '(empty)'}
+                    {stripHtml(post.content) || '(empty)'}
                   </div>
                 </div>
               ))}
@@ -482,4 +482,9 @@ function safeParseJson(val, fallback) {
   if (!val) return fallback;
   if (typeof val === 'object') return val;
   try { return JSON.parse(val); } catch { return fallback; }
+}
+
+function stripHtml(html) {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, '').trim();
 }
