@@ -446,7 +446,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       else if(parts.length===2){ fn=parts[0]; ln=parts[1]; }
       else { fn=parts[0]; ln=parts[parts.length-1]; mn=parts.slice(1,-1).join(' '); }
     }
-    setShowClinicalFields(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both');
+    setShowClinicalFields(profile.work_mode === 'clinician');
     setForm({
       name_prefix:profile.name_prefix||'',first_name:fn,middle_name:mn,last_name:ln,name_suffix:profile.name_suffix||'',
       title:profile.title||'',institution:profile.institution||'',location:profile.location||'',bio:profile.bio||'',
@@ -928,7 +928,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                 <PF label="Current role / title" field="title" form={form} setForm={setForm} placeholder="Professor of Cardiology"/>
-                <PF label={(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist') ? 'Hospital / Clinic' : 'Institution / Organisation'} field="institution" form={form} setForm={setForm} placeholder={(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist') ? 'e.g. Tokyo University Hospital' : 'University of Tokyo'}/>
+                <PF label={form.work_mode === 'clinician' ? 'Hospital / Clinic' : 'Institution / Organisation'} field="institution" form={form} setForm={setForm} placeholder={form.work_mode === 'clinician' ? 'e.g. Tokyo University Hospital' : 'University of Tokyo'}/>
                 <PF label="City" field="location_city" form={form} setForm={setForm} placeholder="Tokyo"/>
                 <PF label="Country" field="location_country" form={form} setForm={setForm} placeholder="Japan"/>
               </div>
@@ -969,8 +969,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/yourname"/>
               </div>
 
-              {/* Clinical Profile section — clinician/clinician_scientist/both */}
-              {(form.work_mode === 'clinician' || form.work_mode === 'clinician_scientist' || form.work_mode === 'both') && (
+              {/* Clinical Profile section — clinician only */}
+              {form.work_mode === 'clinician' && (
                 <div style={{border:`1px solid ${T.bdr}`,borderRadius:12,overflow:'hidden',marginTop:16,marginBottom:4}}>
                   <button onClick={()=>setShowClinicalFields(s=>!s)}
                     style={{width:'100%',padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',border:'none',background:T.s2,cursor:'pointer',fontFamily:'inherit'}}>
@@ -1046,8 +1046,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   <span>{WORK_MODE_MAP[profile.work_mode]?.label}</span>
                 </div>
               )}
-              {/* Qualifications — clinician / clinician_scientist / both (backward compat) */}
-              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist' || profile?.work_mode === 'both') && (profile?.additional_quals || []).length > 0 && (
+              {/* Qualifications — clinician only */}
+              {profile?.work_mode === 'clinician' && (profile?.additional_quals || []).length > 0 && (
                 <>
                   <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:4}}>Qualifications</div>
                   <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:6}}>
@@ -1070,8 +1070,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 {profile?.orcid&&<a href={`https://orcid.org/${profile.orcid}`} target="_blank" rel="noopener noreferrer" style={{color:T.gr,textDecoration:'none',fontWeight:600}}>ORCID ↗</a>}
               </div>
               {profile?.bio&&<div style={{marginBottom:14,maxWidth:620}}><ExpandableBio text={profile.bio}/></div>}
-              {/* Clinical details block — clinician/clinician_scientist/both */}
-              {(profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist' || profile?.work_mode === 'both') && (
+              {/* Clinical details block — clinician only */}
+              {profile?.work_mode === 'clinician' && (
                 profile?.subspeciality || profile?.patient_population
               ) && (
                 <div style={{background:T.s2,border:`1px solid ${T.bdr}`,borderRadius:10,padding:'12px 14px',marginBottom:14,display:'flex',flexWrap:'wrap',gap:12,fontSize:12.5,color:T.text}}>
@@ -1089,7 +1089,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                 </div>
               )}
               {(() => {
-                const isClinician = profile?.work_mode === 'clinician' || profile?.work_mode === 'clinician_scientist' || profile?.work_mode === 'both';
+                const isClinician = profile?.work_mode === 'clinician';
                 const statsRow = isClinician ? [
                   [followStats.followers, 'Followers', 'followers', false],
                   [followStats.following, 'Following', 'following', false],
