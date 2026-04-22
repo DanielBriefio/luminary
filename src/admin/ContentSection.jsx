@@ -6,6 +6,7 @@ import { timeAgo } from '../lib/utils';
 
 const TABS = [
   { id: 'posts',      label: '📝 Posts'      },
+  { id: 'papers',     label: '📄 Papers'     },
   { id: 'groups',     label: '👥 Groups'     },
   { id: 'projects',   label: '🗂️ Projects'   },
   { id: 'moderation', label: '🚩 Moderation' },
@@ -64,6 +65,7 @@ export default function ContentSection({ supabase }) {
       </div>
 
       {tab === 'posts'      && <PostsTab      supabase={supabase} />}
+      {tab === 'papers'     && <PapersTab     supabase={supabase} />}
       {tab === 'groups'     && <GroupsTab     supabase={supabase} />}
       {tab === 'projects'   && <ProjectsTab   supabase={supabase} />}
       {tab === 'moderation' && <ModerationTab supabase={supabase} />}
@@ -365,11 +367,136 @@ function PostRow({
           {post.is_hidden ? 'Unhide' : 'Hide'}
         </button>
 
+        {/* View */}
+        <a href={`/s/${post.id}`} target="_blank" rel="noopener noreferrer"
+          style={{ ...actionBtn(T.bl, false), textDecoration: 'none', display: 'inline-block' }}>
+          View →
+        </a>
+
         {/* Delete */}
         <button onClick={onDelete} disabled={acting} style={actionBtn(T.ro, acting)}>
           Delete
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── PapersTab ────────────────────────────────────────────────────────────────
+
+function getPaperKPI(participants) {
+  if (participants >= 3) return 'active';
+  if (participants === 2) return 'growing';
+  return 'quiet';
+}
+
+const PAPER_KPI = {
+  active:  { bg: T.gr2, color: T.gr, label: '🟢 Active',  desc: '3+ participants' },
+  growing: { bg: T.am2, color: T.am, label: '🟡 Growing', desc: '2 participants'  },
+  quiet:   { bg: T.s3,  color: T.mu, label: '⚪ Quiet',   desc: '1 participant'   },
+};
+
+function PapersTab({ supabase }) {
+  const [papers, setPapers]             = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [healthFilter, setHealthFilter] = useState('');
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const { data } = await supabase.rpc('get_paper_health');
+      setPapers(data || []);
+      setLoading(false);
+    };
+    load();
+  }, [supabase]);
+
+  const filtered = healthFilter
+    ? papers.filter(p => getPaperKPI(p.participants) === healthFilter)
+    : papers;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <select value={healthFilter} onChange={e => setHealthFilter(e.target.value)} style={selectStyle}>
+          <option value="">All papers</option>
+          <option value="active">🟢 Active (3+ participants)</option>
+          <option value="growing">🟡 Growing (2 participants)</option>
+          <option value="quiet">⚪ Quiet (1 participant)</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center' }}><Spinner /></div>
+      ) : papers.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: T.mu, fontSize: 14 }}>
+          No papers discussed yet.
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: T.mu, fontSize: 14 }}>
+          No papers match this filter.
+        </div>
+      ) : (
+        <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12, overflow: 'hidden' }}>
+          {/* Header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 100px 110px 90px 140px',
+            padding: '10px 16px',
+            borderBottom: `1px solid ${T.bdr}`,
+            fontSize: 11, fontWeight: 600, color: T.mu,
+            textTransform: 'uppercase', letterSpacing: 0.4,
+          }}>
+            <div>Paper</div>
+            <div>Discussions</div>
+            <div>Participants</div>
+            <div>Comments</div>
+            <div>Health</div>
+          </div>
+
+          {filtered.map((row, i) => {
+            const kpi = getPaperKPI(row.participants);
+            const h   = PAPER_KPI[kpi];
+            return (
+              <div key={row.paper_doi} style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 100px 110px 90px 140px',
+                padding: '12px 16px',
+                borderBottom: i === filtered.length - 1 ? 'none' : `1px solid ${T.bdr}`,
+                alignItems: 'center',
+                background: kpi === 'active'
+                  ? 'rgba(16,185,129,.06)'
+                  : kpi === 'growing'
+                  ? 'rgba(245,158,11,.06)'
+                  : 'transparent',
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.paper_title || row.paper_doi}
+                  </div>
+                  {row.paper_journal && (
+                    <div style={{ fontSize: 11, color: T.mu, marginTop: 2 }}>{row.paper_journal}</div>
+                  )}
+                </div>
+                <div style={{ fontSize: 13, color: T.mu }}>{row.discussions}</div>
+                <div style={{
+                  fontSize: 13, fontWeight: row.participants >= 3 ? 700 : 400,
+                  color: row.participants >= 3 ? T.gr : row.participants === 2 ? T.am : T.mu,
+                }}>
+                  {row.participants}
+                </div>
+                <div style={{ fontSize: 13, color: T.mu }}>{row.total_comments}</div>
+                <div>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: h.bg, color: h.color }}>
+                    {h.label}
+                  </span>
+                  <div style={{ fontSize: 10, color: T.mu, marginTop: 2 }}>{h.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
