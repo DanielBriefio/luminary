@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { T } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
@@ -61,6 +61,18 @@ export default function InvitesSection({ supabase }) {
   });
 
   const countFor = id => id === 'all' ? codes.length : codes.filter(c => codeType(c) === id).length;
+
+  // Per-creator usage stats for personal codes (promoter KPI)
+  const creatorStats = useMemo(() => {
+    const stats = {};
+    codes.filter(c => !c.is_multi_use).forEach(c => {
+      const key = c.created_by_name || '—';
+      if (!stats[key]) stats[key] = { total: 0, used: 0 };
+      stats[key].total++;
+      if (c.claimed_by || c.uses_count > 0) stats[key].used++;
+    });
+    return stats;
+  }, [codes]);
 
   // Expand/tree
   const toggleExpand = async (code) => {
@@ -245,7 +257,7 @@ export default function InvitesSection({ supabase }) {
           {/* Column headers */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '36px 1fr 1fr 80px 100px 90px 90px 72px',
+            gridTemplateColumns: '36px 1fr 1fr 160px 80px 90px 80px 80px 64px',
             padding: '10px 16px',
             borderBottom: `1px solid ${T.bdr}`,
             fontSize: 11.5, fontWeight: 600, color: T.mu,
@@ -262,6 +274,7 @@ export default function InvitesSection({ supabase }) {
             </div>
             <div>Code</div>
             <div>Label</div>
+            <div>Created by</div>
             <div>Type</div>
             <div>Uses</div>
             <div>Expires</div>
@@ -282,6 +295,7 @@ export default function InvitesSection({ supabase }) {
               onRefresh={load}
               selected={selected.has(code.id)}
               onSelect={() => toggleSelect(code.id)}
+              creatorStat={creatorStats[code.created_by_name || '—']}
             />
           ))}
         </div>
@@ -319,18 +333,23 @@ function BulkBtn({ children, onClick, disabled, danger }) {
 
 // ─── CodeRow ─────────────────────────────────────────────────────────────────
 
-function CodeRow({ code, isLast, expanded, onToggle, tree, treeLoading, supabase, onRefresh, selected, onSelect }) {
+function CodeRow({ code, isLast, expanded, onToggle, tree, treeLoading, supabase, onRefresh, selected, onSelect, creatorStat }) {
   const st = STATUS_STYLES[code.status] || STATUS_STYLES.active;
   const usesLabel = code.is_multi_use
     ? `${code.uses_count ?? 0}${code.max_uses != null ? ` / ${code.max_uses}` : ''}`
     : code.claimed_by ? '1 / 1' : '0 / 1';
+
+  // Promoter score: only meaningful for personal codes where each user gets N codes
+  const showPromoterBadge = !code.is_multi_use && creatorStat && creatorStat.total > 1;
+  const promoterRatio = creatorStat ? creatorStat.used / creatorStat.total : 0;
+  const promoterColor = promoterRatio >= 0.6 ? T.gr : promoterRatio >= 0.2 ? T.am : T.mu;
 
   return (
     <>
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '36px 1fr 1fr 80px 100px 90px 90px 72px',
+          gridTemplateColumns: '36px 1fr 1fr 160px 80px 90px 80px 80px 64px',
           padding: '11px 16px',
           borderBottom: (!isLast || expanded) ? `1px solid ${T.bdr}` : 'none',
           background: selected ? T.v2 : expanded ? T.s2 : 'transparent',
@@ -362,6 +381,18 @@ function CodeRow({ code, isLast, expanded, onToggle, tree, treeLoading, supabase
         {/* Label */}
         <div onClick={onToggle} style={{ fontSize: 13, color: T.mu, cursor: 'pointer' }}>
           {code.label || code.batch_label || '—'}
+        </div>
+
+        {/* Created by */}
+        <div onClick={onToggle} style={{ cursor: 'pointer' }}>
+          <div style={{ fontSize: 13, color: T.text, fontWeight: 500, lineHeight: 1.3 }}>
+            {code.created_by_name || '—'}
+          </div>
+          {showPromoterBadge && (
+            <div style={{ fontSize: 11, color: promoterColor, fontWeight: 600, marginTop: 2 }}>
+              {creatorStat.used}/{creatorStat.total} shared
+            </div>
+          )}
         </div>
 
         {/* Type */}
