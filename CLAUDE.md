@@ -73,6 +73,7 @@ src/
     SafeHtml.jsx                 — Sanitized HTML renderer
     RichTextEditor.jsx           — contenteditable editor with bold/italic/link toolbar
     ConflictResolverModal.jsx    — Dedup conflict resolution UI for imports
+    ReportModal.jsx              — Report post modal: 5 reason options, optional note (200 chars), duplicate-report error handling
     ExpandableBio.jsx            — Truncated bio with expand toggle
     Linkify.jsx                  — Auto-link URLs in text
     LinkPreview.jsx              — URL preview card
@@ -151,6 +152,7 @@ src/
     UserDetailPanel.jsx          — 400px slide-in panel: stats grid, recent posts, groups, admin notes (saves on blur), "Send nudge" button
     BulkNudgeModal.jsx           — Nudge compose modal: 4 quick-fill templates + free compose; calls send_admin_nudge RPC as Luminary Team bot
     TemplatesSection.jsx         — Template approval: pending/approved/rejected tabs; preview modal; approve/reject/restore/unpublish actions
+    ContentSection.jsx           — Content management: Posts (paginated, feature/hide/delete, report badge), Groups/Projects health tables, Moderation queue
     InboxSection.jsx             — Bot conversation inbox: conversation list + real-time thread; replies sent via send_bot_message RPC
   library/
     LibraryClinicalTrialSearch.jsx — ClinicalTrials.gov API v2 search; returns study cards for library import
@@ -314,7 +316,7 @@ Profile sections (stored as JSONB arrays in `profiles`):
 
 ### Admin Panel (`AdminShell`)
 - Gated via `is_admin boolean` on `profiles`; non-admins hit NotFoundScreen (route existence hidden)
-- Left nav (220px): Overview / Users / Invites / Templates / Inbox / Analytics — Analytics is placeholder; all others fully implemented
+- Left nav (220px): Overview / Users / Invites / Templates / Content / Analytics — Analytics is placeholder; all others fully implemented; Inbox section component exists but not in nav (reachable via direct section state)
 - Mounted at `screen === 'admin'` in App.jsx
 - Main content area: `padding: 0, overflow: hidden` when `section === 'inbox'`; normal `28px 32px` padding + `overflow: auto` otherwise
 
@@ -351,6 +353,23 @@ Profile sections (stored as JSONB arrays in `profiles`):
 - **Rejected tab**: "Restore to pending" button
 - Preview modal: full template detail — icon, name, used_by, description, folder chips, starter posts with folder label + sticky indicator + content (4-line clamp); Approve/Reject footer buttons (pending only); backdrop click or ✕ closes
 - At-risk alert in OverviewSection "Review templates →" navigates directly to Templates section
+
+**Content section** (`ContentSection`):
+- Four tabs: Posts / Groups / Projects / Moderation
+- **Posts tab**: paginated post table (50/page) via `get_admin_posts` RPC; filters: text search, post type, featured, hidden; reported posts highlighted amber and sorted to top; actions: Feature (with duration picker: 24h/48h/7d/Permanent), Unfeature, Hide/Unhide, Delete
+- **Groups tab**: health table via `get_content_health` RPC; columns: name, member count, posts/week, last active, health badge (🟢 Active/🟡 Quiet/🔴 Dead); health filter dropdown
+- **Projects tab**: same as groups tab but for active projects; project icon shown
+- **Moderation tab**: reported posts queue via `get_moderation_queue` RPC; status filter (pending/dismissed/actioned); each item shows content preview, author, report count badge, individual reporter names/reasons/notes (up to 3 + overflow count); actions: Dismiss, Hide post (public posts only), Delete post
+
+**Post reporting** (user-facing):
+- Non-owner authenticated users see 🚩 Report in the ··· menu of PostCard and GroupPostCard
+- ReportModal: 5 reasons (spam/misinformation/inappropriate/off_topic/other), optional note (200 chars), duplicate-report error (code 23505)
+- Admin report badge on PostCard when `currentProfile?.is_admin && post.report_count > 0`
+
+**Featured posts** (FeedScreen):
+- `is_hidden = true` posts filtered from feed query (both For You and Following)
+- Featured posts (`is_featured = true`, optionally `featured_until`) sort to top of For You feed
+- Featured badge (✦ Featured) shown on PostCard when `isFeatured` prop is true
 
 **Inbox section** (`InboxSection`):
 - 280px conversation list + flex-1 thread panel; fills full height (no outer padding)
@@ -411,6 +430,15 @@ work_street (TEXT), work_city (TEXT), work_postal_code (TEXT), work_country (TEX
 location_city (TEXT), location_country (TEXT),
 admin_notes (TEXT) — internal admin-only field, never shown to users
 
+### `post_reports`
+id, post_id (FK posts, nullable), group_post_id (FK group_posts, nullable),
+reporter_id (FK profiles NOT NULL), reason (TEXT: spam/misinformation/inappropriate/off_topic/other),
+note (TEXT, nullable), status (TEXT: pending/dismissed/actioned, default 'pending'),
+created_at
+- UNIQUE(post_id, reporter_id), UNIQUE(group_post_id, reporter_id)
+- CHECK: exactly one of post_id / group_post_id must be set
+- RLS: pr_insert (reporter_id = auth.uid()); pr_select_own (own row or is_admin); pr_update_admin (is_admin)
+
 ### `posts`
 id, user_id, content, post_type, visibility,
 paper_title, paper_journal, paper_doi, paper_abstract, paper_authors, paper_year,
@@ -420,13 +448,16 @@ image_url, file_type, file_name,
 tags (TEXT[]), tier1, tier2 (TEXT[]),
 group_id (uuid, nullable), group_name (TEXT, nullable),
 is_deep_dive (bool),
+is_featured (bool, default false), featured_until (timestamptz, nullable),
+is_hidden (bool, default false),
 created_at
 
 ### `posts_with_meta`
 VIEW: posts + author profile fields + like_count, comment_count, repost_count,
 user_liked (bool), user_reposted (bool),
 author_work_mode, author_slug (profile_slug),
-— includes paper_citation, group_id, group_name, is_deep_dive from posts table
+report_count (int — pending reports, visible to all but meaningful only for admins),
+— includes all posts columns via p.* (paper_citation, group_id, group_name, is_deep_dive, is_featured, featured_until, is_hidden)
 
 ### `likes`
 id, user_id, post_id, created_at
@@ -683,6 +714,19 @@ Key policies (as of DB snapshot 2026-04-22, groups_select fixed post-snapshot):
 
 **`claim_invite_code(p_code text)`** — SECURITY DEFINER (pre-existing)
 - Used only for personal (single-use) codes at signup; sets `claimed_by` and `claimed_at`
+
+**`get_admin_posts(p_limit, p_offset, p_search, p_type, p_featured, p_hidden)`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns paginated posts with author info + report_count; reported posts sorted first; excludes milestone/admin_nudge types
+- Returns `{ total, posts }` JSONB; called by ContentSection PostsTab
+
+**`get_content_health()`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns `{ groups, projects }` JSONB; each item has member_count, posts_this_week, last_post_at, health (active/quiet/dead)
+- Health: active = posted in last 7 days; quiet = 8–14 days; dead = 14+ days
+- Called by ContentSection Groups and Projects tabs
+
+**`get_moderation_queue(p_status text)`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns reported posts (public + group) aggregated with report_count, latest_report, reports array (reporter/reason/note)
+- Ordered by report_count desc; called by ContentSection Moderation tab
 
 ## Edge Functions (Supabase)
 
