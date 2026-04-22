@@ -10,6 +10,7 @@ import FilePreview from '../components/FilePreview';
 import PaperPreview from '../components/PaperPreview';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
+import ReportModal from '../components/ReportModal';
 
 function GranularTags({ tags }) {
   const [expanded, setExpanded] = useState(false);
@@ -64,6 +65,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
   const [editTier2,   setEditTier2]   = useState(post.tier2 || []);
   const [editTags,    setEditTags]    = useState(post.tags  || []);
 
+  const [showReport,       setShowReport]       = useState(false);
   const [abstractExpanded, setAbstractExpanded] = useState(false);
   const [topComment,       setTopComment]       = useState(null);
   const [commenterAvatars, setCommenterAvatars] = useState([]);
@@ -278,6 +280,21 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
               {post.edited_at && <span> · edited</span>}
             </div>
           </div>
+
+          {/* ··· report menu for non-managing members */}
+          {currentUserId && !canManage && (
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setMenuOpen(!menuOpen)} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: menuOpen ? T.s2 : 'transparent', cursor: 'pointer', fontSize: 16, color: T.mu, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>···</button>
+              {menuOpen && (
+                <>
+                  <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9 }}/>
+                  <div style={{ position: 'absolute', right: 0, top: 32, background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 11, boxShadow: '0 4px 20px rgba(0,0,0,.12)', zIndex: 10, minWidth: 140, overflow: 'hidden' }}>
+                    <button onClick={() => { setShowReport(true); setMenuOpen(false); }} style={menuItemStyle(T.text)}>🚩 Report</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* ··· menu for owners and admins */}
           {canManage && (
@@ -618,6 +635,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
           )}
         </div>
       )}
+      {showReport && <ReportModal supabase={supabase} groupPostId={post.id} onClose={() => setShowReport(false)}/>}
     </div>
   );
 }

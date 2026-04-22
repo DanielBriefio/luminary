@@ -12,6 +12,7 @@ import PaperPreview from '../components/PaperPreview';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
+import ReportModal from '../components/ReportModal';
 
 function GranularTags({ tags, onTagClick }) {
   const [expanded, setExpanded] = useState(false);
@@ -35,7 +36,7 @@ function GranularTags({ tags, onTagClick }) {
   );
 }
 
-export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup, isSaved = false, onSaveToggled }) {
+export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup, isSaved = false, onSaveToggled, isFeatured = false }) {
   const { isMobile } = useWindowSize();
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
@@ -53,6 +54,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   const [confirmDelete,setConfirmDelete] = useState(false);
   const [showComments,setShowComments]   = useState(false);
   const [showShare,setShowShare]         = useState(false);
+  const [showReport,setShowReport]       = useState(false);
 
   const [comments,  setComments]   = useState([]);
   const [commLoaded,setCommLoaded] = useState(false);
@@ -367,11 +369,42 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
               {post.author_institution&&`${post.author_institution} · `}{timeAgo(post.created_at)}
               {post.edited_at&&<span style={{color:T.mu,fontSize:10}}> · edited</span>}
             </div>
+            {(isFeatured || (currentProfile?.is_admin && post.report_count > 0)) && (
+              <div style={{display:'flex',gap:4,marginTop:3,flexWrap:'wrap'}}>
+                {isFeatured && (
+                  <span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,fontWeight:700,color:T.v,background:T.v2,padding:'2px 8px',borderRadius:20}}>
+                    ✦ Featured
+                  </span>
+                )}
+                {currentProfile?.is_admin && post.report_count > 0 && (
+                  <span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,fontWeight:700,color:T.am,background:T.am2,padding:'2px 8px',borderRadius:20}}>
+                    🚩 {post.report_count} report{post.report_count > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {!isOwner&&post.user_id&&(
             <FollowBtn targetType="user" targetId={post.user_id} currentUserId={currentUserId}
               onToggle={nowFollowing => { if (!nowFollowing) onUnfollow?.(post.user_id); }}/>
+          )}
+
+          {currentUserId&&!isOwner&&(
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setMenuOpen(!menuOpen)}
+                style={{width:28,height:28,borderRadius:"50%",border:"none",background:menuOpen?T.s2:"transparent",cursor:"pointer",fontSize:16,color:T.mu,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                ···
+              </button>
+              {menuOpen&&(
+                <>
+                  <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:9}}/>
+                  <div style={{position:"absolute",right:0,top:32,background:T.w,border:`1px solid ${T.bdr}`,borderRadius:11,boxShadow:"0 4px 20px rgba(0,0,0,.12)",zIndex:10,minWidth:140,overflow:"hidden"}}>
+                    <button onClick={()=>{setShowReport(true);setMenuOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.text,textAlign:"left"}}>🚩 Report</button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {isOwner&&(
@@ -733,6 +766,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       )}
 
       {showShare && <ShareModal post={post} onClose={()=>setShowShare(false)}/>}
+      {showReport && <ReportModal supabase={supabase} postId={post.id} onClose={()=>setShowReport(false)}/>}
     </div>
   );
 }

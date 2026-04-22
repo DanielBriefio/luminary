@@ -5,13 +5,14 @@ import InvitesSection from './InvitesSection';
 import TemplatesSection from './TemplatesSection';
 import UsersSection from './UsersSection';
 import InboxSection from './InboxSection';
+import ContentSection from './ContentSection';
 
 const NAV_ITEMS = [
   { id: 'overview',   label: 'Overview',  icon: '📊' },
   { id: 'users',      label: 'Users',     icon: '👥' },
   { id: 'invites',    label: 'Invites',   icon: '🎟️' },
   { id: 'templates',  label: 'Templates', icon: '📋' },
-  { id: 'inbox',      label: 'Inbox',     icon: '💬' },
+  { id: 'content',    label: 'Content',   icon: '🗂️' },
   { id: 'analytics',  label: 'Analytics', icon: '📈' },
 ];
 
@@ -139,6 +140,8 @@ export default function AdminShell({ supabase, user, profile }) {
           ? <InvitesSection supabase={supabase} />
           : section === 'templates'
           ? <TemplatesSection supabase={supabase} />
+          : section === 'content'
+          ? <ContentSection supabase={supabase} />
           : section === 'inbox'
           ? <InboxSection supabase={supabase} />
           : <AdminSectionPlaceholder section={section} />

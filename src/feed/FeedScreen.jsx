@@ -148,7 +148,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     }
 
     // ── 2. Regular posts ─────────────────────────────────────────────────
-    let postQ = supabase.from('posts_with_meta').select('*').order('created_at',{ascending:false}).limit(30);
+    let postQ = supabase.from('posts_with_meta').select('*').eq('is_hidden', false).order('created_at',{ascending:false}).limit(30);
     if (fp === 'fol') {
       const orParts = [];
       if (followedUserIds.length)  orParts.push(`user_id.in.(${followedUserIds.join(',')})`);
@@ -316,9 +316,24 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       p.post_type !== 'milestone' || p.user_id === user?.id
     );
 
+    // Featured post elevation (For You tab only)
+    let visibleFinal = visible;
+    if (fp === 'sug') {
+      const now = new Date();
+      const featuredPosts = visible.filter(p =>
+        p.is_featured && (!p.featured_until || new Date(p.featured_until) > now)
+      );
+      if (featuredPosts.length > 0) {
+        const normalPosts = visible.filter(p =>
+          !p.is_featured || (p.featured_until != null && new Date(p.featured_until) <= now)
+        );
+        visibleFinal = [...featuredPosts, ...normalPosts];
+      }
+    }
+
     const filtered = fp === 'sug'
-      ? applyModeFilter(visible, modeFilter, profile?.work_mode || 'researcher')
-      : visible;
+      ? applyModeFilter(visibleFinal, modeFilter, profile?.work_mode || 'researcher')
+      : visibleFinal;
 
     setPosts(filtered);
     setLoading(false);
@@ -534,7 +549,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                     <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                   </div>
                 )
-              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
+              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled} isFeatured={!!(p.is_featured && (!p.featured_until || new Date(p.featured_until) > new Date()))}/>)}
             </div>
             {!isMobile && (
               <div>
