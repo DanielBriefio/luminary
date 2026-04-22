@@ -144,9 +144,13 @@ src/
     CardQROverlay.jsx            — QR overlay shown on business card; subtitle adapts to work_mode
     Footer.jsx                   — Simple footer (used in public pages)
   admin/
-    AdminShell.jsx               — Admin shell: 220px left nav (Overview/Users/Invites/Analytics) + content area; gated via is_admin
+    AdminShell.jsx               — Admin shell: 220px left nav (Overview/Users/Invites/Inbox/Analytics) + content area; gated via is_admin; no padding + overflow:hidden for inbox section
     InvitesSection.jsx           — Invite management: code table, inline invite tree, conversion metrics, lock/unlock
     CreateCodeModal.jsx          — Create invite codes: Personal (1 code), Batch (N codes), Event (multi-use memorable code)
+    UsersSection.jsx             — User table: activation stage + ghost segment badges, column filters, multi-select bulk bar, opens UserDetailPanel
+    UserDetailPanel.jsx          — 400px slide-in panel: stats grid, recent posts, groups, admin notes (saves on blur), "Send nudge" button
+    BulkNudgeModal.jsx           — Nudge compose modal: 4 quick-fill templates + free compose; calls send_admin_nudge RPC as Luminary Team bot
+    InboxSection.jsx             — Bot conversation inbox: conversation list + real-time thread; replies sent via send_bot_message RPC
   library/
     LibraryClinicalTrialSearch.jsx — ClinicalTrials.gov API v2 search; returns study cards for library import
 ```
@@ -309,8 +313,9 @@ Profile sections (stored as JSONB arrays in `profiles`):
 
 ### Admin Panel (`AdminShell`)
 - Gated via `is_admin boolean` on `profiles`; non-admins hit NotFoundScreen (route existence hidden)
-- Left nav (220px): Overview / Users / Invites / Analytics — Overview/Users/Analytics are placeholders; Invites is fully implemented
+- Left nav (220px): Overview / Users / Invites / Inbox / Analytics — Overview/Analytics are placeholders; Users, Invites, Inbox are fully implemented
 - Mounted at `screen === 'admin'` in App.jsx
+- Main content area: `padding: 0, overflow: hidden` when `section === 'inbox'`; normal `28px 32px` padding + `overflow: auto` otherwise
 
 **Invites section** (`InvitesSection`):
 - Loads all codes via `get_invite_codes_with_stats()` RPC — returns computed status, uses count, creator name
@@ -326,6 +331,22 @@ Profile sections (stored as JSONB arrays in `profiles`):
 - **Personal**: 1 random 8-char code; uses ambiguous-char-free alphabet (no I/O/0/1)
 - **Batch**: N codes with shared `batch_label` + optional prefix
 - **Event**: custom memorable code; `is_multi_use = true`; duplicate caught via Postgres `23505` unique constraint error
+
+**Users section** (`UsersSection` + `UserDetailPanel` + `BulkNudgeModal`):
+- Loads all users via `get_admin_user_list()` RPC — returns activation stage, ghost segment, last active, posts/groups counts, invite code used; bot account excluded
+- Activation stages: `identified` → `credible` → `connected` → `active` → `visible` (colour-coded badges)
+- Ghost segments: `stuck` (zero activity) / `almost` (≤2 actions, inactive 5+ days) — rose/amber badges
+- Column filters: stage, ghost segment, work mode — `<select>` dropdowns + text search (name/institution/title); Clear button
+- Multi-select + sticky bulk bar → `BulkNudgeModal`
+- `UserDetailPanel`: 400px slide-in right panel; stats grid (joined, last active, posts, groups, invite code used, work mode); recent 5 posts; groups list; admin notes textarea (saves on blur, updates local state); "View profile ↗" + "Send nudge" footer
+- `BulkNudgeModal`: 4 quick-fill templates (Welcome / Complete profile / First post / Come back) + free compose; recipient avatar chips for ≤8 users; calls `send_admin_nudge` RPC with `LUMINARY_TEAM_USER_ID`
+
+**Inbox section** (`InboxSection`):
+- 280px conversation list + flex-1 thread panel; fills full height (no outer padding)
+- Conversation list loaded via `get_bot_conversations(p_bot_user_id)` RPC (SECURITY DEFINER — bypasses RLS); sorted by `last_message_at desc`; shows other user avatar, name, last message preview, time ago
+- Thread loaded via `get_bot_conversation_messages(p_conversation_id, p_bot_user_id)` RPC; bot messages right-aligned (violet), user messages left-aligned (subtle)
+- Real-time subscription on `messages` table for active conversation; auto-scrolls to bottom
+- Reply box: Enter to send, Shift+Enter for newline; calls `send_bot_message` RPC; optimistically updates conversation preview
 
 ## Database Schema (live — verified against Supabase 2026-04-22)
 
@@ -376,7 +397,8 @@ clinical_highlight_label (TEXT, default ''), clinical_highlight_value (TEXT, def
 work_phone (TEXT, default ''), work_address (TEXT, default ''),
 card_show_work_phone (bool, default false), card_show_work_address (bool, default false),
 work_street (TEXT), work_city (TEXT), work_postal_code (TEXT), work_country (TEXT),
-location_city (TEXT), location_country (TEXT)
+location_city (TEXT), location_country (TEXT),
+admin_notes (TEXT) — internal admin-only field, never shown to users
 
 ### `posts`
 id, user_id, content, post_type, visibility,
@@ -612,6 +634,34 @@ Key policies (as of DB snapshot 2026-04-22, groups_select fixed post-snapshot):
 
 ## RPCs (Supabase)
 
+**`get_admin_user_list()`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns all profiles (bot excluded by UUID) with: `last_active` (max across posts/comments/likes), `posts_count`, `groups_count`, `invite_code_used`, `activation_stage` (CASE: visible/active/connected/credible/identified), `ghost_segment` (CASE: stuck/almost/null)
+- Called by `UsersSection` on mount
+
+**`get_user_activation_stages()`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns funnel counts for each of the 5 activation stages (excluding bot account)
+- Intended for Overview dashboard
+
+**`get_ghost_users()`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns users with ≤2 total actions and inactive for 5+ days, with `ghost_segment` label
+- Intended for Overview dashboard
+
+**`send_admin_nudge(p_target_user_ids uuid[], p_message text, p_bot_user_id uuid)`** — SECURITY DEFINER; requires `is_admin = true`
+- Loops over target users; finds or creates conversation (canonical ID sort); inserts message with `sender_id = bot`; inserts `new_message` notification for each recipient
+- Called by `BulkNudgeModal` with `LUMINARY_TEAM_USER_ID`
+
+**`send_bot_message(p_conversation_id uuid, p_message text, p_bot_user_id uuid)`** — SECURITY DEFINER; requires `is_admin = true`
+- Inserts a reply into an existing conversation with `sender_id = bot`; updates `conversations.last_message`; notifies the other participant
+- Called by `InboxSection` reply box
+
+**`get_bot_conversations(p_bot_user_id uuid)`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns all `conversations` rows where the bot is a participant, sorted by `last_message_at desc`
+- Needed because RLS on `conversations` restricts reads to `auth.uid()` participants
+
+**`get_bot_conversation_messages(p_conversation_id uuid, p_bot_user_id uuid)`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns all `messages` for a given conversation (verifies bot is a participant first)
+- Needed because RLS on `messages` restricts reads to conversation participants
+
 **`get_invite_codes_with_stats()`** — SECURITY DEFINER; requires `is_admin = true` on caller's profile
 - Returns all `invite_codes` rows enriched with: computed `status` (`active` / `used` / `locked` / `expired`) via CASE expression; `created_by_name` from profiles JOIN
 - Called by `InvitesSection` on mount; no arguments
@@ -696,4 +746,5 @@ Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level s
 - **sessionStorage.prefill_paper** — used to pass paper metadata from Library/Explore "Share this paper" into NewPostScreen; keys: `doi, title, journal, year, authors, abstract, citation`
 - **work_mode** adapts UI but never restricts access; check `work_mode === 'clinician'` only for clinical-specific display (clinical identity block, clinical stats, "Publications & Presentations" label); `clinician_scientist` shows the researcher view (h-index, citations) since they are primarily researchers who also do patient care; `WORK_MODE_MAP` in `constants.js` maps id → `{ icon, label }`
 - **projectTemplates.js** exports: `PROJECT_TEMPLATES` (all templates keyed by type), `FAST_TEMPLATES` (fast-4 array), `GALLERY_TEMPLATES` (galleryOnly array), `GALLERY_FILTER_CATEGORIES` (filter tab defs), `applyTemplate(template, name, projectId, userId)` → `{ folders, posts }`; `galleryOnly: true` templates are excluded from the fast-4 picker
+- **`LUMINARY_TEAM_USER_ID`** in `constants.js` — UUID of the Luminary Team bot account (`af56ef6f-635a-438b-8c8a-41cc84751bca`); used by `BulkNudgeModal` and `InboxSection`; bot profile has `name = 'Luminary Team'`, `is_admin` is NOT set on its profile
 - **Invite code validation (AuthScreen)**: dual-mode — direct DB query against `invite_codes`; validation checks `locked_at` (rate-limit), `expires_at` (expiry), then branches: multi-use event codes check `uses_count >= max_uses`; personal codes check `claimed_by IS NOT NULL`; validated `codeRow` stored in `useRef` and used post-signup to either insert `invite_code_uses` + increment `uses_count` (event) or call `claim_invite_code` RPC (personal)
