@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { T } from '../lib/constants';
 import InvitesSection from './InvitesSection';
 import UsersSection from './UsersSection';
+import InboxSection from './InboxSection';
 
 const NAV_ITEMS = [
   { id: 'overview',  label: 'Overview',  icon: '📊' },
   { id: 'users',     label: 'Users',     icon: '👥' },
   { id: 'invites',   label: 'Invites',   icon: '🎟️' },
+  { id: 'inbox',     label: 'Inbox',     icon: '💬' },
   { id: 'analytics', label: 'Analytics', icon: '📈' },
 ];
 
@@ -114,16 +116,18 @@ export default function AdminShell({ supabase, user, profile }) {
         </div>
       </div>
 
-      {/* Main content area */}
+      {/* Main content area — inbox has no padding and needs overflow:hidden for its own scroll */}
       <div style={{
         flex: 1,
-        overflow: 'auto',
-        padding: '28px 32px',
+        overflow: section === 'inbox' ? 'hidden' : 'auto',
+        padding: section === 'inbox' ? 0 : '28px 32px',
       }}>
         {section === 'invites'
           ? <InvitesSection supabase={supabase} />
           : section === 'users'
           ? <UsersSection supabase={supabase} user={user} />
+          : section === 'inbox'
+          ? <InboxSection supabase={supabase} />
           : <AdminSectionPlaceholder section={section} />
         }
       </div>
@@ -136,6 +140,7 @@ function AdminSectionPlaceholder({ section }) {
     overview:  'Overview',
     users:     'Users',
     invites:   'Invites',
+    inbox:     'Inbox',
     analytics: 'Analytics',
   };
   const title = LABELS[section] || 'Overview';
