@@ -119,12 +119,12 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
 
   const addPaperToFolder = async (paperData, source = 'epmc') => {
     if (!activeFolderID) return;
-    await supabase.from('library_items').insert({
+    const { error } = await supabase.from('library_items').insert({
       folder_id: activeFolderID,
       added_by:  user.id,
       ...paperData,
     });
-    capture('library_item_added', { source });
+    if (!error) capture('library_item_added', { source });
     fetchItems(activeFolderID);
     setShowSearch(false);
   };
@@ -187,14 +187,14 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
     const { error } = await supabase.storage.from('library-files').upload(path, file);
     if (error) { alert('Upload failed.'); return; }
     const { data } = supabase.storage.from('library-files').getPublicUrl(path);
-    await supabase.from('library_items').insert({
+    const { error: insertError } = await supabase.from('library_items').insert({
       folder_id: activeFolderID,
       added_by:  user.id,
       title:     file.name.replace(/\.[^/.]+$/, ''),
       pdf_url:   data.publicUrl,
       pdf_name:  file.name,
     });
-    capture('library_item_added', { source: 'upload' });
+    if (!insertError) capture('library_item_added', { source: 'upload' });
     fetchItems(activeFolderID);
   };
 
