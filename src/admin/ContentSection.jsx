@@ -198,7 +198,7 @@ function PostsTab({ supabase }) {
             {/* Header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 90px 90px 70px 70px 70px 160px',
+              gridTemplateColumns: '1fr 80px 90px 70px 120px 160px',
               padding: '10px 16px',
               borderBottom: `1px solid ${T.bdr}`,
               fontSize: 11, fontWeight: 600, color: T.mu,
@@ -208,8 +208,7 @@ function PostsTab({ supabase }) {
               <div>Type</div>
               <div>Date</div>
               <div>Reports</div>
-              <div>Featured</div>
-              <div>Hidden</div>
+              <div>Status</div>
               <div>Actions</div>
             </div>
 
@@ -259,24 +258,32 @@ function PostsTab({ supabase }) {
 
 // ─── PostRow ──────────────────────────────────────────────────────────────────
 
+function postHealth(participants) {
+  if (participants >= 3) return { label: '🟢 Active',  bg: T.gr2, color: T.gr  };
+  if (participants === 2) return { label: '🟡 Growing', bg: T.am2, color: T.am  };
+  return                         { label: '⚪ Quiet',   bg: T.s3,  color: T.mu  };
+}
+
 function PostRow({
   post, isLast, acting, featuringThis,
   onFeatureClick, onFeatureDuration, onUnfeature,
   onToggleHidden, onDelete,
 }) {
-  const hasReports = post.report_count > 0;
+  const participants = post.participant_count || 0;
+  const health       = postHealth(participants);
+  const hasReports   = post.report_count > 0;
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '1fr 90px 90px 70px 70px 70px 160px',
+      gridTemplateColumns: '1fr 80px 90px 70px 120px 160px',
       padding: '12px 16px',
       borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`,
       alignItems: 'center',
-      background: hasReports ? T.am2 : 'transparent',
+      background: hasReports ? 'rgba(245,158,11,.07)' : 'transparent',
     }}>
-      {/* Post preview */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+      {/* Post preview + stats */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, minWidth: 0 }}>
         <Av
           size={28}
           name={post.author_name}
@@ -290,6 +297,17 @@ function PostRow({
              post.link_title  ||
              post.content?.replace(/<[^>]+>/g, '').slice(0, 80) ||
              '(no content)'}
+          </div>
+          {/* Engagement stats */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 11, color: T.mu }}>
+            <span>👍 {post.like_count || 0}</span>
+            <span>💬 {post.comment_count || 0}</span>
+            <span style={{
+              fontWeight: participants >= 3 ? 700 : 400,
+              color: participants >= 3 ? T.gr : participants === 2 ? T.am : T.mu,
+            }}>
+              👥 {participants} participant{participants !== 1 ? 's' : ''}
+            </span>
           </div>
         </div>
       </div>
@@ -309,21 +327,16 @@ function PostRow({
         )}
       </div>
 
-      {/* Featured */}
-      <div>
+      {/* Status: health + featured/hidden indicators */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: health.bg, color: health.color, alignSelf: 'flex-start' }}>
+          {health.label}
+        </span>
         {post.is_featured && (
-          <span style={{ fontSize: 11, fontWeight: 700, color: T.v, background: T.v2, padding: '2px 7px', borderRadius: 20 }}>
-            ✦
-          </span>
+          <span style={{ fontSize: 10, color: T.v, fontWeight: 600 }}>✦ Featured</span>
         )}
-      </div>
-
-      {/* Hidden */}
-      <div>
         {post.is_hidden && (
-          <span style={{ fontSize: 11, fontWeight: 700, color: T.mu, background: T.s3, padding: '2px 7px', borderRadius: 20 }}>
-            Hidden
-          </span>
+          <span style={{ fontSize: 10, color: T.mu, fontWeight: 600 }}>👁 Hidden</span>
         )}
       </div>
 
