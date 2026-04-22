@@ -143,6 +143,10 @@ src/
     FeedTipCard.jsx              — Dismissible tip card in feed (from FEED_TIPS in constants.js)
     CardQROverlay.jsx            — QR overlay shown on business card; subtitle adapts to work_mode
     Footer.jsx                   — Simple footer (used in public pages)
+  admin/
+    AdminShell.jsx               — Admin shell: 220px left nav (Overview/Users/Invites/Analytics) + content area; gated via is_admin
+    InvitesSection.jsx           — Invite management: code table, inline invite tree, conversion metrics, lock/unlock
+    CreateCodeModal.jsx          — Create invite codes: Personal (1 code), Batch (N codes), Event (multi-use memorable code)
   library/
     LibraryClinicalTrialSearch.jsx — ClinicalTrials.gov API v2 search; returns study cards for library import
 ```
@@ -404,7 +408,16 @@ id, conversation_id, sender_id, content, read_at, created_at, updated_at, insert
 topic, extension, payload (JSONB), event, private
 
 ### `invite_codes`
-id, code, created_by, claimed_by, claimed_at, batch_label, attempts, locked_at, created_at
+id, code, created_by, claimed_by, claimed_at, batch_label, attempts, locked_at, created_at,
+label (TEXT), max_uses (int, default 1), notes (TEXT), expires_at (timestamptz),
+is_multi_use (bool, default false), uses_count (int, default 0)
+- Personal codes: single-use; `claimed_by` stores the one user; `is_multi_use = false`
+- Event codes: multi-use; `is_multi_use = true`; uses tracked in `invite_code_uses`; `uses_count` incremented on each signup
+
+### `invite_code_uses`
+id, code_id (FK invite_codes), user_id (FK profiles), claimed_at — UNIQUE(code_id, user_id)
+- Tracks every individual use of a multi-use event code
+- RLS: icu_insert (auth.uid() = user_id), icu_select (own row or is_admin)
 
 ### `invite_rate_limits`
 ip, window_start, attempts

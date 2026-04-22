@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { T } from '../lib/constants';
+import InvitesSection from './InvitesSection';
 
 const NAV_ITEMS = [
   { id: 'overview',  label: 'Overview',  icon: '📊' },
@@ -118,7 +119,10 @@ export default function AdminShell({ supabase, user, profile }) {
         overflow: 'auto',
         padding: '28px 32px',
       }}>
-        <AdminSectionPlaceholder section={section} />
+        {section === 'invites'
+          ? <InvitesSection supabase={supabase} />
+          : <AdminSectionPlaceholder section={section} />
+        }
       </div>
     </div>
   );

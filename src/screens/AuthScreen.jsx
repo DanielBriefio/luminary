@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T, ORCID_CLIENT_ID, ORCID_AUTHORIZE_URL, ORCID_REDIRECT_URI } from '../lib/constants';
 import Inp from '../components/Inp';
@@ -44,6 +44,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [inviteChecking,    setInviteChecking]    = useState(false);
   const [inviteError,       setInviteError]       = useState('');
   const [inviteRateLimited, setInviteRateLimited] = useState(false);
+  const codeRowRef = useRef(null);
 
   // Consent (both signup paths)
   const [consentTerms,         setConsentTerms]         = useState(false);
@@ -91,33 +92,59 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     setLoading(false);
   };
 
-  // ── Invite code validation (via Edge Function — brute-force protected) ────
+  // ── Invite code validation ────────────────────────────────────────────────
   const validateInviteCode = async () => {
     if (inviteRateLimited) return;
     setInviteChecking(true);
     setInviteError('');
 
     try {
-      const { data, error } = await supabase.functions.invoke('validate-invite', {
-        body: { code: inviteCode.trim().toUpperCase() }
-      });
+      const { data: codeRow, error: codeError } = await supabase
+        .from('invite_codes')
+        .select('id, code, is_multi_use, max_uses, uses_count, expires_at, locked_at, claimed_by')
+        .eq('code', inviteCode.trim().toUpperCase())
+        .single();
 
-      const reason = data?.reason || (error ? 'Validation failed. Please try again.' : 'Code not found or already used.');
-
-      if (error || !data?.valid) {
+      if (codeError || !codeRow) {
         setInviteValid(false);
-        setInviteError(reason);
-        if (reason.toLowerCase().includes('too many') || reason === 'locked') setInviteRateLimited(true);
-      } else {
-        setInviteValid(true);
-        setSignupPath('invite-details');
+        setInviteError('Code not found or already used.');
+        return;
       }
+
+      if (codeRow.locked_at) {
+        setInviteValid(false);
+        setInviteError('locked');
+        setInviteRateLimited(true);
+        return;
+      }
+
+      if (codeRow.expires_at && new Date(codeRow.expires_at) < new Date()) {
+        setInviteValid(false);
+        setInviteError('This invite code has expired.');
+        return;
+      }
+
+      if (codeRow.is_multi_use) {
+        if (codeRow.max_uses != null && codeRow.uses_count >= codeRow.max_uses) {
+          setInviteValid(false);
+          setInviteError('This invite code is no longer available.');
+          return;
+        }
+      } else if (codeRow.claimed_by) {
+        setInviteValid(false);
+        setInviteError('This invite code has already been used.');
+        return;
+      }
+
+      codeRowRef.current = codeRow;
+      setInviteValid(true);
+      setSignupPath('invite-details');
     } catch (e) {
       setInviteValid(false);
       setInviteError('Validation failed. Please try again.');
+    } finally {
+      setInviteChecking(false);
     }
-
-    setInviteChecking(false);
   };
 
   // ── Waitlist submission ───────────────────────────────────────────────────
@@ -245,10 +272,23 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       const userId = authData.user?.id;
       if (!userId) throw new Error('Account creation failed');
 
-      await supabase.rpc('claim_invite_code', {
-        p_code:    inviteCode.trim().toUpperCase(),
-        p_user_id: userId,
-      });
+      const codeRow = codeRowRef.current;
+      if (codeRow?.is_multi_use) {
+        await supabase.from('invite_code_uses').insert({
+          code_id:    codeRow.id,
+          user_id:    userId,
+          claimed_at: new Date().toISOString(),
+        });
+        await supabase
+          .from('invite_codes')
+          .update({ uses_count: (codeRow.uses_count || 0) + 1 })
+          .eq('id', codeRow.id);
+      } else {
+        await supabase.rpc('claim_invite_code', {
+          p_code:    inviteCode.trim().toUpperCase(),
+          p_user_id: userId,
+        });
+      }
 
       await supabase.from('profiles').upsert({
         id:                   userId,
