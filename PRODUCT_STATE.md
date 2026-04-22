@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-22 (rev 7)_
+_Last updated: 2026-04-22 (rev 8)_
 
 ## What exists and works
 
@@ -165,7 +165,7 @@ _Last updated: 2026-04-22 (rev 7)_
 - **Mobile layout**: No responsive design. Desktop-only (200px sidebar + multi-column grids break on phones). `useWindowSize` hook exists but not wired to layout yet.
 - **XP / leveling system**: Sidebar badge is decorative. ProfileCompletionMeter stages are real but don't write to the `xp`/`level` columns.
 - **Push notifications / email digests**: No push; no email. `email_notifications` preference stored but not actioned.
-- **Analytics / usage tracking**: No PostHog or equivalent. PostHog consent-gated integration is the next planned task (Phase 6H).
+- **Analytics / usage tracking**: PostHog integrated (Phase 6H). Consent-gated via `analytics_consent_at` on profiles — separate from email marketing consent. Key events tracked across all major flows. Requires `REACT_APP_POSTHOG_KEY` in Vercel env vars.
 - **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state; pending nav reorganisation.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.
