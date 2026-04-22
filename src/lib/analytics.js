@@ -34,15 +34,11 @@ export function optOutAndReset() {
 }
 
 export function capture(event, properties = {}) {
-  if (!KEY || !initialised) {
-    console.log('[Analytics] SKIPPED:', event, { KEY: !!KEY, initialised });
-    return;
-  }
+  if (!KEY || !initialised) return;
   try {
-    console.log('[Analytics] CAPTURED:', event, properties);
     posthog.capture(event, properties);
-  } catch (e) {
-    console.error('[Analytics] ERROR:', e);
+  } catch {
+    // never block app functionality
   }
 }
 
