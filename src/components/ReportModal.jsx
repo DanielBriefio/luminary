@@ -30,7 +30,11 @@ export default function ReportModal({
     setSubmitting(true);
     setError('');
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setError('You must be signed in to report.'); setSubmitting(false); return; }
+
     const payload = {
+      reporter_id: user.id,
       reason,
       note: note.trim() || null,
     };
