@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import { T } from '../lib/constants';
 import OverviewSection from './OverviewSection';
 import InvitesSection from './InvitesSection';
+import TemplatesSection from './TemplatesSection';
 import UsersSection from './UsersSection';
 import InboxSection from './InboxSection';
 
 const NAV_ITEMS = [
-  { id: 'overview',  label: 'Overview',  icon: '📊' },
-  { id: 'users',     label: 'Users',     icon: '👥' },
-  { id: 'invites',   label: 'Invites',   icon: '🎟️' },
-  { id: 'inbox',     label: 'Inbox',     icon: '💬' },
-  { id: 'analytics', label: 'Analytics', icon: '📈' },
+  { id: 'overview',   label: 'Overview',  icon: '📊' },
+  { id: 'users',      label: 'Users',     icon: '👥' },
+  { id: 'invites',    label: 'Invites',   icon: '🎟️' },
+  { id: 'templates',  label: 'Templates', icon: '📋' },
+  { id: 'inbox',      label: 'Inbox',     icon: '💬' },
+  { id: 'analytics',  label: 'Analytics', icon: '📈' },
 ];
 
 export default function AdminShell({ supabase, user, profile }) {
@@ -135,6 +137,8 @@ export default function AdminShell({ supabase, user, profile }) {
           ? <UsersSection supabase={supabase} user={user} initialParams={sectionParams} />
           : section === 'invites'
           ? <InvitesSection supabase={supabase} />
+          : section === 'templates'
+          ? <TemplatesSection supabase={supabase} />
           : section === 'inbox'
           ? <InboxSection supabase={supabase} />
           : <AdminSectionPlaceholder section={section} />

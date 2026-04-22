@@ -150,6 +150,7 @@ src/
     UsersSection.jsx             — User table: activation stage + ghost segment badges, column filters, multi-select bulk bar, opens UserDetailPanel
     UserDetailPanel.jsx          — 400px slide-in panel: stats grid, recent posts, groups, admin notes (saves on blur), "Send nudge" button
     BulkNudgeModal.jsx           — Nudge compose modal: 4 quick-fill templates + free compose; calls send_admin_nudge RPC as Luminary Team bot
+    TemplatesSection.jsx         — Template approval: pending/approved/rejected tabs; preview modal; approve/reject/restore/unpublish actions
     InboxSection.jsx             — Bot conversation inbox: conversation list + real-time thread; replies sent via send_bot_message RPC
   library/
     LibraryClinicalTrialSearch.jsx — ClinicalTrials.gov API v2 search; returns study cards for library import
@@ -313,7 +314,7 @@ Profile sections (stored as JSONB arrays in `profiles`):
 
 ### Admin Panel (`AdminShell`)
 - Gated via `is_admin boolean` on `profiles`; non-admins hit NotFoundScreen (route existence hidden)
-- Left nav (220px): Overview / Users / Invites / Inbox / Analytics — Overview/Analytics are placeholders; Users, Invites, Inbox are fully implemented
+- Left nav (220px): Overview / Users / Invites / Templates / Inbox / Analytics — Analytics is placeholder; all others fully implemented
 - Mounted at `screen === 'admin'` in App.jsx
 - Main content area: `padding: 0, overflow: hidden` when `section === 'inbox'`; normal `28px 32px` padding + `overflow: auto` otherwise
 
@@ -340,6 +341,16 @@ Profile sections (stored as JSONB arrays in `profiles`):
 - Multi-select + sticky bulk bar → `BulkNudgeModal`
 - `UserDetailPanel`: 400px slide-in right panel; stats grid (joined, last active, posts, groups, invite code used, work mode); recent 5 posts; groups list; admin notes textarea (saves on blur, updates local state); "View profile ↗" + "Send nudge" footer
 - `BulkNudgeModal`: 4 quick-fill templates (Welcome / Complete profile / First post / Come back) + free compose; recipient avatar chips for ≤8 users; calls `send_admin_nudge` RPC with `LUMINARY_TEAM_USER_ID`
+
+**Templates section** (`TemplatesSection`):
+- Three status tabs: Pending (amber) / Approved (green) / Rejected (muted)
+- Each tab loads `community_templates` filtered by status; sorted by `created_at desc`
+- Template rows: icon, name, category badge, description (2-line clamp), submitter avatar + name + institution, folder count, starter post count, submitted time ago
+- **Pending tab**: Approve (green) + Reject (rose outline) buttons; approve sets `status = 'approved'`, reject sets `status = 'rejected'`
+- **Approved tab**: Unpublish button (moves back to rejected)
+- **Rejected tab**: "Restore to pending" button
+- Preview modal: full template detail — icon, name, used_by, description, folder chips, starter posts with folder label + sticky indicator + content (4-line clamp); Approve/Reject footer buttons (pending only); backdrop click or ✕ closes
+- At-risk alert in OverviewSection "Review templates →" navigates directly to Templates section
 
 **Inbox section** (`InboxSection`):
 - 280px conversation list + flex-1 thread panel; fills full height (no outer padding)

@@ -238,9 +238,9 @@ function AtRiskAlerts({ alerts, onNavigate }) {
       count:   alerts.pending_templates,
       level:   'yellow',
       label:   'community template submissions pending review',
-      action:  'Review templates (coming soon)',
-      onClick: null,
-      live:    false,
+      action:  'Review templates →',
+      onClick: () => onNavigate('templates'),
+      live:    true,
     },
   ];
 
