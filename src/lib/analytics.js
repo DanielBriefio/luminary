@@ -6,8 +6,7 @@ const HOST = 'https://app.posthog.com';
 let initialised = false;
 
 export function initAnalytics() {
-  if (!KEY) return;
-  if (initialised) return;
+  if (!KEY || initialised) return;
 
   posthog.init(KEY, {
     api_host:                    HOST,
