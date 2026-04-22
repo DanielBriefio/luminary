@@ -107,6 +107,7 @@ export default function GroupMembers({ groupId, group, user, myRole, onLeft }) {
   const approveRequest = async (req) => {
     setActionId(req.user_id);
     await supabase.from('group_members').insert({ group_id: groupId, user_id: req.user_id, role: 'member' });
+    capture('group_joined', { group_id: groupId });
     await supabase.from('group_join_requests').update({ status: 'approved' }).eq('id', req.id);
     const groupName = group?.name || '';
     await supabase.from('notifications').insert({
