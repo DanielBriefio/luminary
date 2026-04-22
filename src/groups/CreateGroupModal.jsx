@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 
 const GROUP_TYPES = [
@@ -53,6 +54,7 @@ export default function CreateGroupModal({ user, onGroupCreated, onClose }) {
         display_role: adminRole.trim() || '',
       });
 
+      capture('group_created', { is_public: isPublic });
       onGroupCreated(group.id);
     } catch (e) {
       setError(e.message || 'Failed to create group.');

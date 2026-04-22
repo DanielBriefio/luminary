@@ -311,6 +311,7 @@ function AtRiskAlerts({ alerts, onNavigate }) {
 // ─── PostHogCard ──────────────────────────────────────────────────────────────
 
 function PostHogCard() {
+  const dashboardUrl = 'https://app.posthog.com';
   return (
     <div style={{
       background: T.w, border: `1px solid ${T.bdr}`,
@@ -321,39 +322,34 @@ function PostHogCard() {
         📊 PostHog Analytics
       </div>
       <div style={{
-        fontSize: 13, color: T.mu, lineHeight: 1.6, marginBottom: 16, flex: 1,
+        fontSize: 13, color: T.mu, lineHeight: 1.6, marginBottom: 12,
       }}>
-        Connect PostHog to see funnel analysis, session recordings,
-        cohort retention, and feature adoption data. Free up to 1M
-        events/month.
+        Event-based analytics. Funnels, retention, and feature adoption
+        data live in PostHog. Capturing is consent-gated — only users
+        who accepted terms are tracked.
       </div>
-      <div style={{
-        background: T.s2, border: `1px dashed ${T.bdr}`,
-        borderRadius: 9, padding: '20px',
-        textAlign: 'center', marginBottom: 14,
-        flex: 1,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <div style={{ color: T.mu, fontSize: 13 }}>
-          PostHog dashboard will appear here
-          <br />
-          once integration is configured.
-        </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {[
+          { label: 'Dashboard', url: dashboardUrl },
+          { label: 'Funnels',   url: `${dashboardUrl}/funnels`  },
+          { label: 'Insights',  url: `${dashboardUrl}/insights` },
+        ].map(link => (
+          <a
+            key={link.label}
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              padding: '7px 14px', borderRadius: 8,
+              border: `1px solid ${T.bdr}`, background: T.s2,
+              color: T.v, fontSize: 12.5, fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            {link.label} ↗
+          </a>
+        ))}
       </div>
-      <a
-        href="https://eu.posthog.com"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          display: 'block', textAlign: 'center',
-          padding: '9px 0', borderRadius: 9,
-          border: `1px solid ${T.bdr}`, background: T.w,
-          color: T.v, fontSize: 13, fontWeight: 600,
-          textDecoration: 'none',
-        }}
-      >
-        Open PostHog →
-      </a>
     </div>
   );
 }

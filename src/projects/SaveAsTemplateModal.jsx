@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
@@ -129,7 +130,7 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
     });
 
     setSubmitting(false);
-    if (!error) setDone(true);
+    if (!error) { capture('template_submitted'); setDone(true); }
   };
 
   if (done) {

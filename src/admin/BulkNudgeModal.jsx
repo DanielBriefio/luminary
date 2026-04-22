@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { T, LUMINARY_TEAM_USER_ID } from '../lib/constants';
+import { capture } from '../lib/analytics';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 
@@ -48,6 +49,7 @@ export default function BulkNudgeModal({ supabase, targetUsers, onClose, onSent 
       return;
     }
 
+    capture('admin_nudge_sent', { recipient_count: targetUsers.length });
     setSent(true);
     setTimeout(onSent, 1200);
   };

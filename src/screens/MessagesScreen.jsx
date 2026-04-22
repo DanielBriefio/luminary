@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
@@ -517,6 +518,7 @@ export default function MessagesScreen({ user, onViewUser }) {
       sender_id: user.id,
       content,
     });
+    capture('dm_sent');
 
     await supabase.from('conversations').update({
       last_message: content.slice(0, 100),

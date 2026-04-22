@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { T } from '../lib/constants';
+import { capture } from '../lib/analytics';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import { timeAgo } from '../lib/utils';
@@ -48,6 +49,7 @@ export default function TemplatesSection({ supabase }) {
   const approve = async (id) => {
     setActing(id);
     await supabase.from('community_templates').update({ status: 'approved' }).eq('id', id);
+    capture('template_approved');
     setActing(null);
     load();
   };

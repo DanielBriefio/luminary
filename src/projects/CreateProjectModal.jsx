@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import { FAST_TEMPLATES, PROJECT_TEMPLATES, applyTemplate } from '../lib/projectTemplates';
 import Btn from '../components/Btn';
@@ -122,6 +123,7 @@ export default function CreateProjectModal({
         }
       }
 
+      capture('project_created', { template_type: selectedTemplate || 'blank' });
       onProjectCreated(project.id);
     } catch (e) {
       setError(e.message || 'Failed to create project.');

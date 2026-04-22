@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { T } from '../lib/constants';
+import { capture } from '../lib/analytics';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import { timeAgo } from '../lib/utils';
@@ -134,6 +135,7 @@ function PostsTab({ supabase }) {
         ? new Date(Date.now() + hours * 3600 * 1000).toISOString()
         : null,
     }).eq('id', post.id);
+    capture('post_featured', { duration_hours: hours || 'permanent' });
     setActing(null);
     setFeaturingId(null);
     load();

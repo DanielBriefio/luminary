@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T, AUTO_TAG_ENABLED, EDGE_HEADERS, COMPOSER_PROMPTS } from '../lib/constants';
 
 const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
@@ -395,6 +396,8 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
         userId:        user.id,
       }).catch(console.warn);
     }
+    capture('post_created', { post_type: resolvedPostType, has_tags: tags.trim().length > 0 });
+    if (resolvedPostType === 'paper') capture('paper_shared', { has_doi: !!paperDoi.trim() });
     setSuccess(true);
     setContent(''); resetDoi(); clearAttachment(); setTags('');
     setTimeout(() => { setSuccess(false); onPostCreated && onPostCreated(); }, 2000);

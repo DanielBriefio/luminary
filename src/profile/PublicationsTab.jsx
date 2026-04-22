@@ -195,6 +195,7 @@ function doExportRis(pubs) {
 
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
+import { capture } from '../lib/analytics';
 import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
 import { parseRis, parseBib, buildCitationFromRef } from '../lib/referenceUtils';
 import { typeIcon, typeLabel } from '../lib/pubUtils';
@@ -291,7 +292,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
             year:String(p.year||''), doi:p.doi||'', authors:p.authors||'',
             pmid:'', pub_type:p.pub_type||'journal', venue:p.venue||'', source:'cv' }))
         ).select();
-        if(data) setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+        if(data) { setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'ai' }); }
       }
       onPendingConsumed?.();
     };
@@ -393,7 +394,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       citations:pub.citations||0, is_open_access:pub.is_open_access||false,
       full_text_url:pub.full_text_url||'', citation:pub.citation||'',
     }).select().single();
-    if(data) setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+    if(data) { setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'epmc' }); }
   };
 
   const rejectPub = (key) => setRejected(s=>new Set([...s, key]));
@@ -545,7 +546,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
             year:String(p.year||''), doi:p.doi||'', authors:p.authors||'',
             pmid:'', pub_type:p.pub_type||'journal', venue:p.venue||'', source:'cv' }))
         ).select();
-        if(data) setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+        if(data) { setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'ai' }); }
       }
     }
 
@@ -603,7 +604,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       pmid:'', pub_type:pub.pub_type||'other', venue:pub.venue||pub.journal||'',
       source:'document'
     }).select().single();
-    if(data) setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+    if(data) { setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'ai' }); }
   };
 
   const rejectImportPub = (idx) => setImportRejected(s=>new Set([...s,idx]));
@@ -651,7 +652,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         citation: buildCitationFromRef(p),
       }))
     ).select();
-    if (data) setPubs(prev => [...data, ...prev].sort((a, b) => (b.year||'').localeCompare(a.year||'')));
+    if (data) { setPubs(prev => [...data, ...prev].sort((a, b) => (b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'ris' }); }
     setRisSaving(false);
     setShowRisImport(false);
     setRisProposals([]);
@@ -763,7 +764,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     const { data } = await supabase.from('publications').insert({
       user_id:user.id, ...newPub, pmid:'', source:'manual'
     }).select().single();
-    if(data) setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+    if(data) { setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'manual' }); }
     setSaving(false);
     closeAddPanel();
   };

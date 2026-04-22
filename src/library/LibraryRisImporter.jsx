@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
@@ -66,6 +67,7 @@ export default function LibraryRisImporter({ userId, groupId, folders, onDone, o
     const { error: err } = await supabase.from('library_items').insert(rows);
     if (err) { setError('Import failed: ' + err.message); setImporting(false); return; }
 
+    capture('library_item_added', { source: 'ris' });
     setImporting(false);
     setDone(true);
     onDone(folderId, targetFolder === '__new__');

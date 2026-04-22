@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T, ORCID_CLIENT_ID, ORCID_AUTHORIZE_URL, ORCID_REDIRECT_URI } from '../lib/constants';
 import Inp from '../components/Inp';
 import Btn from '../components/Btn';
@@ -246,6 +247,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       await supabase.from('orcid_pending').delete().eq('token', orcidPendingToken);
 
       // Done — Supabase auth session is now active, app will re-render
+      capture('signed_up', { method: 'orcid' });
       if (authData.session) {
         onAuth();
       } else {
@@ -302,6 +304,8 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         privacy_accepted_at:  new Date().toISOString(),
       });
 
+      capture('signed_up', { method: 'email' });
+      capture('invite_code_used', { code_type: codeRow?.is_multi_use ? 'event' : 'personal' });
       if (authData.session) {
         onAuth();
       } else {

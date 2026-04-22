@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabase';
+import { initAnalytics, optInAndIdentify, optOutAndReset, capturePageview } from './lib/analytics';
 import { T, NAV } from './lib/constants';
 import Av from './components/Av';
 import Spinner from './components/Spinner';
@@ -80,6 +81,8 @@ const getPublicGroupSlug = () => {
 })();
 
 export default function App() {
+  useEffect(() => { initAnalytics(); }, []);
+
   const [publicSlug]      = useState(getPublicSlug);
   const [publicPostId]    = useState(getPublicPostId);
   const [publicPaperDoi]  = useState(getPublicPaperDoi);
@@ -141,6 +144,17 @@ export default function App() {
     if(!session?.user){setProfile(null);return;}
     supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>setProfile(data));
   },[session]);
+
+  useEffect(()=>{
+    if (!session?.user || !profile) return;
+    if (profile.marketing_consent_at) {
+      optInAndIdentify(session.user.id, {
+        work_mode: profile.work_mode || null,
+        has_orcid: !!profile.orcid,
+        is_admin:  !!profile.is_admin,
+      });
+    }
+  },[session?.user?.id, profile?.marketing_consent_at]); // eslint-disable-line
 
   useEffect(()=>{
     if (!profile) return;
@@ -376,7 +390,7 @@ export default function App() {
     redeem();
   }, [groupInviteToken, session]); // eslint-disable-line
 
-  const signOut=async()=>{ await supabase.auth.signOut(); setScreen('feed'); };
+  const signOut=async()=>{ optOutAndReset(); await supabase.auth.signOut(); setScreen('feed'); };
 
   const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>;
 
@@ -555,6 +569,7 @@ export default function App() {
                   if(n.id==='notifs') setUnreadNotifs(0);
                   if(n.id==='groups') setActiveGroupId(null);
                   setScreen(n.id);
+                  capturePageview(n.id);
                 }}
 
                   style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",margin:"1px 8px",borderRadius:9,cursor:"pointer",fontSize:12.5,fontWeight:screen===n.id?700:500,color:screen===n.id?T.v:T.mu,background:screen===n.id?T.v2:"transparent"}}>
@@ -752,7 +767,7 @@ export default function App() {
                   <span style={{fontSize:18, width:24}}>⚙️</span>
                   <span style={{fontSize:14, fontWeight:500, color:T.text}}>Settings</span>
                 </button>
-                <button onClick={()=>supabase.auth.signOut()}
+                <button onClick={()=>{ optOutAndReset(); supabase.auth.signOut(); }}
                   style={{width:'100%', padding:'13px 20px', border:'none', background:'transparent', cursor:'pointer', display:'flex', alignItems:'center', gap:14, fontFamily:'inherit'}}>
                   <span style={{fontSize:18, width:24}}>👋</span>
                   <span style={{fontSize:14, fontWeight:500, color:T.ro}}>Sign out</span>

@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import { MILESTONES, STAGES, STAGE_REWARDS, computeStage } from '../lib/profileMilestones';
+import { capture } from '../lib/analytics';
 
 export default function ProfileCompletionMeter({ profile, user, onAction }) {
   const [stats,    setStats]    = useState({});
@@ -68,9 +69,22 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
       });
   }, [loading, profile, stats, user.id]);
 
-  if (loading) return null;
+  const currentStage = computeStage(profile, stats);
 
-  const currentStage   = computeStage(profile, stats);
+  useEffect(() => {
+    if (loading) return;
+    const key = `luminary_last_stage_${user.id}`;
+    const stored = parseInt(localStorage.getItem(key) || '-1', 10);
+    if (stored === -1) {
+      localStorage.setItem(key, String(currentStage));
+    } else if (currentStage > stored) {
+      localStorage.setItem(key, String(currentStage));
+      const label = STAGES.find(s => s.number === currentStage)?.label?.toLowerCase() || String(currentStage);
+      capture('profile_stage_reached', { stage: label });
+    }
+  }, [loading, currentStage, user.id]); // eslint-disable-line
+
+  if (loading) return null;
   if (currentStage === 5) return null;
 
   const nextStageNum   = currentStage + 1;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T, TIER1_LIST, getTier2, WORK_MODES } from '../lib/constants';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
@@ -127,6 +128,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
   const handleComplete = async () => {
     await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
     setProfile(p => ({ ...p, onboarding_completed: true }));
+    capture('onboarding_completed');
     onComplete();
   };
 

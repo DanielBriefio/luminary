@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T, TIER1_LIST, getTier2, DISCUSSION_PROMPTS, ZERO_COMMENT_PROMPTS, getDiscussionPrompts } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import { useWindowSize } from '../lib/useWindowSize';
@@ -198,7 +199,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
     if(!currentUserId||saving) return;
     setSaving(true);
     const nl=!liked; setLiked(nl); setLikeCount(c=>nl?c+1:c-1);
-    if(nl) await supabase.from('likes').insert({user_id:currentUserId,post_id:post.id});
+    if(nl) { await supabase.from('likes').insert({user_id:currentUserId,post_id:post.id}); capture('post_liked'); }
     else await supabase.from('likes').delete().eq('user_id',currentUserId).eq('post_id',post.id);
     setSaving(false);
   };
@@ -251,6 +252,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       setComments(c => [...c, data]);
       setCommCount(n => n + 1);
       setCommText('');
+      capture('comment_posted');
     }
     setCommSaving(false);
   };

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import Btn from '../components/Btn';
@@ -116,13 +117,14 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
     setInboxItems(prev => prev.filter(x => x.id !== item.id));
   };
 
-  const addPaperToFolder = async (paperData) => {
+  const addPaperToFolder = async (paperData, source = 'epmc') => {
     if (!activeFolderID) return;
     await supabase.from('library_items').insert({
       folder_id: activeFolderID,
       added_by:  user.id,
       ...paperData,
     });
+    capture('library_item_added', { source });
     fetchItems(activeFolderID);
     setShowSearch(false);
   };
@@ -144,7 +146,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
         journal: w['container-title']?.[0] || '',
         year:    String(w.published?.['date-parts']?.[0]?.[0] || ''),
         doi:     doiInput.trim(),
-      });
+      }, 'doi');
       setDoiInput('');
       setShowDOI(false);
     } catch {
@@ -192,6 +194,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
       pdf_url:   data.publicUrl,
       pdf_name:  file.name,
     });
+    capture('library_item_added', { source: 'upload' });
     fetchItems(activeFolderID);
   };
 
@@ -326,14 +329,14 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
                 {showSearch && (
                   <div style={{marginBottom:14, padding:14, background:T.w,
                     borderRadius:12, border:`1px solid ${T.bdr}`}}>
-                    <LibraryPaperSearch onSelect={addPaperToFolder}/>
+                    <LibraryPaperSearch onSelect={data => addPaperToFolder(data, 'epmc')}/>
                   </div>
                 )}
 
                 {searchSource === 'trials' && !showSearch && !showDOI && !showRisImport && (
                   <div style={{marginBottom:14, padding:14, background:T.w,
                     borderRadius:12, border:`1px solid ${T.bdr}`}}>
-                    <LibraryClinicalTrialSearch onSelect={addPaperToFolder}/>
+                    <LibraryClinicalTrialSearch onSelect={data => addPaperToFolder(data, 'trials')}/>
                   </div>
                 )}
 

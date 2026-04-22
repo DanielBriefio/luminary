@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import GroupFeed from './GroupFeed';
@@ -92,6 +93,7 @@ function PublicJoinPanel({ group, user, onBack, onJoined }) {
     const { error: e } = await supabase.from('group_members').insert({ group_id: group.id, user_id: user.id, role: 'member' });
     setJoining(false);
     if (e) { setError(e.message); return; }
+    capture('group_joined', { group_id: group.id });
     onJoined();
   };
   return (

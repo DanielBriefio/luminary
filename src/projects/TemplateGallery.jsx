@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { GALLERY_TEMPLATES, GALLERY_FILTER_CATEGORIES } from '../lib/projectTemplates';
 import { T } from '../lib/constants';
 import Av from '../components/Av';
@@ -132,7 +133,7 @@ export default function TemplateGallery({ onSelectTemplate, onBack, user }) {
               <TemplateCard
                 key={template.type}
                 template={template}
-                onUse={() => onSelectTemplate(template.type, null)}
+                onUse={() => { capture('template_used', { template_type: template.type, source: 'curated' }); onSelectTemplate(template.type, null); }}
                 onPreview={() => openPreview(template)}
               />
             ))}
@@ -195,7 +196,7 @@ export default function TemplateGallery({ onSelectTemplate, onBack, user }) {
                   key={template.id}
                   template={template}
                   currentUserId={user?.id}
-                  onUse={() => onSelectTemplate('community', template)}
+                  onUse={() => { capture('template_used', { template_type: template.name, source: 'community' }); onSelectTemplate('community', template); }}
                   onPreview={() => openPreview(template, true)}
                 />
               ))
@@ -211,8 +212,10 @@ export default function TemplateGallery({ onSelectTemplate, onBack, user }) {
           onUse={() => {
             setPreviewTemplate(null);
             if (previewTemplate._isCommunity) {
+              capture('template_used', { template_type: previewTemplate.name, source: 'community' });
               onSelectTemplate('community', previewTemplate);
             } else {
+              capture('template_used', { template_type: previewTemplate.type, source: 'curated' });
               onSelectTemplate(previewTemplate.type, null);
             }
           }}
