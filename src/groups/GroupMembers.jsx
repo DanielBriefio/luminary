@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import Av from '../components/Av';
@@ -90,6 +91,7 @@ export default function GroupMembers({ groupId, group, user, myRole, onLeft }) {
 
   const leaveGroup = async () => {
     await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', user.id);
+    capture('group_left', { group_id: groupId });
     // Notify admins
     const { data: admins } = await supabase.from('group_members').select('user_id')
       .eq('group_id', groupId).eq('role', 'admin').neq('user_id', user.id);

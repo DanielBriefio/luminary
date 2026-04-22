@@ -177,6 +177,7 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
 
   const leaveGroup = async () => {
     await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', user.id);
+    capture('group_left', { group_id: groupId });
     onBack();
   };
 
