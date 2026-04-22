@@ -89,7 +89,7 @@ export default function PublicProfilePage({ slug }) {
   const grt  = vis.grants        !== false ? (profile.grants         || []) : [];
   const showPubs = vis.publications !== false;
 
-  const pubTabLabel = (profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both')
+  const pubTabLabel = profile.work_mode === 'clinician'
     ? `Publications & Presentations (${pubs.length})`
     : `Publications (${pubs.length})`;
 
@@ -169,7 +169,7 @@ export default function PublicProfilePage({ slug }) {
                 <span>{WORK_MODE_MAP[profile.work_mode].label}</span>
               </div>
             )}
-            {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both') && (profile.additional_quals || []).length > 0 && (
+            {profile.work_mode === 'clinician' && (profile.additional_quals || []).length > 0 && (
               <>
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Qualifications</div>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -192,7 +192,7 @@ export default function PublicProfilePage({ slug }) {
               )}
             </div>
             {/* Clinical identity block — clinician/clinician_scientist mode */}
-            {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist') && profile.years_in_practice && (
+            {profile.work_mode === 'clinician' && profile.years_in_practice && (
               <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 6 }}>
                 {profile.years_in_practice} years in practice
               </div>
@@ -210,7 +210,7 @@ export default function PublicProfilePage({ slug }) {
 
             {/* Stats */}
             {(() => {
-              const isClinician = profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist' || profile.work_mode === 'both';
+              const isClinician = profile.work_mode === 'clinician';
               const statItems = isClinician ? [
                 ['—', 'Followers'],
                 ['—', 'Following'],
@@ -259,7 +259,7 @@ export default function PublicProfilePage({ slug }) {
           {tab === 'about' && (
             <div>
               {/* Clinical sections — shown for clinician/both mode */}
-              {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist') && profile.patient_population && (
+              {profile.work_mode === 'clinician' && profile.patient_population && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
                     Patient Population
@@ -267,7 +267,7 @@ export default function PublicProfilePage({ slug }) {
                   <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6 }}>{profile.patient_population}</div>
                 </div>
               )}
-              {(profile.work_mode === 'clinician' || profile.work_mode === 'clinician_scientist') && (profile.additional_quals || []).length > 0 && (
+              {profile.work_mode === 'clinician' && (profile.additional_quals || []).length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
                     Additional Qualifications

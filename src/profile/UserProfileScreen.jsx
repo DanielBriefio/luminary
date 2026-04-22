@@ -84,7 +84,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
   const hIndex     = citations.reduce((h, c, i) => c >= (i + 1) ? i + 1 : h, 0);
   const totalCit   = citations.reduce((s, c) => s + c, 0);
 
-  const pubTabLabel = (p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist' || p.work_mode === 'both')
+  const pubTabLabel = p.work_mode === 'clinician'
     ? `Publications & Presentations (${pubCount})`
     : `Publications (${pubCount})`;
 
@@ -159,7 +159,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                     <span>{p.topic_interests.join(', ')}</span>
                   </div>
                 )}
-                {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist' || p.work_mode === 'both') && (p.additional_quals || []).length > 0 && (
+                {p.work_mode === 'clinician' && (p.additional_quals || []).length > 0 && (
                   <>
                     <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Qualifications</div>
                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -185,7 +185,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                 </div>
 
                 {/* Clinical identity block — years in practice only */}
-                {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist') && p.years_in_practice && (
+                {p.work_mode === 'clinician' && p.years_in_practice && (
                   <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 6 }}>
                     {p.years_in_practice} years in practice
                   </div>
@@ -216,7 +216,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
 
             {/* Stats */}
             {(() => {
-              const isClinician = p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist' || p.work_mode === 'both';
+              const isClinician = p.work_mode === 'clinician';
               const statItems = isClinician ? [
                 [posts.length || '—', 'Posts'],
                 [pubCount || '—', 'Publications'],
@@ -256,13 +256,13 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
             {tab === 'about' && (
               <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderTop: 'none', borderRadius: '0 0 14px 14px', padding: '18px 22px', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
                 {/* Clinical sections — clinician/both mode */}
-                {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist') && p.patient_population && (
+                {p.work_mode === 'clinician' && p.patient_population && (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Patient Population</div>
                     <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6 }}>{p.patient_population}</div>
                   </div>
                 )}
-                {(p.work_mode === 'clinician' || p.work_mode === 'clinician_scientist') && (p.additional_quals || []).length > 0 && (
+                {p.work_mode === 'clinician' && (p.additional_quals || []).length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Additional Qualifications</div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

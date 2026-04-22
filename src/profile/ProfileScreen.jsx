@@ -1495,6 +1495,11 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
 
               {editingCard ? (
                 <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div style={{fontSize:11,fontWeight:600,color:T.mu,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:2}}>Login email</div>
+                  <div style={{fontSize:13,color:T.mu,background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 13px',marginBottom:4}}>
+                    {user?.email}
+                    <span style={{fontSize:11,color:T.mu,marginLeft:8}}>(sign-in address — not editable here)</span>
+                  </div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                     <PF label="Work email" field="card_email" form={form} setForm={setForm} placeholder="you@institution.com"/>
                     <PF label="Mobile phone (📱)" field="work_phone" form={form} setForm={setForm} placeholder="+81 90 1234 5678"/>

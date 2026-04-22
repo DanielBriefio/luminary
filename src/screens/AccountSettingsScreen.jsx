@@ -190,12 +190,15 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
 
           {/* Account email */}
           <SectionHead label="Account"/>
-          <div style={{ fontSize: 11, fontWeight: 600, color: T.mu, marginBottom: 4 }}>Email address</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.mu, marginBottom: 4 }}>Login email</div>
           <div style={{
             fontSize: 13, color: T.text, background: T.s2,
-            border: `1.5px solid ${T.bdr}`, borderRadius: 9, padding: '8px 13px', marginBottom: 16,
+            border: `1.5px solid ${T.bdr}`, borderRadius: 9, padding: '8px 13px', marginBottom: 4,
           }}>
             {user?.email}
+          </div>
+          <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 16 }}>
+            Used to sign in — contact <a href="mailto:hello@luminary.to" style={{ color: T.v }}>hello@luminary.to</a> to change it
           </div>
 
           {/* Change password */}
