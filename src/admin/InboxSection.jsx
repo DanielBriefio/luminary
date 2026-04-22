@@ -16,16 +16,14 @@ export default function InboxSection({ supabase }) {
   const bottomRef  = useRef(null);
   const channelRef = useRef(null);
 
-  // Load all bot conversations
+  // Load all bot conversations via SECURITY DEFINER RPC (bypasses RLS)
   useEffect(() => {
     const load = async () => {
       setLoading(true);
 
-      const { data: convData } = await supabase
-        .from('conversations')
-        .select('*')
-        .or(`user_id_a.eq.${LUMINARY_TEAM_USER_ID},user_id_b.eq.${LUMINARY_TEAM_USER_ID}`)
-        .order('last_message_at', { ascending: false });
+      const { data: convData } = await supabase.rpc('get_bot_conversations', {
+        p_bot_user_id: LUMINARY_TEAM_USER_ID,
+      });
 
       if (!convData?.length) {
         setConvos([]);
@@ -60,11 +58,10 @@ export default function InboxSection({ supabase }) {
 
     const loadMessages = async () => {
       setLoadingMsgs(true);
-      const { data } = await supabase
-        .from('messages')
-        .select('id, sender_id, content, created_at')
-        .eq('conversation_id', activeConvo.id)
-        .order('created_at', { ascending: true });
+      const { data } = await supabase.rpc('get_bot_conversation_messages', {
+        p_conversation_id: activeConvo.id,
+        p_bot_user_id:     LUMINARY_TEAM_USER_ID,
+      });
       setMessages(data || []);
       setLoadingMsgs(false);
     };
