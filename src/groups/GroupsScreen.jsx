@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
+import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import CreateGroupModal from './CreateGroupModal';
@@ -207,8 +208,9 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
   const joinGroup = async (group) => {
     if (!group.is_public) { onGroupSelect(group.id); return; }
     setJoining(group.id);
-    await supabase.from('group_members').insert({ group_id: group.id, user_id: user.id, role: 'member' });
+    const { error } = await supabase.from('group_members').insert({ group_id: group.id, user_id: user.id, role: 'member' });
     setJoining(null);
+    if (!error) capture('group_joined', { group_id: group.id });
     onGroupSelect(group.id);
   };
 
