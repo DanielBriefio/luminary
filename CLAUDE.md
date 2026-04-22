@@ -307,6 +307,26 @@ Profile sections (stored as JSONB arrays in `profiles`):
 - **ProjectMembers**: member list + add-from-group-members panel; owner can remove members
 - **GroupProjects**: same gallery flow + archiving/pinning available to admin/member roles in group context
 
+### Admin Panel (`AdminShell`)
+- Gated via `is_admin boolean` on `profiles`; non-admins hit NotFoundScreen (route existence hidden)
+- Left nav (220px): Overview / Users / Invites / Analytics — Overview/Users/Analytics are placeholders; Invites is fully implemented
+- Mounted at `screen === 'admin'` in App.jsx
+
+**Invites section** (`InvitesSection`):
+- Loads all codes via `get_invite_codes_with_stats()` RPC — returns computed status, uses count, creator name
+- Column filters: Type (personal/batch/event), Status (active/used/locked/expired), Created By — per-column ▾ dropdown, outside-click dismiss via `useRef`+`useEffect`
+- Multi-select checkboxes + bulk action bar: Lock / Unlock / Delete (confirm step before delete)
+- `codeType(c)` helper: returns `'event'` if `is_multi_use`, `'batch'` if `batch_label`, else `'personal'`
+- Creator column with promoter KPI badge: `X/Y shared` ratio (green ≥50% / amber <50% / grey 0 used); computed client-side via `creatorStats` useMemo
+- Inline expand → `InviteTree` loaded via `get_invite_tree(code)` RPC — shows each signup with `completed_profile`, `made_first_post`, `active_7d` flags, level-2 invitees, and summary metrics row
+- `CodeActions` menu: Copy, Edit, Lock/Unlock, Delete (with `window.confirm`)
+- `EditCodeForm`: modal overlay — Label, Max uses (event codes only), Expiry date; saves via direct table update
+
+**Create code modal** (`CreateCodeModal`):
+- **Personal**: 1 random 8-char code; uses ambiguous-char-free alphabet (no I/O/0/1)
+- **Batch**: N codes with shared `batch_label` + optional prefix
+- **Event**: custom memorable code; `is_multi_use = true`; duplicate caught via Postgres `23505` unique constraint error
+
 ## Database Schema (live — verified against Supabase 2026-04-22)
 
 ### `profiles`
@@ -561,6 +581,13 @@ created_at (timestamptz)
 - Written to by a public landing page outside this repo; no select policy means rows are not readable by the app
 - 1 row as of 2026-04-22 snapshot
 
+## RLS — invite_codes (key policies)
+
+- `ic_admin_insert`: `EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)`
+- `ic_admin_update`: `EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)`
+- `ic_admin_delete`: `EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)`
+- Select and claim policies for non-admin users remain unchanged
+
 ## RLS — Groups (key policies)
 
 All group RLS uses SECURITY DEFINER helper functions to avoid infinite recursion:
@@ -582,6 +609,19 @@ Key policies (as of DB snapshot 2026-04-22, groups_select fixed post-snapshot):
 - `li_update`: `added_by = auth.uid() OR folder_id IN (admin group folder check)`
 - `li_delete`: `added_by = auth.uid() OR folder_id IN (admin group folder check)`
 — The null folder_id policies enable the Unsorted inbox (papers added from Explore without a folder)
+
+## RPCs (Supabase)
+
+**`get_invite_codes_with_stats()`** — SECURITY DEFINER; requires `is_admin = true` on caller's profile
+- Returns all `invite_codes` rows enriched with: computed `status` (`active` / `used` / `locked` / `expired`) via CASE expression; `created_by_name` from profiles JOIN
+- Called by `InvitesSection` on mount; no arguments
+
+**`get_invite_tree(p_code text)`** — SECURITY DEFINER; requires `is_admin = true`
+- Returns signups for a given code with per-user flags: `completed_profile`, `made_first_post`, `active_7d`; plus level-2 invitees (codes created by each signup) and summary metrics (`total_signups`, `completed_profiles`, `made_first_posts`, `active_7d_count`)
+- Branches on `is_multi_use`: personal codes join via `claimed_by`; event codes join via `invite_code_uses`
+
+**`claim_invite_code(p_code text)`** — SECURITY DEFINER (pre-existing)
+- Used only for personal (single-use) codes at signup; sets `claimed_by` and `claimed_at`
 
 ## Edge Functions (Supabase)
 
@@ -656,3 +696,4 @@ Sidebar shows a level badge: "Lv.1 — Researcher, 0 XP". The XP bar and level s
 - **sessionStorage.prefill_paper** — used to pass paper metadata from Library/Explore "Share this paper" into NewPostScreen; keys: `doi, title, journal, year, authors, abstract, citation`
 - **work_mode** adapts UI but never restricts access; check `work_mode === 'clinician'` only for clinical-specific display (clinical identity block, clinical stats, "Publications & Presentations" label); `clinician_scientist` shows the researcher view (h-index, citations) since they are primarily researchers who also do patient care; `WORK_MODE_MAP` in `constants.js` maps id → `{ icon, label }`
 - **projectTemplates.js** exports: `PROJECT_TEMPLATES` (all templates keyed by type), `FAST_TEMPLATES` (fast-4 array), `GALLERY_TEMPLATES` (galleryOnly array), `GALLERY_FILTER_CATEGORIES` (filter tab defs), `applyTemplate(template, name, projectId, userId)` → `{ folders, posts }`; `galleryOnly: true` templates are excluded from the fast-4 picker
+- **Invite code validation (AuthScreen)**: dual-mode — direct DB query against `invite_codes`; validation checks `locked_at` (rate-limit), `expires_at` (expiry), then branches: multi-use event codes check `uses_count >= max_uses`; personal codes check `claimed_by IS NOT NULL`; validated `codeRow` stored in `useRef` and used post-signup to either insert `invite_code_uses` + increment `uses_count` (event) or call `claim_invite_code` RPC (personal)

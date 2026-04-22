@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-22 (rev 2)_
+_Last updated: 2026-04-22 (rev 3)_
 
 ## What exists and works
 
@@ -8,7 +8,7 @@ _Last updated: 2026-04-22 (rev 2)_
 - ORCID OAuth login (production client ID; `/authenticate` scope only; pending row bridged via `orcid_pending` table)
 - First-run onboarding wizard: follow suggested users + add first publication
 - Auto-generated `profile_slug` for public profile URLs
-- Invite-code gate with rate limiting
+- Invite-code gate: dual-mode validation — personal (single-use, `claimed_by`) and event (multi-use, `invite_code_uses` table); checks `locked_at`, `expires_at`, and use limits; validated code stored in `useRef` for post-signup claim step
 
 ### Feed
 - For You / Following toggle; All / Papers tab filter
@@ -61,15 +61,16 @@ _Last updated: 2026-04-22 (rev 2)_
 - Fuzzy dedup with `ConflictResolverModal` on all imports
 - Publications tab: CRUD, EPMC name search, ORCID import, AI import, .ris/.bib import, export (BibTeX / RIS / PDF)
 - Share panel: slug editor, per-section visibility toggles, SVG badge, QR code
+- Login email displayed as read-only in the business card edit section (above work email) and in Account Settings; labelled "Login email — not editable here"
 - Profile completion meter (`ProfileCompletionMeter`): milestone checklist with 5 stages (Newcomer → Luminary); confetti on stage unlock; CTA actions link to relevant edit flows
 
 ### User Profile (other users)
 - Tabs: About / Publications / Posts; Follow, Message buttons
 - Discipline `"Tier2 (Tier1)"`; sector without emoji; INTERESTS one-liner in header
 - work_mode badge (clinician=green, industry=amber, clinician_scientist=blue, researcher=violet)
-- Clinical identity block (hospital, years_in_practice, additional_quals chips) for clinician/clinician_scientist
-- Dynamic stats row: clinical modes replace citations/h-index with years_in_practice + clinical_highlight
-- Publications tab label: "Publications & Presentations (N)" for clinical modes
+- Clinical identity block (hospital, years_in_practice, additional_quals chips) for `clinician` only — `clinician_scientist` shows researcher view (h-index, citations)
+- Dynamic stats row: `clinician` mode replaces citations/h-index with years_in_practice + clinical_highlight; `clinician_scientist` retains research stats
+- Publications tab label: "Publications & Presentations (N)" for `clinician` only
 
 ### Business Card (`/c/:slug`)
 - Public card with vCard download; `work_mode`-aware field ordering
@@ -82,7 +83,7 @@ _Last updated: 2026-04-22 (rev 2)_
 - Single post + comments, no auth
 
 ### Public Profile (`/p/:slug`)
-- Respects `profile_visibility` JSONB; work_mode-aware clinical block; dynamic stats; discipline format matches auth views
+- Respects `profile_visibility` JSONB; clinical block shown for `clinician` only; `clinician_scientist` shows researcher stats; discipline format matches auth views
 
 ### Library
 - **Personal library**: LibraryFolderSidebar (200px) + main content; Unsorted virtual folder (folder_id IS NULL)
@@ -105,6 +106,19 @@ _Last updated: 2026-04-22 (rev 2)_
 - **Community templates**: user-submitted via SaveAsTemplateModal (2-step: metadata + review starter posts); status='pending' until approved via SQL; CommunityTemplateCard shows submitter + 👍 rating
 - **GroupProjects**: same flow in group context (admin/member only)
 
+### Admin Panel (`/admin`)
+- Gated via `is_admin = true` on `profiles`; non-admins hit NotFoundScreen
+- Left nav (220px): Overview / Users / Invites / Analytics — Overview/Users/Analytics are placeholders
+
+**Invite management** (fully implemented):
+- Full invite code table loaded via `get_invite_codes_with_stats()` RPC
+- Column filters on Type, Status, Created By — per-column dropdown, outside-click dismiss
+- Multi-select + bulk Lock / Unlock / Delete actions
+- Creator column with promoter KPI: `X/Y shared` ratio with traffic-light colouring
+- Inline tree expand via `get_invite_tree(code)` RPC: per-signup flags (profile complete, first post, 7-day activity), level-2 invitees, summary metrics
+- Inline code editing (label, max uses for event codes, expiry date)
+- `CreateCodeModal`: Personal (1 random code) / Batch (N codes, shared label) / Event (multi-use memorable code)
+
 ### Gamification
 - Sidebar: static "Lv.1 — Researcher, 0 XP" badge — decorative
 - `ProfileCompletionMeter`: live milestone system (5 stages, confetti) — wired to real DB counts
@@ -118,7 +132,7 @@ _Last updated: 2026-04-22 (rev 2)_
 - **Push notifications / email digests**: No push; no email. `email_notifications` preference stored but not actioned.
 - **Moderation / reporting**: None.
 - **Analytics / usage tracking**: No PostHog or equivalent.
-- **Admin panel**: Community template approval is SQL-only. No UI for content moderation, user management, or invite batch generation.
+- **Admin panel**: Invite management is fully built. Overview / Users / Analytics tabs are placeholder. Community template approval is still SQL-only. No UI for content moderation or user management.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.
 - **Group slug / public group URL**: `PublicGroupProfileScreen` exists and `groups.slug` column is confirmed in live DB (auto-generated by `generate_group_slug` trigger); routing in App.jsx for `/g/:slug` still needs wiring.

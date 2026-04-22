@@ -1,5 +1,8 @@
 export const AUTO_TAG_ENABLED = true;
 
+// Luminary Team bot account — used for admin nudge DMs
+export const LUMINARY_TEAM_USER_ID = 'af56ef6f-635a-438b-8c8a-41cc84751bca';
+
 // ── ORCID OAuth ────────────────────────────────────────────────────────────────
 // Client ID is public (like an API key). Secret stays in Supabase secrets only.
 export const ORCID_CLIENT_ID     = 'APP-1BL4ASN7GRKJSFA0';

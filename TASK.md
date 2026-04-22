@@ -1,80 +1,70 @@
-# Task: Admin Panel — Invite Management (Phase 6B)
+# Task: Admin Panel — User Management (Phase 6C)
 
 ## Context
 
 Read CLAUDE.md and PRODUCT_STATE.md first.
 
-This task builds the Invite Management section of the Super Admin Panel
-and extends the invite system to support two code types:
-
-- **Personal codes** (existing): random string (e.g. `X7K2-PLMQ`),
-  single-use, `claimed_by` stores the one person who used it. Unchanged.
-- **Event codes** (new): memorable string (e.g. `AHA2026`), multi-use,
-  tracks every person who joined with it, supports max_uses cap + expiry.
+This task builds the User Management section of the Super Admin Panel.
+It includes a full searchable/filterable user table, a slide-in detail
+panel per user, and a bulk nudge system that sends DMs + notifications
+from a dedicated "Luminary Team" bot account.
 
 Scope:
 
-1. SQL migration — extend `invite_codes`, new `invite_code_uses` table,
-   two RPCs (`get_invite_codes_with_stats`, updated `get_invite_tree`)
-2. `AuthScreen.jsx` — update invite gate to handle both code types
-3. `src/admin/InvitesSection.jsx` — admin table with inline expand
-4. `src/admin/CreateCodeModal.jsx` — three-mode creation UI
-5. `src/admin/AdminShell.jsx` — wire InvitesSection for `section === 'invites'`
+1. Prerequisites — bot account setup (manual, done by user before this task)
+2. SQL migration — `admin_notes` on profiles, four RPCs
+3. `src/lib/constants.js` — add `LUMINARY_TEAM_USER_ID`
+4. `src/admin/UsersSection.jsx` — full user table with filters + bulk select
+5. `src/admin/UserDetailPanel.jsx` — slide-in right panel
+6. `src/admin/BulkNudgeModal.jsx` — compose + send nudge
+7. `src/admin/AdminShell.jsx` — wire UsersSection for `section === 'users'`
 
-> ⚠️ **Critical:** Step 2 touches the live signup flow. Read the existing
-> validation logic in AuthScreen.jsx carefully before making any changes.
-> Test both code types end-to-end before deploying.
+No delete/suspend functionality — deferred (requires service role key).
+No private post nudge — separate task immediately after this one.
+
+---
+
+## Prerequisites — bot account setup (user does this manually first)
+
+Before Claude Code runs this task, the following must be done in
+Supabase Dashboard:
+
+**Step 1 — Create the bot user:**
+Supabase Dashboard → Authentication → Users → "Add user"
+- Email: `team@luminary.app` (or any address — it never receives mail)
+- Set a strong random password (not needed again)
+- Note the UUID Supabase assigns — call it `<BOT_UUID>`
+
+**Step 2 — Create the bot profile:**
+Run in Supabase SQL Editor:
+```sql
+insert into profiles (id, name, title, avatar_color, onboarding_completed)
+values (
+  '<BOT_UUID>',
+  'Luminary Team',
+  'Official Luminary Account',
+  '#6c63ff',
+  true
+)
+on conflict (id) do nothing;
+```
+
+**Step 3 — Note the UUID.** It goes into `constants.js` in Step 3 below.
 
 ---
 
 ## Step 1 — SQL migration
 
-Create `migration_admin_invites.sql`:
+Create `migration_admin_users.sql`:
 
 ```sql
--- Extend invite_codes with new fields
-alter table invite_codes
-  add column if not exists label       text,
-  add column if not exists max_uses    integer default 1,
-  add column if not exists notes       text,
-  add column if not exists expires_at  timestamptz,
-  add column if not exists is_multi_use boolean default false,
-  add column if not exists uses_count  integer default 0;
+-- Admin notes on profiles (simple internal field, never shown to users)
+alter table profiles
+  add column if not exists admin_notes text;
 
--- Backfill: personal codes already claimed count as 1 use
-update invite_codes
-set uses_count = 1
-where claimed_by is not null and is_multi_use = false;
-
--- New table: tracks every individual use of a multi-use event code
-create table if not exists invite_code_uses (
-  id          uuid primary key default gen_random_uuid(),
-  code_id     uuid references invite_codes(id) on delete cascade not null,
-  user_id     uuid references profiles(id) on delete cascade not null,
-  claimed_at  timestamptz default now(),
-  unique(code_id, user_id)
-);
-
-alter table invite_code_uses enable row level security;
-
--- User can record their own use; admin can read all
-create policy "icu_insert" on invite_code_uses for insert
-  with check (auth.uid() = user_id);
-
-create policy "icu_select" on invite_code_uses for select
-  using (
-    auth.uid() = user_id or
-    (select is_admin from profiles where id = auth.uid())
-  );
-
-create index if not exists idx_icu_code_id
-  on invite_code_uses(code_id);
-create index if not exists idx_icu_user_id
-  on invite_code_uses(user_id);
-
--- RPC: get_invite_codes_with_stats
--- Returns all invite codes with computed status and creator name
-create or replace function get_invite_codes_with_stats()
+-- RPC: get_admin_user_list
+-- Returns all users with computed activity, stage, ghost segment
+create or replace function get_admin_user_list()
 returns jsonb
 language plpgsql
 security definer
@@ -89,411 +79,454 @@ begin
     select coalesce(jsonb_agg(row_to_json(t) order by t.created_at desc), '[]'::jsonb)
     from (
       select
-        ic.id,
-        ic.code,
-        ic.label,
-        ic.batch_label,
-        ic.is_multi_use,
-        ic.max_uses,
-        ic.uses_count,
-        ic.expires_at,
-        ic.locked_at,
-        ic.created_at,
-        ic.notes,
-        ic.claimed_by,
-        ic.claimed_at,
+        p.id,
+        p.name,
+        p.title,
+        p.institution,
+        p.work_mode,
+        p.avatar_color,
+        p.avatar_url,
+        p.profile_slug,
+        p.onboarding_completed,
+        p.admin_notes,
+        p.created_at,
+
+        -- Last active: max created_at across posts, comments, likes
+        greatest(
+          (select max(created_at) from posts    where user_id = p.id),
+          (select max(created_at) from comments where user_id = p.id),
+          (select max(created_at) from likes    where user_id = p.id)
+        ) as last_active,
+
+        -- Counts
+        (select count(*) from posts        where user_id = p.id)::int as posts_count,
+        (select count(*) from group_members where user_id = p.id)::int as groups_count,
+
+        -- Invite code used at signup
+        coalesce(
+          (select ic.code from invite_codes ic
+           where ic.claimed_by = p.id limit 1),
+          (select ic.code from invite_code_uses icu
+           join invite_codes ic on ic.id = icu.code_id
+           where icu.user_id = p.id limit 1)
+        ) as invite_code_used,
+
+        -- Activation stage (highest reached)
         case
-          when ic.locked_at is not null then 'locked'
-          when ic.expires_at is not null and ic.expires_at < now() then 'expired'
-          when ic.is_multi_use
-            and ic.max_uses is not null
-            and ic.uses_count >= ic.max_uses then 'exhausted'
-          when not ic.is_multi_use
-            and ic.claimed_by is not null then 'exhausted'
-          else 'active'
-        end as status,
-        p.name as created_by_name
-      from invite_codes ic
-      left join profiles p on p.id = ic.created_by
+          when exists(select 1 from posts where user_id = p.id)
+            and p.profile_slug is not null
+            then 'visible'
+          when exists(select 1 from posts where user_id = p.id)
+            then 'active'
+          when exists(select 1 from follows where follower_id = p.id)
+            or exists(select 1 from group_members where user_id = p.id)
+            then 'connected'
+          when coalesce(p.onboarding_completed, false) = true
+            or exists(select 1 from publications where user_id = p.id)
+            then 'credible'
+          else 'identified'
+        end as activation_stage,
+
+        -- Ghost segment
+        case
+          when (
+            (select count(*) from posts         where user_id = p.id) +
+            (select count(*) from comments      where user_id = p.id) +
+            (select count(*) from likes         where user_id = p.id) +
+            (select count(*) from follows       where follower_id = p.id) +
+            (select count(*) from group_members where user_id = p.id)
+          ) = 0 then 'stuck'
+          when (
+            (select count(*) from posts         where user_id = p.id) +
+            (select count(*) from comments      where user_id = p.id) +
+            (select count(*) from likes         where user_id = p.id) +
+            (select count(*) from follows       where follower_id = p.id) +
+            (select count(*) from group_members where user_id = p.id)
+          ) <= 2
+          and greatest(
+            (select max(created_at) from posts    where user_id = p.id),
+            (select max(created_at) from comments where user_id = p.id),
+            (select max(created_at) from likes    where user_id = p.id)
+          ) < now() - interval '5 days'
+          then 'almost'
+          else null
+        end as ghost_segment
+
+      from profiles p
+      -- Exclude the bot account from the user list
+      where p.id != (
+        select id from profiles where name = 'Luminary Team' limit 1
+      )
     ) t
   );
 end;
 $$;
 
--- RPC: get_invite_tree (replaces Phase 6A stub with real implementation)
--- Takes a code string, returns signups + conversion metrics + level-2 invitees
-create or replace function get_invite_tree(p_code text)
+-- RPC: get_user_activation_stages (real implementation — replaces Phase 6A stub)
+-- Returns funnel counts for Overview dashboard
+create or replace function get_user_activation_stages()
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_code_row  invite_codes;
-  v_signups   jsonb;
-  v_summary   jsonb;
+  v_total      int;
+  v_credible   int;
+  v_connected  int;
+  v_active     int;
+  v_visible    int;
 begin
   if not (select is_admin from profiles where id = auth.uid()) then
     raise exception 'not authorized';
   end if;
 
-  select * into v_code_row from invite_codes where code = p_code;
-  if not found then
-    return null;
-  end if;
+  select count(*) into v_total from profiles
+  where name != 'Luminary Team';
 
-  -- Build signup list depending on code type
-  if v_code_row.is_multi_use then
-    -- Event code: get users from invite_code_uses
-    select coalesce(jsonb_agg(
-      jsonb_build_object(
-        'user_id',          p.id,
-        'name',             p.name,
-        'avatar_color',     p.avatar_color,
-        'joined_at',        icu.claimed_at,
-        'completed_profile', coalesce(p.onboarding_completed, false),
-        'made_first_post',  exists(
-          select 1 from posts where user_id = p.id limit 1
-        ),
-        'active_7d',        exists(
-          select 1 from posts
-          where user_id = p.id
-            and created_at >= icu.claimed_at
-            and created_at <  icu.claimed_at + interval '7 days'
-          limit 1
-        ),
-        'invitees', (
-          -- Level 2: codes this user created + who claimed them
-          select coalesce(jsonb_agg(
-            jsonb_build_object(
-              'user_id',           p2.id,
-              'name',              p2.name,
-              'avatar_color',      p2.avatar_color,
-              'joined_at',         coalesce(ic2.claimed_at, icu2.claimed_at),
-              'completed_profile', coalesce(p2.onboarding_completed, false),
-              'made_first_post',   exists(
-                select 1 from posts where user_id = p2.id limit 1
-              ),
-              'active_7d',         exists(
-                select 1 from posts
-                where user_id = p2.id
-                  and created_at >= coalesce(ic2.claimed_at, icu2.claimed_at)
-                  and created_at <  coalesce(ic2.claimed_at, icu2.claimed_at) + interval '7 days'
-                limit 1
-              )
-            )
-          ), '[]'::jsonb)
-          from invite_codes ic2
-          left join profiles p2         on p2.id  = ic2.claimed_by
-          left join invite_code_uses icu2 on icu2.code_id = ic2.id
-          where ic2.created_by = p.id
-            and (ic2.claimed_by is not null or icu2.user_id is not null)
-        )
-      )
-    ), '[]'::jsonb) into v_signups
-    from invite_code_uses icu
-    join profiles p on p.id = icu.user_id
-    where icu.code_id = v_code_row.id;
+  select count(*) into v_credible from profiles p
+  where (coalesce(p.onboarding_completed, false) = true
+    or exists(select 1 from publications where user_id = p.id))
+    and p.name != 'Luminary Team';
 
-  else
-    -- Personal code: get from claimed_by
-    select coalesce(jsonb_agg(
-      jsonb_build_object(
-        'user_id',          p.id,
-        'name',             p.name,
-        'avatar_color',     p.avatar_color,
-        'joined_at',        ic.claimed_at,
-        'completed_profile', coalesce(p.onboarding_completed, false),
-        'made_first_post',  exists(
-          select 1 from posts where user_id = p.id limit 1
-        ),
-        'active_7d',        exists(
-          select 1 from posts
-          where user_id = p.id
-            and created_at >= ic.claimed_at
-            and created_at <  ic.claimed_at + interval '7 days'
-          limit 1
-        ),
-        'invitees', (
-          select coalesce(jsonb_agg(
-            jsonb_build_object(
-              'user_id',           p2.id,
-              'name',              p2.name,
-              'avatar_color',      p2.avatar_color,
-              'joined_at',         coalesce(ic2.claimed_at, icu2.claimed_at),
-              'completed_profile', coalesce(p2.onboarding_completed, false),
-              'made_first_post',   exists(
-                select 1 from posts where user_id = p2.id limit 1
-              ),
-              'active_7d',         exists(
-                select 1 from posts
-                where user_id = p2.id
-                  and created_at >= coalesce(ic2.claimed_at, icu2.claimed_at)
-                  and created_at <  coalesce(ic2.claimed_at, icu2.claimed_at) + interval '7 days'
-                limit 1
-              )
-            )
-          ), '[]'::jsonb)
-          from invite_codes ic2
-          left join profiles p2           on p2.id  = ic2.claimed_by
-          left join invite_code_uses icu2 on icu2.code_id = ic2.id
-          where ic2.created_by = p.id
-            and (ic2.claimed_by is not null or icu2.user_id is not null)
-        )
-      )
-    ), '[]'::jsonb) into v_signups
-    from invite_codes ic
-    join profiles p on p.id = ic.claimed_by
-    where ic.code = p_code;
-  end if;
+  select count(*) into v_connected from profiles p
+  where (exists(select 1 from follows where follower_id = p.id)
+    or exists(select 1 from group_members where user_id = p.id))
+    and p.name != 'Luminary Team';
 
-  -- Compute summary metrics across all signups
-  select jsonb_build_object(
-    'total',             jsonb_array_length(coalesce(v_signups, '[]'::jsonb)),
-    'pct_profile',       case when jsonb_array_length(coalesce(v_signups,'[]'::jsonb)) = 0 then 0
-                         else round(100.0 *
-                           (select count(*) from jsonb_array_elements(v_signups) s
-                            where (s->>'completed_profile')::boolean) /
-                           jsonb_array_length(v_signups)) end,
-    'pct_first_post',    case when jsonb_array_length(coalesce(v_signups,'[]'::jsonb)) = 0 then 0
-                         else round(100.0 *
-                           (select count(*) from jsonb_array_elements(v_signups) s
-                            where (s->>'made_first_post')::boolean) /
-                           jsonb_array_length(v_signups)) end,
-    'pct_active_7d',     case when jsonb_array_length(coalesce(v_signups,'[]'::jsonb)) = 0 then 0
-                         else round(100.0 *
-                           (select count(*) from jsonb_array_elements(v_signups) s
-                            where (s->>'active_7d')::boolean) /
-                           jsonb_array_length(v_signups)) end
-  ) into v_summary;
+  select count(*) into v_active from profiles p
+  where exists(select 1 from posts where user_id = p.id)
+    and p.name != 'Luminary Team';
 
-  return jsonb_build_object(
-    'code',         v_code_row.code,
-    'label',        v_code_row.label,
-    'is_multi_use', v_code_row.is_multi_use,
-    'uses_count',   v_code_row.uses_count,
-    'max_uses',     v_code_row.max_uses,
-    'summary',      v_summary,
-    'signups',      coalesce(v_signups, '[]'::jsonb)
+  select count(*) into v_visible from profiles p
+  where exists(select 1 from posts where user_id = p.id)
+    and p.profile_slug is not null
+    and p.name != 'Luminary Team';
+
+  return jsonb_build_array(
+    jsonb_build_object('stage', 'Identified',  'count', v_total),
+    jsonb_build_object('stage', 'Credible',    'count', v_credible),
+    jsonb_build_object('stage', 'Connected',   'count', v_connected),
+    jsonb_build_object('stage', 'Active',      'count', v_active),
+    jsonb_build_object('stage', 'Visible',     'count', v_visible)
   );
 end;
 $$;
 
-grant execute on function get_invite_codes_with_stats() to authenticated;
-grant execute on function get_invite_tree(text)         to authenticated;
+-- RPC: get_ghost_users (real implementation — replaces Phase 6A stub)
+create or replace function get_ghost_users()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not (select is_admin from profiles where id = auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+
+  return (
+    select coalesce(jsonb_agg(row_to_json(t)), '[]'::jsonb)
+    from (
+      select
+        p.id,
+        p.name,
+        p.avatar_color,
+        p.created_at,
+        case
+          when (
+            (select count(*) from posts         where user_id = p.id) +
+            (select count(*) from comments      where user_id = p.id) +
+            (select count(*) from likes         where user_id = p.id) +
+            (select count(*) from follows       where follower_id = p.id) +
+            (select count(*) from group_members where user_id = p.id)
+          ) = 0 then 'stuck'
+          else 'almost'
+        end as ghost_segment
+      from profiles p
+      where p.name != 'Luminary Team'
+        and (
+          -- stuck
+          (select count(*) from posts         where user_id = p.id) +
+          (select count(*) from comments      where user_id = p.id) +
+          (select count(*) from likes         where user_id = p.id) +
+          (select count(*) from follows       where follower_id = p.id) +
+          (select count(*) from group_members where user_id = p.id)
+        ) <= 2
+        and greatest(
+          (select max(created_at) from posts    where user_id = p.id),
+          (select max(created_at) from comments where user_id = p.id),
+          (select max(created_at) from likes    where user_id = p.id),
+          p.created_at
+        ) < now() - interval '5 days'
+      order by p.created_at desc
+    ) t
+  );
+end;
+$$;
+
+-- RPC: send_admin_nudge
+-- Sends a DM + notification from the Luminary Team bot to each target user.
+-- Runs as SECURITY DEFINER so it can insert messages with sender_id = bot,
+-- bypassing the normal RLS requirement that sender_id = auth.uid().
+create or replace function send_admin_nudge(
+  p_target_user_ids  uuid[],
+  p_message          text,
+  p_bot_user_id      uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_target_id  uuid;
+  v_conv_id    uuid;
+  v_uid_a      uuid;
+  v_uid_b      uuid;
+begin
+  if not (select is_admin from profiles where id = auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+
+  if p_message is null or trim(p_message) = '' then
+    raise exception 'message cannot be empty';
+  end if;
+
+  foreach v_target_id in array p_target_user_ids loop
+    -- Canonical conversation ID sort (matches startConversation() helper)
+    if p_bot_user_id < v_target_id then
+      v_uid_a := p_bot_user_id;
+      v_uid_b := v_target_id;
+    else
+      v_uid_a := v_target_id;
+      v_uid_b := p_bot_user_id;
+    end if;
+
+    -- Find or create conversation
+    select id into v_conv_id
+    from conversations
+    where user_id_a = v_uid_a and user_id_b = v_uid_b
+    limit 1;
+
+    if v_conv_id is null then
+      insert into conversations (user_id_a, user_id_b, last_message, last_message_at)
+      values (v_uid_a, v_uid_b, p_message, now())
+      returning id into v_conv_id;
+    else
+      update conversations
+      set last_message = p_message, last_message_at = now()
+      where id = v_conv_id;
+    end if;
+
+    -- Insert message from bot
+    insert into messages (conversation_id, sender_id, content)
+    values (v_conv_id, p_bot_user_id, p_message);
+
+    -- Insert notification
+    insert into notifications (user_id, actor_id, notif_type, target_type, target_id, read)
+    values (v_target_id, p_bot_user_id, 'new_message', 'conversation', v_conv_id::text, false);
+
+  end loop;
+
+  return jsonb_build_object('sent', array_length(p_target_user_ids, 1));
+end;
+$$;
+
+grant execute on function get_admin_user_list()                        to authenticated;
+grant execute on function get_user_activation_stages()                 to authenticated;
+grant execute on function get_ghost_users()                            to authenticated;
+grant execute on function send_admin_nudge(uuid[], text, uuid)         to authenticated;
 ```
 
 Tell the user to run this in Supabase SQL Editor.
 
 ---
 
-## Step 2 — Update invite gate in AuthScreen.jsx
+## Step 2 — Update constants.js
 
-> ⚠️ Read the existing invite validation logic in AuthScreen.jsx carefully
-> before modifying. Locate the section that validates the invite code at
-> signup and the section that marks the code as used after signup.
-> Make surgical changes only — do not restructure the auth flow.
+In `src/lib/constants.js`, add the bot account UUID at the top of the
+file alongside other constants. Claude Code should not guess the UUID —
+it must ask the user to provide it, since it was created manually in
+the Supabase Dashboard in the Prerequisites step.
 
-### Validation (before signup)
-
-Find the code that checks whether an invite code is valid. It currently
-checks something like `claimed_by is null` (single-use model). Replace
-the validity check with logic that handles both code types:
-
+Add:
 ```javascript
-// Fetch the code row (existing pattern — keep whatever query method is used)
-const { data: codeRow, error: codeError } = await supabase
-  .from('invite_codes')
-  .select('id, code, is_multi_use, max_uses, uses_count, expires_at, locked_at, claimed_by')
-  .eq('code', inviteCode.trim().toUpperCase())
-  .single();
-
-if (codeError || !codeRow) {
-  // Invalid code — show existing error UI
-  return;
-}
-
-// Check if locked
-if (codeRow.locked_at) {
-  // Show "This code has been locked" error
-  return;
-}
-
-// Check expiry
-if (codeRow.expires_at && new Date(codeRow.expires_at) < new Date()) {
-  // Show "This invite code has expired" error
-  return;
-}
-
-if (codeRow.is_multi_use) {
-  // Event code: check capacity
-  if (codeRow.max_uses != null && codeRow.uses_count >= codeRow.max_uses) {
-    // Show "This invite code is no longer available" error
-    return;
-  }
-  // Valid event code — proceed to signup
-} else {
-  // Personal code: must be unclaimed
-  if (codeRow.claimed_by) {
-    // Show existing "code already used" error
-    return;
-  }
-  // Valid personal code — proceed to signup
-}
+// Luminary Team bot account — used for admin nudge DMs
+// Set this to the UUID from Supabase Auth → Users → Luminary Team
+export const LUMINARY_TEAM_USER_ID = '<BOT_UUID>';
 ```
-
-### Post-signup: mark code as used
-
-Find the section that runs after `supabase.auth.signUp()` succeeds and
-marks the code as used. It currently sets `claimed_by` and `claimed_at`.
-Update it to handle both types:
-
-```javascript
-if (codeRow.is_multi_use) {
-  // Event code: insert into invite_code_uses + increment uses_count
-  await supabase.from('invite_code_uses').insert({
-    code_id:    codeRow.id,
-    user_id:    newUser.id,        // the newly created user's id
-    claimed_at: new Date().toISOString(),
-  });
-  await supabase
-    .from('invite_codes')
-    .update({ uses_count: (codeRow.uses_count || 0) + 1 })
-    .eq('id', codeRow.id);
-} else {
-  // Personal code: mark as claimed (existing logic — keep as-is)
-  await supabase
-    .from('invite_codes')
-    .update({
-      claimed_by: newUser.id,
-      claimed_at: new Date().toISOString(),
-    })
-    .eq('id', codeRow.id);
-}
-```
-
-Pass `codeRow` into the post-signup handler — store it in a `useRef` or
-local variable that persists from validation to post-signup. Match
-whatever pattern is already used to pass the code row between those two
-steps.
 
 ---
 
-## Step 3 — InvitesSection.jsx
+## Step 3 — UsersSection.jsx
 
-Create `src/admin/InvitesSection.jsx`:
+Create `src/admin/UsersSection.jsx`:
 
 ```jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { T } from '../../lib/constants';
 import Av from '../../components/Av';
 import Spinner from '../../components/Spinner';
-import CreateCodeModal from './CreateCodeModal';
+import { timeAgo } from '../../lib/utils';
+import UserDetailPanel from './UserDetailPanel';
+import BulkNudgeModal from './BulkNudgeModal';
 
-const STATUS_STYLES = {
-  active:    { bg: T.gr2,  color: T.gr,   label: 'Active'    },
-  exhausted: { bg: T.bl2,  color: T.bl,   label: 'Exhausted' },
-  expired:   { bg: T.ro2,  color: T.ro,   label: 'Expired'   },
-  locked:    { bg: T.am2,  color: T.am,   label: 'Locked'    },
+const STAGE_STYLES = {
+  visible:    { bg: T.v2,   color: T.v3,  label: 'Visible'    },
+  active:     { bg: T.gr2,  color: T.gr,  label: 'Active'     },
+  connected:  { bg: T.bl2,  color: T.bl,  label: 'Connected'  },
+  credible:   { bg: T.te2,  color: T.te,  label: 'Credible'   },
+  identified: { bg: T.s3,   color: T.mu,  label: 'Identified' },
 };
 
-export default function InvitesSection({ supabase }) {
-  const [codes, setCodes]           = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [expandedId, setExpandedId] = useState(null);
-  const [treeData, setTreeData]     = useState({});   // code → tree result
-  const [treeLoading, setTreeLoading] = useState({}); // code → bool
-  const [showCreate, setShowCreate] = useState(false);
-  const [search, setSearch]         = useState('');
+const GHOST_STYLES = {
+  stuck:  { bg: T.ro2, color: T.ro, label: '👻 Stuck'  },
+  almost: { bg: T.am2, color: T.am, label: '⚡ Almost' },
+};
+
+const WORK_MODE_LABELS = {
+  researcher:          'Researcher',
+  clinician:           'Clinician',
+  industry:            'Industry',
+  clinician_scientist: 'Clin. Scientist',
+};
+
+const STAGES   = ['identified', 'credible', 'connected', 'active', 'visible'];
+const GHOSTS   = ['stuck', 'almost'];
+const MODES    = ['researcher', 'clinician', 'industry', 'clinician_scientist'];
+
+export default function UsersSection({ supabase, user: adminUser }) {
+  const [users, setUsers]             = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [search, setSearch]           = useState('');
+  const [stageFilter, setStageFilter] = useState('');
+  const [ghostFilter, setGhostFilter] = useState('');
+  const [modeFilter, setModeFilter]   = useState('');
+  const [selected, setSelected]       = useState(new Set());
+  const [detailUser, setDetailUser]   = useState(null);
+  const [showNudge, setShowNudge]     = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.rpc('get_invite_codes_with_stats');
-    setCodes(data || []);
+    const { data } = await supabase.rpc('get_admin_user_list');
+    setUsers(data || []);
     setLoading(false);
   }, [supabase]);
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleExpand = async (code) => {
-    if (expandedId === code.code) {
-      setExpandedId(null);
-      return;
+  // Filtered list
+  const filtered = users.filter(u => {
+    if (stageFilter && u.activation_stage !== stageFilter) return false;
+    if (ghostFilter && u.ghost_segment    !== ghostFilter) return false;
+    if (modeFilter  && u.work_mode        !== modeFilter)  return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        u.name?.toLowerCase().includes(q) ||
+        u.institution?.toLowerCase().includes(q) ||
+        u.title?.toLowerCase().includes(q)
+      );
     }
-    setExpandedId(code.code);
-    if (treeData[code.code]) return; // already loaded
-
-    setTreeLoading(prev => ({ ...prev, [code.code]: true }));
-    const { data } = await supabase.rpc('get_invite_tree', { p_code: code.code });
-    setTreeData(prev => ({ ...prev, [code.code]: data }));
-    setTreeLoading(prev => ({ ...prev, [code.code]: false }));
-  };
-
-  const filtered = codes.filter(c => {
-    const q = search.toLowerCase();
-    return !q
-      || c.code?.toLowerCase().includes(q)
-      || c.label?.toLowerCase().includes(q)
-      || c.batch_label?.toLowerCase().includes(q);
+    return true;
   });
 
+  // Bulk select helpers
+  const allSelected   = filtered.length > 0 && filtered.every(u => selected.has(u.id));
+  const someSelected  = selected.size > 0;
+  const toggleAll     = () => {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(u => u.id)));
+    }
+  };
+  const toggleOne = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectedUsers = users.filter(u => selected.has(u.id));
+
   return (
-    <div>
+    <div style={{ paddingBottom: someSelected ? 80 : 0 }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', marginBottom: 20,
+        justifyContent: 'space-between', marginBottom: 16,
       }}>
         <div>
           <h1 style={{
             fontFamily: "'DM Serif Display', serif",
             fontSize: 32, color: T.text, margin: '0 0 4px',
           }}>
-            Invites
+            Users
           </h1>
           <div style={{ fontSize: 13, color: T.mu }}>
-            {codes.filter(c => c.status === 'active').length} active ·{' '}
-            {codes.reduce((n, c) => n + (c.uses_count || 0), 0)} total signups
+            {users.length} total ·{' '}
+            {users.filter(u => u.ghost_segment).length} ghost users
           </div>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          style={{
-            padding: '9px 18px', borderRadius: 9, border: 'none',
-            background: T.v, color: '#fff', fontWeight: 600,
-            fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
-          }}
-        >
-          + Create code
-        </button>
       </div>
 
-      {/* Search */}
-      <input
-        placeholder="Search codes or labels…"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        style={{
-          width: '100%', padding: '9px 12px', marginBottom: 14,
-          borderRadius: 9, border: `1px solid ${T.bdr}`,
-          background: T.s2, fontSize: 13, color: T.text,
-          fontFamily: 'inherit', outline: 'none',
-          boxSizing: 'border-box',
-        }}
-      />
+      {/* Filters row */}
+      <div style={{
+        display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap',
+      }}>
+        <input
+          placeholder="Search name, institution, title…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{
+            flex: 1, minWidth: 200, padding: '8px 12px',
+            borderRadius: 9, border: `1px solid ${T.bdr}`,
+            background: T.s2, fontSize: 13, color: T.text,
+            fontFamily: 'inherit', outline: 'none',
+          }}
+        />
+        <FilterSelect
+          value={stageFilter}
+          onChange={setStageFilter}
+          placeholder="All stages"
+          options={STAGES.map(s => ({ value: s, label: STAGE_STYLES[s].label }))}
+        />
+        <FilterSelect
+          value={ghostFilter}
+          onChange={setGhostFilter}
+          placeholder="All users"
+          options={GHOSTS.map(g => ({ value: g, label: GHOST_STYLES[g].label }))}
+        />
+        <FilterSelect
+          value={modeFilter}
+          onChange={setModeFilter}
+          placeholder="All modes"
+          options={MODES.map(m => ({ value: m, label: WORK_MODE_LABELS[m] }))}
+        />
+        {(stageFilter || ghostFilter || modeFilter || search) && (
+          <button
+            onClick={() => {
+              setStageFilter(''); setGhostFilter('');
+              setModeFilter(''); setSearch('');
+            }}
+            style={{
+              padding: '8px 12px', borderRadius: 9,
+              border: `1px solid ${T.bdr}`, background: T.w,
+              color: T.mu, fontSize: 13, cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
 
       {/* Table */}
       {loading ? (
-        <div style={{ padding: 40, textAlign: 'center' }}>
-          <Spinner />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div style={{
-          textAlign: 'center', padding: '48px 20px',
-          color: T.mu, fontSize: 14,
-        }}>
-          {search ? 'No codes match your search.' : 'No invite codes yet.'}
-        </div>
+        <div style={{ padding: 40, textAlign: 'center' }}><Spinner /></div>
       ) : (
         <div style={{
           background: T.w, border: `1px solid ${T.bdr}`,
@@ -502,423 +535,343 @@ export default function InvitesSection({ supabase }) {
           {/* Column headers */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr 80px 100px 90px 90px 80px',
-            padding: '10px 16px',
+            gridTemplateColumns: '32px 1fr 110px 90px 90px 50px 50px 100px 80px 80px',
+            padding: '10px 14px',
             borderBottom: `1px solid ${T.bdr}`,
-            fontSize: 11.5, fontWeight: 600, color: T.mu,
+            fontSize: 11, fontWeight: 600, color: T.mu,
             textTransform: 'uppercase', letterSpacing: 0.4,
+            alignItems: 'center',
           }}>
-            <div>Code</div>
-            <div>Label</div>
-            <div>Type</div>
-            <div>Uses</div>
-            <div>Expires</div>
-            <div>Status</div>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleAll}
+              style={{ cursor: 'pointer' }}
+            />
+            <div>User</div>
+            <div>Work mode</div>
+            <div>Joined</div>
+            <div>Last active</div>
+            <div>Posts</div>
+            <div>Groups</div>
+            <div>Stage</div>
+            <div>Ghost</div>
             <div></div>
           </div>
 
-          {filtered.map((code, i) => (
-            <CodeRow
-              key={code.id}
-              code={code}
-              isLast={i === filtered.length - 1}
-              expanded={expandedId === code.code}
-              onToggle={() => toggleExpand(code)}
-              tree={treeData[code.code]}
-              treeLoading={treeLoading[code.code]}
-              supabase={supabase}
-              onRefresh={load}
-            />
-          ))}
+          {filtered.length === 0 ? (
+            <div style={{
+              textAlign: 'center', padding: '40px 20px',
+              color: T.mu, fontSize: 14,
+            }}>
+              No users match your filters.
+            </div>
+          ) : (
+            filtered.map((u, i) => (
+              <UserRow
+                key={u.id}
+                user={u}
+                isLast={i === filtered.length - 1}
+                selected={selected.has(u.id)}
+                onToggle={() => toggleOne(u.id)}
+                onOpen={() => setDetailUser(u)}
+              />
+            ))
+          )}
         </div>
       )}
 
-      {showCreate && (
-        <CreateCodeModal
+      {/* Bulk action bar */}
+      {someSelected && (
+        <div style={{
+          position: 'fixed', bottom: 20, left: '50%',
+          transform: 'translateX(-50%)',
+          background: T.text, color: '#fff',
+          borderRadius: 12, padding: '12px 20px',
+          display: 'flex', alignItems: 'center', gap: 16,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.25)',
+          zIndex: 50, fontSize: 14,
+        }}>
+          <span style={{ fontWeight: 600 }}>
+            {selected.size} user{selected.size > 1 ? 's' : ''} selected
+          </span>
+          <button
+            onClick={() => setShowNudge(true)}
+            style={{
+              padding: '7px 16px', borderRadius: 8, border: 'none',
+              background: T.v, color: '#fff', fontWeight: 600,
+              fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Send nudge
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            style={{
+              padding: '7px 12px', borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.2)',
+              background: 'transparent', color: '#fff',
+              fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Detail panel */}
+      {detailUser && (
+        <UserDetailPanel
+          user={detailUser}
           supabase={supabase}
-          onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); load(); }}
+          adminUser={adminUser}
+          onClose={() => setDetailUser(null)}
+          onNudge={() => {
+            setSelected(new Set([detailUser.id]));
+            setDetailUser(null);
+            setShowNudge(true);
+          }}
+          onNotesUpdated={(notes) => {
+            setUsers(prev => prev.map(u =>
+              u.id === detailUser.id ? { ...u, admin_notes: notes } : u
+            ));
+          }}
+        />
+      )}
+
+      {/* Bulk nudge modal */}
+      {showNudge && (
+        <BulkNudgeModal
+          supabase={supabase}
+          targetUsers={selectedUsers}
+          onClose={() => setShowNudge(false)}
+          onSent={() => {
+            setShowNudge(false);
+            setSelected(new Set());
+          }}
         />
       )}
     </div>
   );
 }
 
-// ─── CodeRow ─────────────────────────────────────────────────────────────────
+// ─── UserRow ──────────────────────────────────────────────────────────────────
 
-function CodeRow({ code, isLast, expanded, onToggle, tree, treeLoading, supabase, onRefresh }) {
-  const st = STATUS_STYLES[code.status] || STATUS_STYLES.active;
-  const usesLabel = code.is_multi_use
-    ? `${code.uses_count ?? 0}${code.max_uses != null ? ` / ${code.max_uses}` : ''}`
-    : code.claimed_by ? '1 / 1' : '0 / 1';
+function UserRow({ user, isLast, selected, onToggle, onOpen }) {
+  const stage = STAGE_STYLES[user.activation_stage] || STAGE_STYLES.identified;
+  const ghost = user.ghost_segment ? GHOST_STYLES[user.ghost_segment] : null;
 
   return (
-    <>
-      {/* Main row */}
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '32px 1fr 110px 90px 90px 50px 50px 100px 80px 80px',
+        padding: '11px 14px',
+        borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`,
+        alignItems: 'center',
+        background: selected ? T.v2 : 'transparent',
+        cursor: 'default',
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={onToggle}
+        onClick={e => e.stopPropagation()}
+        style={{ cursor: 'pointer' }}
+      />
+
+      {/* Name + avatar */}
       <div
-        onClick={onToggle}
+        onClick={onOpen}
         style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 80px 100px 90px 90px 80px',
-          padding: '12px 16px',
-          borderBottom: (!isLast || expanded) ? `1px solid ${T.bdr}` : 'none',
+          display: 'flex', alignItems: 'center', gap: 9,
           cursor: 'pointer',
-          background: expanded ? T.s2 : 'transparent',
-          alignItems: 'center',
-          transition: 'background 0.15s',
         }}
       >
-        {/* Code */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            fontFamily: 'monospace', fontSize: 13.5,
-            fontWeight: 700, color: T.text,
-          }}>
-            {code.code}
-          </span>
-          <span style={{ fontSize: 12, color: T.mu }}>
-            {expanded ? '▲' : '▼'}
-          </span>
-        </div>
-
-        {/* Label */}
-        <div style={{ fontSize: 13, color: T.mu }}>
-          {code.label || code.batch_label || '—'}
-        </div>
-
-        {/* Type */}
+        <Av
+          size={30}
+          name={user.name}
+          color={user.avatar_color}
+          url={user.avatar_url || ''}
+        />
         <div>
-          <span style={{
-            fontSize: 11, fontWeight: 700, padding: '2px 7px',
-            borderRadius: 20,
-            background: code.is_multi_use ? T.v2 : T.s3,
-            color: code.is_multi_use ? T.v3 : T.mu,
-          }}>
-            {code.is_multi_use ? 'Event' : 'Personal'}
-          </span>
-        </div>
-
-        {/* Uses */}
-        <div style={{ fontSize: 13, color: T.text }}>{usesLabel}</div>
-
-        {/* Expires */}
-        <div style={{ fontSize: 12, color: T.mu }}>
-          {code.expires_at
-            ? new Date(code.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })
-            : '—'}
-        </div>
-
-        {/* Status */}
-        <div>
-          <span style={{
-            fontSize: 11, fontWeight: 700, padding: '2px 8px',
-            borderRadius: 20, background: st.bg, color: st.color,
-          }}>
-            {st.label}
-          </span>
-        </div>
-
-        {/* Actions */}
-        <div onClick={e => e.stopPropagation()}>
-          <CodeActions code={code} supabase={supabase} onRefresh={onRefresh} />
-        </div>
-      </div>
-
-      {/* Inline expanded tree */}
-      {expanded && (
-        <div style={{
-          borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`,
-          background: T.s2, padding: '16px 20px',
-        }}>
-          {treeLoading ? (
-            <div style={{ textAlign: 'center', padding: 16 }}><Spinner /></div>
-          ) : tree ? (
-            <InviteTree tree={tree} />
-          ) : (
-            <div style={{ color: T.mu, fontSize: 13 }}>No data yet.</div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>
+            {user.name || '—'}
+          </div>
+          {user.institution && (
+            <div style={{ fontSize: 11.5, color: T.mu }}>
+              {user.institution}
+            </div>
           )}
         </div>
-      )}
-    </>
-  );
-}
-
-// ─── InviteTree ───────────────────────────────────────────────────────────────
-
-function InviteTree({ tree }) {
-  const s = tree.summary || {};
-  const signups = tree.signups || [];
-
-  return (
-    <div>
-      {/* Summary metrics */}
-      <div style={{
-        display: 'flex', gap: 24, marginBottom: 14,
-        padding: '10px 14px', background: T.w,
-        borderRadius: 9, border: `1px solid ${T.bdr}`,
-        flexWrap: 'wrap',
-      }}>
-        {[
-          { label: 'Signups',         value: s.total ?? 0,          unit: '' },
-          { label: 'Completed profile', value: s.pct_profile ?? 0,  unit: '%' },
-          { label: 'First post',       value: s.pct_first_post ?? 0, unit: '%' },
-          { label: 'Active 7d',        value: s.pct_active_7d ?? 0, unit: '%' },
-        ].map(m => (
-          <div key={m.label} style={{ textAlign: 'center' }}>
-            <div style={{
-              fontSize: 20, fontWeight: 700, color: T.v,
-              fontFamily: "'DM Serif Display', serif",
-            }}>
-              {m.value}{m.unit}
-            </div>
-            <div style={{ fontSize: 11.5, color: T.mu }}>{m.label}</div>
-          </div>
-        ))}
       </div>
 
-      {/* Tree rows */}
-      {signups.length === 0 ? (
-        <div style={{ fontSize: 13, color: T.mu }}>No signups yet.</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {signups.map(user => (
-            <TreeUser key={user.user_id} user={user} depth={0} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TreeUser({ user, depth }) {
-  const invitees = user.invitees || [];
-  return (
-    <div style={{ marginLeft: depth * 24 }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '7px 10px', borderRadius: 8,
-        background: depth === 0 ? T.w : T.s3,
-        border: `1px solid ${T.bdr}`,
-        marginBottom: invitees.length ? 6 : 0,
-      }}>
-        <Av size={26} name={user.name} color={user.avatar_color} url="" />
-        <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.text }}>
-          {user.name}
-          <span style={{ fontSize: 11.5, color: T.mu, fontWeight: 400, marginLeft: 8 }}>
-            {user.joined_at
-              ? new Date(user.joined_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-              : ''}
-          </span>
-        </div>
-        <ConversionPills user={user} />
+      {/* Work mode */}
+      <div style={{ fontSize: 12, color: T.mu }}>
+        {WORK_MODE_LABELS[user.work_mode] || user.work_mode || '—'}
       </div>
-      {invitees.map(inv => (
-        <TreeUser key={inv.user_id} user={inv} depth={depth + 1} />
-      ))}
-      {depth === 0 && invitees.length === 0 && (
-        <div style={{ marginLeft: 36, fontSize: 11.5, color: T.mu, marginBottom: 4 }}>
-          No invitees yet
-        </div>
-      )}
-    </div>
-  );
-}
 
-function ConversionPills({ user }) {
-  const pills = [
-    { label: 'Profile', ok: user.completed_profile },
-    { label: 'Post',    ok: user.made_first_post    },
-    { label: '7d',      ok: user.active_7d          },
-  ];
-  return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      {pills.map(p => (
-        <span key={p.label} style={{
-          fontSize: 11, padding: '2px 7px', borderRadius: 20,
-          background: p.ok ? T.gr2 : T.s3,
-          color:      p.ok ? T.gr  : T.mu,
-          fontWeight: 600,
+      {/* Joined */}
+      <div style={{ fontSize: 12, color: T.mu }}>
+        {user.created_at
+          ? new Date(user.created_at).toLocaleDateString('en-GB', {
+              day: 'numeric', month: 'short',
+            })
+          : '—'}
+      </div>
+
+      {/* Last active */}
+      <div style={{ fontSize: 12, color: T.mu }}>
+        {user.last_active ? timeAgo(user.last_active) : 'Never'}
+      </div>
+
+      {/* Posts */}
+      <div style={{ fontSize: 13, color: T.text, textAlign: 'center' }}>
+        {user.posts_count ?? 0}
+      </div>
+
+      {/* Groups */}
+      <div style={{ fontSize: 13, color: T.text, textAlign: 'center' }}>
+        {user.groups_count ?? 0}
+      </div>
+
+      {/* Stage */}
+      <div>
+        <span style={{
+          fontSize: 11, fontWeight: 700, padding: '2px 8px',
+          borderRadius: 20, background: stage.bg, color: stage.color,
         }}>
-          {p.ok ? '✓' : '·'} {p.label}
+          {stage.label}
         </span>
-      ))}
+      </div>
+
+      {/* Ghost */}
+      <div>
+        {ghost && (
+          <span style={{
+            fontSize: 11, fontWeight: 700, padding: '2px 8px',
+            borderRadius: 20, background: ghost.bg, color: ghost.color,
+          }}>
+            {ghost.label}
+          </span>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div>
+        <button
+          onClick={onOpen}
+          style={{
+            padding: '5px 11px', borderRadius: 7,
+            border: `1px solid ${T.bdr}`, background: T.w,
+            color: T.mu, fontSize: 12, cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          View
+        </button>
+      </div>
     </div>
   );
 }
 
-// ─── CodeActions ──────────────────────────────────────────────────────────────
+// ─── FilterSelect ─────────────────────────────────────────────────────────────
 
-function CodeActions({ code, supabase, onRefresh }) {
-  const [open, setOpen] = useState(false);
-
-  const copyCode = () => {
-    navigator.clipboard.writeText(code.code);
-    setOpen(false);
-  };
-
-  const toggleLock = async () => {
-    setOpen(false);
-    await supabase
-      .from('invite_codes')
-      .update({ locked_at: code.locked_at ? null : new Date().toISOString() })
-      .eq('id', code.id);
-    onRefresh();
-  };
-
+function FilterSelect({ value, onChange, placeholder, options }) {
   return (
-    <div style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          background: 'transparent', border: `1px solid ${T.bdr}`,
-          borderRadius: 7, padding: '4px 10px', cursor: 'pointer',
-          fontSize: 15, color: T.mu, fontFamily: 'inherit',
-        }}
-      >
-        ···
-      </button>
-      {open && (
-        <>
-          <div
-            onClick={() => setOpen(false)}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 10,
-            }}
-          />
-          <div style={{
-            position: 'absolute', right: 0, top: 32, zIndex: 20,
-            background: T.w, border: `1px solid ${T.bdr}`,
-            borderRadius: 10, padding: '6px 0', minWidth: 160,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-          }}>
-            {[
-              { label: '📋 Copy code',   action: copyCode },
-              { label: code.locked_at ? '🔓 Unlock' : '🔒 Lock', action: toggleLock },
-            ].map(item => (
-              <button key={item.label}
-                onClick={item.action}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left',
-                  padding: '8px 14px', background: 'transparent',
-                  border: 'none', cursor: 'pointer', fontSize: 13,
-                  color: T.text, fontFamily: 'inherit',
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        padding: '8px 10px', borderRadius: 9,
+        border: `1px solid ${T.bdr}`, background: T.s2,
+        fontSize: 13, color: value ? T.text : T.mu,
+        fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+      }}
+    >
+      <option value="">{placeholder}</option>
+      {options.map(o => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
   );
 }
 ```
 
 ---
 
-## Step 4 — CreateCodeModal.jsx
+## Step 4 — UserDetailPanel.jsx
 
-Create `src/admin/CreateCodeModal.jsx`:
+Create `src/admin/UserDetailPanel.jsx`:
 
 ```jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { T } from '../../lib/constants';
+import Av from '../../components/Av';
 import Spinner from '../../components/Spinner';
+import { timeAgo } from '../../lib/utils';
 
-const MODES = [
-  { id: 'personal', label: '👤 Personal',  desc: 'One code, one person' },
-  { id: 'batch',    label: '📦 Batch',     desc: 'Multiple codes, same label' },
-  { id: 'event',    label: '🎤 Event',     desc: 'Memorable code, many people' },
-];
-
-// Generates a random uppercase alphanumeric string (no I, O, 0, 1)
-const randomSuffix = (len = 8) => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: len }, () =>
-    chars[Math.floor(Math.random() * chars.length)]
-  ).join('');
+const STAGE_STYLES = {
+  visible:    { bg: T.v2,  color: T.v3, label: 'Visible'    },
+  active:     { bg: T.gr2, color: T.gr, label: 'Active'     },
+  connected:  { bg: T.bl2, color: T.bl, label: 'Connected'  },
+  credible:   { bg: T.te2, color: T.te, label: 'Credible'   },
+  identified: { bg: T.s3,  color: T.mu, label: 'Identified' },
 };
 
-export default function CreateCodeModal({ supabase, onClose, onCreated }) {
-  const [mode, setMode]         = useState('personal');
-  const [label, setLabel]       = useState('');
-  const [eventCode, setEventCode] = useState('');
-  const [maxUses, setMaxUses]   = useState('');
-  const [quantity, setQuantity] = useState('10');
-  const [prefix, setPrefix]     = useState('');
-  const [expires, setExpires]   = useState('');
-  const [notes, setNotes]       = useState('');
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState('');
+const GHOST_STYLES = {
+  stuck:  { bg: T.ro2, color: T.ro, label: '👻 Stuck'  },
+  almost: { bg: T.am2, color: T.am, label: '⚡ Almost' },
+};
 
-  const handleCreate = async () => {
-    setError('');
-    setSaving(true);
+export default function UserDetailPanel({
+  user, supabase, onClose, onNudge, onNotesUpdated,
+}) {
+  const [posts, setPosts]       = useState([]);
+  const [groups, setGroups]     = useState([]);
+  const [loadingDetail, setLoadingDetail] = useState(true);
+  const [notes, setNotes]       = useState(user.admin_notes || '');
+  const [savingNotes, setSavingNotes] = useState(false);
 
-    try {
-      if (mode === 'personal') {
-        // Single random code
-        const code = randomSuffix(8);
-        const { error: e } = await supabase.from('invite_codes').insert({
-          code,
-          label:      label || null,
-          max_uses:   1,
-          is_multi_use: false,
-          uses_count: 0,
-          expires_at: expires || null,
-          notes:      notes || null,
-        });
-        if (e) throw e;
-      }
+  useEffect(() => {
+    const fetchDetail = async () => {
+      setLoadingDetail(true);
 
-      if (mode === 'batch') {
-        // N random codes sharing a batch_label
-        const qty = parseInt(quantity, 10);
-        if (!qty || qty < 1 || qty > 200) throw new Error('Quantity must be 1–200');
-        const batchLabel = label || `BATCH-${randomSuffix(4)}`;
-        const rows = Array.from({ length: qty }, () => ({
-          code:        prefix ? `${prefix.toUpperCase()}-${randomSuffix(6)}` : randomSuffix(8),
-          label:       batchLabel,
-          batch_label: batchLabel,
-          max_uses:    1,
-          is_multi_use: false,
-          uses_count:  0,
-          expires_at:  expires || null,
-          notes:       notes || null,
-        }));
-        const { error: e } = await supabase.from('invite_codes').insert(rows);
-        if (e) throw e;
-      }
+      const [postsRes, groupsRes] = await Promise.all([
+        supabase
+          .from('posts')
+          .select('id, content, post_type, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('group_members')
+          .select('group_id, role, groups(name)')
+          .eq('user_id', user.id),
+      ]);
 
-      if (mode === 'event') {
-        // Custom memorable code, multi-use
-        const code = eventCode.trim().toUpperCase().replace(/\s+/g, '');
-        if (!code) throw new Error('Event code cannot be empty');
-        if (code.length < 4) throw new Error('Event code must be at least 4 characters');
-        const mu = maxUses ? parseInt(maxUses, 10) : null;
-        const { error: e } = await supabase.from('invite_codes').insert({
-          code,
-          label:       label || code,
-          max_uses:    mu,
-          is_multi_use: true,
-          uses_count:  0,
-          expires_at:  expires || null,
-          notes:       notes || null,
-        });
-        if (e) {
-          if (e.code === '23505') throw new Error('That code already exists — choose a different one');
-          throw e;
-        }
-      }
+      setPosts(postsRes.data || []);
+      setGroups(groupsRes.data || []);
+      setLoadingDetail(false);
+    };
 
-      onCreated();
-    } catch (err) {
-      setError(err.message || 'Something went wrong');
-    } finally {
-      setSaving(false);
-    }
+    fetchDetail();
+    setNotes(user.admin_notes || '');
+  }, [user.id]);
+
+  const saveNotes = async () => {
+    setSavingNotes(true);
+    await supabase
+      .from('profiles')
+      .update({ admin_notes: notes })
+      .eq('id', user.id);
+    setSavingNotes(false);
+    onNotesUpdated(notes);
   };
+
+  const stage = STAGE_STYLES[user.activation_stage] || STAGE_STYLES.identified;
+  const ghost = user.ghost_segment ? GHOST_STYLES[user.ghost_segment] : null;
 
   return (
     <>
@@ -926,127 +879,411 @@ export default function CreateCodeModal({ supabase, onClose, onCreated }) {
       <div
         onClick={onClose}
         style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
-          zIndex: 100,
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.25)', zIndex: 200,
         }}
       />
+
+      {/* Panel */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0,
+        width: 400, background: T.w, zIndex: 201,
+        borderLeft: `1px solid ${T.bdr}`,
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '-4px 0 24px rgba(0,0,0,0.10)',
+        overflow: 'hidden',
+      }}>
+        {/* Panel header */}
+        <div style={{
+          padding: '18px 20px 14px',
+          borderBottom: `1px solid ${T.bdr}`,
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <Av
+            size={44}
+            name={user.name}
+            color={user.avatar_color}
+            url={user.avatar_url || ''}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 16, fontWeight: 700, color: T.text,
+              marginBottom: 2,
+            }}>
+              {user.name || '—'}
+            </div>
+            <div style={{
+              fontSize: 12, color: T.mu,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {[user.title, user.institution].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none',
+            fontSize: 20, cursor: 'pointer', color: T.mu,
+            padding: '0 4px', lineHeight: 1,
+          }}>
+            ✕
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }}>
+
+          {/* Stage + ghost badges */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+            <span style={{
+              fontSize: 11.5, fontWeight: 700, padding: '3px 10px',
+              borderRadius: 20, background: stage.bg, color: stage.color,
+            }}>
+              {stage.label}
+            </span>
+            {ghost && (
+              <span style={{
+                fontSize: 11.5, fontWeight: 700, padding: '3px 10px',
+                borderRadius: 20, background: ghost.bg, color: ghost.color,
+              }}>
+                {ghost.label}
+              </span>
+            )}
+          </div>
+
+          {/* Stats grid */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr',
+            gap: 8, marginBottom: 18,
+          }}>
+            {[
+              { label: 'Joined',      value: user.created_at
+                ? new Date(user.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : '—' },
+              { label: 'Last active', value: user.last_active ? timeAgo(user.last_active) : 'Never' },
+              { label: 'Posts',       value: user.posts_count  ?? 0 },
+              { label: 'Groups',      value: user.groups_count ?? 0 },
+              { label: 'Invite code', value: user.invite_code_used || '—' },
+              { label: 'Work mode',   value: user.work_mode || '—' },
+            ].map(s => (
+              <div key={s.label} style={{
+                background: T.s2, borderRadius: 8, padding: '9px 12px',
+                border: `1px solid ${T.bdr}`,
+              }}>
+                <div style={{ fontSize: 11, color: T.mu, marginBottom: 2 }}>
+                  {s.label}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>
+                  {String(s.value)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {loadingDetail ? (
+            <div style={{ textAlign: 'center', padding: 20 }}><Spinner /></div>
+          ) : (
+            <>
+              {/* Recent posts */}
+              <Section title="Recent posts">
+                {posts.length === 0 ? (
+                  <Empty>No posts yet</Empty>
+                ) : (
+                  posts.map(post => (
+                    <div key={post.id} style={{
+                      padding: '8px 0',
+                      borderBottom: `1px solid ${T.bdr}`,
+                      fontSize: 13, color: T.text,
+                    }}>
+                      <div style={{
+                        overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap', marginBottom: 2,
+                      }}>
+                        {post.content?.replace(/<[^>]+>/g, '').slice(0, 80) || '(no content)'}
+                      </div>
+                      <div style={{ fontSize: 11, color: T.mu }}>
+                        {post.post_type} · {timeAgo(post.created_at)}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </Section>
+
+              {/* Groups */}
+              <Section title="Groups">
+                {groups.length === 0 ? (
+                  <Empty>Not in any groups</Empty>
+                ) : (
+                  groups.map(gm => (
+                    <div key={gm.group_id} style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      padding: '7px 0', borderBottom: `1px solid ${T.bdr}`,
+                      fontSize: 13,
+                    }}>
+                      <span style={{ color: T.text }}>
+                        {gm.groups?.name || gm.group_id}
+                      </span>
+                      <span style={{ color: T.mu, fontSize: 12 }}>
+                        {gm.role}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </Section>
+            </>
+          )}
+
+          {/* Admin notes */}
+          <Section title="Admin notes (internal only)">
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              onBlur={saveNotes}
+              rows={4}
+              placeholder="Add internal notes about this user…"
+              style={{
+                width: '100%', padding: '9px 11px', borderRadius: 8,
+                border: `1px solid ${T.bdr}`, background: T.s2,
+                fontSize: 13, color: T.text, fontFamily: 'inherit',
+                resize: 'vertical', outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            {savingNotes && (
+              <div style={{ fontSize: 11, color: T.mu, marginTop: 4 }}>
+                Saving…
+              </div>
+            )}
+          </Section>
+        </div>
+
+        {/* Footer actions */}
+        <div style={{
+          padding: '14px 20px',
+          borderTop: `1px solid ${T.bdr}`,
+          display: 'flex', gap: 8,
+        }}>
+          {user.profile_slug && (
+            <a
+              href={`/p/${user.profile_slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                flex: 1, padding: '9px 0', borderRadius: 9,
+                border: `1px solid ${T.bdr}`, background: T.w,
+                color: T.text, fontSize: 13, fontWeight: 600,
+                textDecoration: 'none', textAlign: 'center',
+              }}
+            >
+              View profile ↗
+            </a>
+          )}
+          <button
+            onClick={onNudge}
+            style={{
+              flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
+              background: T.v, color: '#fff', fontSize: 13,
+              fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Send nudge
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Section({ title, children }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: T.mu,
+        textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8,
+      }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }) {
+  return (
+    <div style={{ fontSize: 13, color: T.mu, fontStyle: 'italic' }}>
+      {children}
+    </div>
+  );
+}
+```
+
+---
+
+## Step 5 — BulkNudgeModal.jsx
+
+Create `src/admin/BulkNudgeModal.jsx`:
+
+```jsx
+import React, { useState } from 'react';
+import { T, LUMINARY_TEAM_USER_ID } from '../../lib/constants';
+import Av from '../../components/Av';
+import Spinner from '../../components/Spinner';
+
+const TEMPLATES = [
+  {
+    label: '👋 Welcome',
+    text: `Welcome to Luminary! We're glad you're here. If you have any questions or need help getting started, just reply to this message — we're happy to help.`,
+  },
+  {
+    label: '📄 Complete profile',
+    text: `Hi! We noticed you haven't finished setting up your Luminary profile yet. Adding your publications and work history helps other researchers find and connect with you. It only takes a few minutes!`,
+  },
+  {
+    label: '✍️ First post',
+    text: `Hi! Why not share your first thought on Luminary? It could be a paper you've been reading, a question for the community, or something from your own research. We'd love to hear from you.`,
+  },
+  {
+    label: '🔄 Come back',
+    text: `Hi! We've missed you on Luminary. There's been some great activity in the community lately — come take a look when you get a chance.`,
+  },
+];
+
+export default function BulkNudgeModal({ supabase, targetUsers, onClose, onSent }) {
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError]     = useState('');
+  const [sent, setSent]       = useState(false);
+
+  const handleSend = async () => {
+    if (!message.trim()) {
+      setError('Message cannot be empty.');
+      return;
+    }
+    setSending(true);
+    setError('');
+
+    const { error: rpcError } = await supabase.rpc('send_admin_nudge', {
+      p_target_user_ids: targetUsers.map(u => u.id),
+      p_message:         message.trim(),
+      p_bot_user_id:     LUMINARY_TEAM_USER_ID,
+    });
+
+    setSending(false);
+    if (rpcError) {
+      setError(rpcError.message || 'Failed to send nudge.');
+      return;
+    }
+
+    setSent(true);
+    setTimeout(onSent, 1200);
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.35)', zIndex: 300,
+      }} />
 
       {/* Modal */}
       <div style={{
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
-        background: T.w, borderRadius: 14, zIndex: 101,
-        width: 460, maxHeight: '90vh', overflow: 'auto',
+        background: T.w, borderRadius: 14, zIndex: 301,
+        width: 500, maxHeight: '90vh', overflow: 'auto',
         boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
-        padding: '24px 24px 20px',
+        padding: '24px',
       }}>
         <div style={{
           fontFamily: "'DM Serif Display', serif",
-          fontSize: 22, color: T.text, marginBottom: 18,
+          fontSize: 22, color: T.text, marginBottom: 6,
         }}>
-          Create invite code
+          Send nudge
+        </div>
+        <div style={{ fontSize: 13, color: T.mu, marginBottom: 16 }}>
+          Sending to {targetUsers.length} user{targetUsers.length > 1 ? 's' : ''} as Luminary Team
         </div>
 
-        {/* Mode picker */}
-        <div style={{
-          display: 'flex', gap: 8, marginBottom: 20,
-        }}>
-          {MODES.map(m => (
-            <button key={m.id}
-              onClick={() => setMode(m.id)}
-              style={{
-                flex: 1, padding: '9px 8px', borderRadius: 9, border: 'none',
-                background: mode === m.id ? T.v2 : T.s2,
-                color: mode === m.id ? T.v3 : T.mu,
-                fontWeight: mode === m.id ? 700 : 500,
-                fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit',
-                textAlign: 'center',
-              }}
-            >
-              <div>{m.label}</div>
-              <div style={{ fontSize: 11, fontWeight: 400, marginTop: 2 }}>{m.desc}</div>
-            </button>
-          ))}
+        {/* Recipient avatars */}
+        {targetUsers.length <= 8 && (
+          <div style={{
+            display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16,
+          }}>
+            {targetUsers.map(u => (
+              <div key={u.id} style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: T.s2, borderRadius: 20, padding: '4px 10px 4px 4px',
+                fontSize: 12, color: T.text,
+              }}>
+                <Av size={20} name={u.name} color={u.avatar_color} url="" />
+                {u.name}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Template buttons */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: T.mu,
+            textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 7,
+          }}>
+            Quick templates
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {TEMPLATES.map(t => (
+              <button
+                key={t.label}
+                onClick={() => setMessage(t.text)}
+                style={{
+                  padding: '5px 11px', borderRadius: 20,
+                  border: `1px solid ${T.bdr}`, background: T.s2,
+                  color: T.text, fontSize: 12, cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Fields */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-          {/* Label (all modes) */}
-          <Field label={mode === 'batch' ? 'Batch label' : 'Label'}>
-            <input value={label} onChange={e => setLabel(e.target.value)}
-              placeholder={
-                mode === 'event'    ? 'e.g. AHA Annual Conference 2026' :
-                mode === 'batch'    ? 'e.g. JSC2026_CARDIOLOGY' :
-                                     'e.g. For Dr. Chen'
-              }
-              style={inputStyle} />
-          </Field>
-
-          {/* Event code: custom code string */}
-          {mode === 'event' && (
-            <Field label="Event code (memorable)">
-              <input value={eventCode} onChange={e => setEventCode(e.target.value)}
-                placeholder="e.g. AHA2026"
-                style={{ ...inputStyle, fontFamily: 'monospace', fontWeight: 700 }} />
-            </Field>
-          )}
-
-          {/* Batch: prefix + quantity */}
-          {mode === 'batch' && (
-            <>
-              <Field label="Prefix (optional)">
-                <input value={prefix} onChange={e => setPrefix(e.target.value)}
-                  placeholder="e.g. JSC26 → JSC26-A4X2K8"
-                  style={inputStyle} />
-              </Field>
-              <Field label="Quantity">
-                <input value={quantity} onChange={e => setQuantity(e.target.value)}
-                  type="number" min="1" max="200" placeholder="10"
-                  style={inputStyle} />
-              </Field>
-            </>
-          )}
-
-          {/* Event: max uses */}
-          {mode === 'event' && (
-            <Field label="Max uses (leave blank for unlimited)">
-              <input value={maxUses} onChange={e => setMaxUses(e.target.value)}
-                type="number" min="1" placeholder="e.g. 200"
-                style={inputStyle} />
-            </Field>
-          )}
-
-          {/* Expiry (event + batch) */}
-          {(mode === 'event' || mode === 'batch') && (
-            <Field label="Expires (optional)">
-              <input value={expires} onChange={e => setExpires(e.target.value)}
-                type="date" style={inputStyle} />
-            </Field>
-          )}
-
-          {/* Notes (all modes) */}
-          <Field label="Notes (internal, not shown to users)">
-            <textarea value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="e.g. Distributed at AHA booth, April 2026"
-              rows={2}
-              style={{ ...inputStyle, resize: 'vertical' }} />
-          </Field>
-        </div>
+        {/* Message compose */}
+        <textarea
+          value={message}
+          onChange={e => { setMessage(e.target.value); setError(''); }}
+          rows={6}
+          placeholder="Write your message to these users…"
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 9,
+            border: `1px solid ${T.bdr}`, background: T.s2,
+            fontSize: 13, color: T.text, fontFamily: 'inherit',
+            resize: 'vertical', outline: 'none', boxSizing: 'border-box',
+            marginBottom: 8,
+          }}
+        />
 
         {error && (
           <div style={{
-            marginTop: 12, padding: '8px 12px', borderRadius: 8,
-            background: T.ro2, color: T.ro, fontSize: 13,
+            padding: '8px 12px', borderRadius: 8,
+            background: T.ro2, color: T.ro, fontSize: 13, marginBottom: 8,
           }}>
             {error}
+          </div>
+        )}
+
+        {sent && (
+          <div style={{
+            padding: '8px 12px', borderRadius: 8,
+            background: T.gr2, color: T.gr, fontSize: 13,
+            fontWeight: 600, marginBottom: 8, textAlign: 'center',
+          }}>
+            ✓ Nudge sent to {targetUsers.length} user{targetUsers.length > 1 ? 's' : ''}
           </div>
         )}
 
         {/* Buttons */}
         <div style={{
           display: 'flex', gap: 8, justifyContent: 'flex-end',
-          marginTop: 20,
+          marginTop: 12,
         }}>
           <button onClick={onClose} style={{
             padding: '9px 16px', borderRadius: 9,
@@ -1056,64 +1293,45 @@ export default function CreateCodeModal({ supabase, onClose, onCreated }) {
           }}>
             Cancel
           </button>
-          <button onClick={handleCreate} disabled={saving} style={{
-            padding: '9px 20px', borderRadius: 9, border: 'none',
-            background: T.v, color: '#fff', fontWeight: 600,
-            fontSize: 13, cursor: saving ? 'default' : 'pointer',
-            fontFamily: 'inherit', opacity: saving ? 0.7 : 1,
-          }}>
-            {saving ? <Spinner size={14} /> : (
-              mode === 'batch'
-                ? `Generate ${quantity || '?'} codes`
-                : 'Create code'
-            )}
+          <button
+            onClick={handleSend}
+            disabled={sending || sent}
+            style={{
+              padding: '9px 20px', borderRadius: 9, border: 'none',
+              background: T.v, color: '#fff', fontWeight: 600,
+              fontSize: 13, cursor: (sending || sent) ? 'default' : 'pointer',
+              fontFamily: 'inherit', opacity: (sending || sent) ? 0.7 : 1,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}
+          >
+            {sending ? <><Spinner size={14} /> Sending…</> : `Send to ${targetUsers.length} user${targetUsers.length > 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
     </>
   );
 }
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <div style={{
-        fontSize: 12, fontWeight: 600, color: T.mu,
-        marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.3,
-      }}>
-        {label}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-const inputStyle = {
-  width: '100%', padding: '8px 11px', borderRadius: 8,
-  border: `1px solid ${T.bdr}`, background: T.s2,
-  fontSize: 13, color: T.text, fontFamily: 'inherit',
-  outline: 'none', boxSizing: 'border-box',
-};
 ```
 
 ---
 
-## Step 5 — Wire InvitesSection in AdminShell.jsx
+## Step 6 — Wire UsersSection in AdminShell.jsx
 
-In `src/admin/AdminShell.jsx`, add the import:
+Add the import:
 
 ```javascript
-import InvitesSection from './InvitesSection';
+import UsersSection from './UsersSection';
 ```
 
-Replace the single `<AdminSectionPlaceholder section={section} />` render
-with a conditional that renders the real component for 'invites':
+Extend the content area conditional to handle 'users':
 
 ```jsx
 {/* Main content area */}
 <div style={{ flex: 1, overflow: 'auto', padding: '28px 32px' }}>
   {section === 'invites'
     ? <InvitesSection supabase={supabase} />
+    : section === 'users'
+    ? <UsersSection supabase={supabase} user={user} />
     : <AdminSectionPlaceholder section={section} />
   }
 </div>
@@ -1124,12 +1342,11 @@ with a conditional that renders the real component for 'invites':
 ## What NOT to change
 
 - `src/screens/GroupsScreen.jsx` — legacy file, do not touch
-- Personal code validation / claiming logic in AuthScreen — only extend
-  it for multi-use codes; do not restructure the existing flow
 - `groups.owner_id`, `groups.is_private` (legacy fields)
-- Any existing RPC functions other than `get_invite_tree` (which is
-  being replaced from stub to real implementation)
+- `projects.user_id` (legacy, coexists with `created_by`)
 - Any existing feed, profile, groups, projects, library, messages screens
+- Existing InvitesSection — do not modify
+- No delete/suspend functionality — deliberately excluded
 - Run `npm run build` when done
 
 ---
@@ -1137,93 +1354,116 @@ with a conditional that renders the real component for 'invites':
 ## Deployment
 
 ```bash
-# 1. Run migration_admin_invites.sql in Supabase SQL Editor
+# 1. Complete the Prerequisites (bot account + profile) — do this first
+#    before running any code changes.
 
-# 2. Verify new columns exist:
-#    select column_name from information_schema.columns
-#    where table_name = 'invite_codes'
-#    order by ordinal_position;
-#    → should include: label, max_uses, notes, expires_at, is_multi_use, uses_count
+# 2. Add LUMINARY_TEAM_USER_ID to constants.js manually with the bot UUID.
 
-# 3. Verify invite_code_uses table exists:
-#    select count(*) from invite_code_uses;  -- should return 0
+# 3. Run migration_admin_users.sql in Supabase SQL Editor
 
-# 4. Deploy:
-git add . && git commit -m "Phase 6B: Invite management — event codes, admin UI, invite tree, conversion metrics" && git push
+# 4. Verify:
+#    select count(*) from profiles where name = 'Luminary Team';
+#    -- should return 1
+#
+#    select get_admin_user_list();
+#    -- should return JSON array of users (bot excluded)
+
+# 5. Deploy:
+git add . && git commit -m "Phase 6C: Admin user management — table, detail panel, bulk nudge, bot account" && git push
 ```
 
 ---
 
 ## Remind the user
 
-**Creating your first event code for testing:**
+**Before testing nudge, make sure:**
+1. `LUMINARY_TEAM_USER_ID` in `constants.js` matches the actual UUID from
+   Supabase Auth → Users → Luminary Team row.
+2. The bot has a profile row (run the Prerequisites SQL if not done).
 
-From the admin panel → Invites → Create code → Event mode:
-- Label: "Test Event"
-- Event code: `TEST2026`
-- Max uses: 10
-- No expiry
+**Testing nudge end-to-end:**
+1. In admin panel → Users, check one user's checkbox
+2. Click "Send nudge" in sticky bar
+3. Write a message or pick a template
+4. Click send
+5. Log in as that user in a separate browser session
+6. Check Messages — should see a conversation from "Luminary Team"
+7. Check notification bell — should have an unread notification
 
-Then open an incognito window, go to the signup page, and enter `TEST2026`.
-After signup verify in the admin panel that:
-- Uses count incremented from 0 to 1
-- Your test user appears in the invite tree
-- Conversion metrics show 0% (no profile/post completed yet)
-
-**Creating your first personal code:**
-
-From Create code → Personal mode:
-- Label: "For Daniel's colleague"
-- Copy the generated code
-- Redeem it in incognito → verify `claimed_by` is set and status shows Exhausted
+**If nudge fails with "not authorized":**
+Confirm `is_admin = true` on your profile and that `LUMINARY_TEAM_USER_ID`
+is a valid UUID (not the placeholder string `'<BOT_UUID>'`).
 
 ---
 
 ## Testing checklist
 
+**Prerequisites:**
+- [ ] Luminary Team user exists in Supabase Auth → Users
+- [ ] Luminary Team profile row exists in profiles table
+- [ ] `LUMINARY_TEAM_USER_ID` in constants.js matches the Supabase UUID
+- [ ] Not a placeholder string
+
 **Migration:**
-- [ ] `migration_admin_invites.sql` runs cleanly
-- [ ] `invite_codes` has new columns: label, max_uses, notes, expires_at, is_multi_use, uses_count
-- [ ] `invite_code_uses` table exists with correct columns and RLS
-- [ ] `get_invite_codes_with_stats()` RPC returns JSON array
-- [ ] `get_invite_tree()` RPC returns tree structure (not empty stub)
+- [ ] `migration_admin_users.sql` runs cleanly
+- [ ] `profiles.admin_notes` column exists
+- [ ] `get_admin_user_list()` returns JSON array (bot excluded from results)
+- [ ] `get_user_activation_stages()` returns array of 5 stage objects with counts
+- [ ] `get_ghost_users()` returns array (may be empty if no ghost users)
+- [ ] `send_admin_nudge()` exists in DB
 
-**Auth gate — personal codes (existing behaviour, must not regress):**
-- [ ] Valid unclaimed personal code → signup succeeds
-- [ ] Already-claimed personal code → rejected with error
-- [ ] Locked code → rejected
-- [ ] Invalid code (not in DB) → rejected
+**Users table:**
+- [ ] Navigating to Users in AdminShell renders UsersSection (not "Coming soon")
+- [ ] All users load with correct columns
+- [ ] Name + avatar + institution display correctly
+- [ ] Work mode column shows correct label
+- [ ] Joined date shows correctly
+- [ ] Last active shows "Never" for users with no activity
+- [ ] Posts + groups counts are accurate
+- [ ] Activation stage pill shows correct colour and label
+- [ ] Ghost segment pill appears only for stuck/almost users
+- [ ] Bot account (Luminary Team) does NOT appear in the user list
 
-**Auth gate — event codes (new behaviour):**
-- [ ] Valid event code `TEST2026` → signup succeeds
-- [ ] After signup: `invite_code_uses` row exists for this user + code
-- [ ] After signup: `uses_count` on `invite_codes` incremented by 1
-- [ ] Event code at max_uses → rejected with appropriate error
-- [ ] Expired event code → rejected with appropriate error
+**Filters + search:**
+- [ ] Search filters by name, institution, title
+- [ ] Stage filter works for each of the 5 stages
+- [ ] Ghost filter shows only stuck / almost users
+- [ ] Work mode filter works for each mode
+- [ ] Clear button resets all filters
+- [ ] Filters combine correctly (e.g. stage=active + mode=clinician)
 
-**Admin UI — Invites section:**
-- [ ] Navigating to Invites in AdminShell renders InvitesSection (not "Coming soon")
-- [ ] Code table loads and shows all codes with correct columns
-- [ ] Status pills show correct colour: Active/Exhausted/Expired/Locked
-- [ ] Event codes show "Event" badge; personal codes show "Personal" badge
-- [ ] Search filters by code string and label
-- [ ] Clicking a row expands the inline tree; clicking again collapses
-- [ ] Expanded tree shows summary metrics (Signups, % profile, % first post, % 7d)
-- [ ] Tree shows level-1 users with conversion pills
-- [ ] Level-2 invitees (indented) shown under each level-1 user
-- [ ] "No invitees yet" shown for users who haven't invited anyone
-- [ ] ··· menu: "Copy code" copies to clipboard
-- [ ] ··· menu: "Lock" sets locked_at; "Unlock" clears it; status updates on refresh
-- [ ] Header summary ("X active · Y total signups") is accurate
+**Bulk select:**
+- [ ] Checkbox on each row selects/deselects that user
+- [ ] Header checkbox selects all visible (filtered) users
+- [ ] Sticky bar appears when ≥1 user selected
+- [ ] Sticky bar shows correct count
+- [ ] "Clear" in sticky bar deselects all
+- [ ] Selecting then filtering updates the count correctly
 
-**Create code modal:**
-- [ ] "+ Create code" button opens modal
-- [ ] Three mode tabs switch correctly
-- [ ] Personal mode: creates one random code; appears in table on refresh
-- [ ] Batch mode: generates correct quantity; all share batch_label; appear in table
-- [ ] Event mode: creates memorable code; `is_multi_use = true` in DB
-- [ ] Event mode: duplicate code → shows "already exists" error
-- [ ] Event mode: code < 4 chars → validation error
-- [ ] Batch mode: quantity > 200 → validation error
-- [ ] Cancel closes modal without creating anything
-- [ ] `npm run build` succeeds
+**User detail panel:**
+- [ ] Clicking "View" or username opens slide-in panel
+- [ ] Clicking backdrop closes panel
+- [ ] Avatar, name, title, institution display correctly
+- [ ] Stage + ghost badges match the table row
+- [ ] Stats grid shows correct joined, last active, posts, groups, invite code, work mode
+- [ ] Recent posts (up to 5) load and display
+- [ ] Groups list loads and displays
+- [ ] Admin notes textarea saves on blur (check DB after)
+- [ ] Notes persist after closing and reopening the panel
+- [ ] "View profile ↗" opens `/p/:slug` in new tab (only shown if slug exists)
+- [ ] "Send nudge" in panel opens BulkNudgeModal with just this user
+
+**Bulk nudge:**
+- [ ] Modal opens with correct user count in header
+- [ ] Recipient avatars shown for ≤8 users
+- [ ] Template buttons populate the message textarea
+- [ ] Empty message shows validation error
+- [ ] Successful send shows green confirmation + auto-closes
+- [ ] Target user receives DM from "Luminary Team" in Messages screen
+- [ ] Target user receives unread notification
+- [ ] Non-admin calling `send_admin_nudge` RPC returns "not authorized"
+
+**Isolation:**
+- [ ] No changes to existing feed, profile, groups, projects, library screens
+- [ ] InvitesSection still works after AdminShell change
+- [ ] `npm run build` succeeds with no new warnings
