@@ -10,6 +10,7 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
   const [saved,          setSaved]          = useState(false);
   const [notifications,  setNotifications]  = useState(profile?.email_notifications ?? true);
   const [marketing,      setMarketing]      = useState(profile?.email_marketing ?? false);
+  const [analytics,      setAnalytics]      = useState(!!profile?.analytics_consent_at);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
   const [deleteText,     setDeleteText]     = useState('');
   const [deleting,       setDeleting]       = useState(false);
@@ -39,6 +40,9 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
       email_marketing:      marketing,
       marketing_consent_at: marketing
         ? (profile?.marketing_consent_at || new Date().toISOString())
+        : null,
+      analytics_consent_at: analytics
+        ? (profile?.analytics_consent_at || new Date().toISOString())
         : null,
     };
     const { data } = await supabase
@@ -294,6 +298,11 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
             value={marketing} onChange={setMarketing}
             label="Product updates & news"
             sublabel="New Luminary features and research community highlights (max 2 per month)"
+          />
+          <Toggle
+            value={analytics} onChange={setAnalytics}
+            label="Usage analytics"
+            sublabel="Share anonymous usage data to help us improve Luminary (no personal data)"
           />
           <div style={{ marginTop: 16 }}>
             <Btn variant="s" onClick={savePreferences} disabled={saving}>

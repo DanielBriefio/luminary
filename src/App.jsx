@@ -147,14 +147,16 @@ export default function App() {
 
   useEffect(()=>{
     if (!session?.user || !profile) return;
-    if (profile.marketing_consent_at) {
+    if (profile.analytics_consent_at) {
       optInAndIdentify(session.user.id, {
         work_mode: profile.work_mode || null,
         has_orcid: !!profile.orcid,
         is_admin:  !!profile.is_admin,
       });
+    } else {
+      optOutAndReset();
     }
-  },[session?.user?.id, profile?.marketing_consent_at]); // eslint-disable-line
+  },[session?.user?.id, profile?.analytics_consent_at]); // eslint-disable-line
 
   useEffect(()=>{
     if (!profile) return;

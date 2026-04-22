@@ -51,6 +51,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [consentTerms,         setConsentTerms]         = useState(false);
   const [consentNotifications, setConsentNotifications] = useState(true);
   const [consentMarketing,     setConsentMarketing]     = useState(false);
+  const [consentAnalytics,     setConsentAnalytics]     = useState(false);
 
   // Waitlist path
   const [waitlistName,        setWaitlistName]        = useState('');
@@ -64,7 +65,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     setMode(m); setError(''); setSuccess('');
     setSignupPath(null);
     setInviteCode(''); setInviteValid(null); setInviteError(''); setInviteRateLimited(false);
-    setConsentTerms(false); setConsentNotifications(true); setConsentMarketing(false);
+    setConsentTerms(false); setConsentNotifications(true); setConsentMarketing(false); setConsentAnalytics(false);
     setSignupEmail(''); setSignupPassword(''); setSignupName(''); setSignupError('');
     setWaitlistName(''); setWaitlistEmail(''); setWaitlistInstitution('');
     setWaitlistRole(''); setWaitlistReferral(''); setWaitlistSubmitted(false);
@@ -217,11 +218,12 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         signup_method:        'orcid',
         work_history:         JSON.parse(pending.work_history || '[]'),
         education:            JSON.parse(pending.education    || '[]'),
-        email_notifications:  consentNotifications,
-        email_marketing:      consentMarketing,
-        marketing_consent_at: consentMarketing ? new Date().toISOString() : null,
-        terms_accepted_at:    new Date().toISOString(),
-        privacy_accepted_at:  new Date().toISOString(),
+        email_notifications:    consentNotifications,
+        email_marketing:        consentMarketing,
+        marketing_consent_at:   consentMarketing  ? new Date().toISOString() : null,
+        analytics_consent_at:   consentAnalytics  ? new Date().toISOString() : null,
+        terms_accepted_at:      new Date().toISOString(),
+        privacy_accepted_at:    new Date().toISOString(),
       }).eq('id', userId);
 
       // 4. Insert publications
@@ -300,6 +302,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         email_notifications:  consentNotifications,
         email_marketing:      consentMarketing,
         marketing_consent_at: consentMarketing ? new Date().toISOString() : null,
+        analytics_consent_at: consentAnalytics  ? new Date().toISOString() : null,
         terms_accepted_at:    new Date().toISOString(),
         privacy_accepted_at:  new Date().toISOString(),
       });
@@ -355,6 +358,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           consentTerms={consentTerms} setConsentTerms={setConsentTerms}
           consentNotifications={consentNotifications} setConsentNotifications={setConsentNotifications}
           consentMarketing={consentMarketing} setConsentMarketing={setConsentMarketing}
+          consentAnalytics={consentAnalytics} setConsentAnalytics={setConsentAnalytics}
         />
 
         <Btn variant="s" onClick={handleOrcidSignupComplete}
@@ -558,6 +562,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           consentTerms={consentTerms} setConsentTerms={setConsentTerms}
           consentNotifications={consentNotifications} setConsentNotifications={setConsentNotifications}
           consentMarketing={consentMarketing} setConsentMarketing={setConsentMarketing}
+          consentAnalytics={consentAnalytics} setConsentAnalytics={setConsentAnalytics}
         />
 
         {signupError && <div style={{ color: T.ro, fontSize: 12.5, marginTop: 4, marginBottom: 8 }}>{signupError}</div>}
@@ -574,7 +579,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   };
 
   // ── Shared consent block (used in both signup paths) ─────────────────────
-  const ConsentBlock = ({ consentTerms, setConsentTerms, consentNotifications, setConsentNotifications, consentMarketing, setConsentMarketing }) => (
+  const ConsentBlock = ({ consentTerms, setConsentTerms, consentNotifications, setConsentNotifications, consentMarketing, setConsentMarketing, consentAnalytics, setConsentAnalytics }) => (
     <div style={{ marginTop: 16, padding: '14px 16px', background: T.s2, borderRadius: 12, border: `1px solid ${T.bdr}` }}>
       <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
         <input type="checkbox" checked={consentTerms} onChange={e => setConsentTerms(e.target.checked)}
@@ -595,12 +600,20 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           <span style={{ color: T.mu, fontSize: 11 }}> (you can change this anytime)</span>
         </span>
       </label>
-      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
         <input type="checkbox" checked={consentMarketing} onChange={e => setConsentMarketing(e.target.checked)}
           style={{ marginTop: 2, accentColor: T.v, flexShrink: 0 }}/>
         <span style={{ fontSize: 12.5, color: T.text, lineHeight: 1.55 }}>
           Keep me updated on new Luminary features and research community news
           <span style={{ color: T.mu, fontSize: 11 }}> (max 2 emails per month)</span>
+        </span>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+        <input type="checkbox" checked={consentAnalytics} onChange={e => setConsentAnalytics(e.target.checked)}
+          style={{ marginTop: 2, accentColor: T.v, flexShrink: 0 }}/>
+        <span style={{ fontSize: 12.5, color: T.text, lineHeight: 1.55 }}>
+          Help improve Luminary by sharing anonymous usage analytics
+          <span style={{ color: T.mu, fontSize: 11 }}> (no personal data, you can change this anytime)</span>
         </span>
       </label>
     </div>
