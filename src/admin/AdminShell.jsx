@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { T } from '../lib/constants';
+import OverviewSection from './OverviewSection';
 import InvitesSection from './InvitesSection';
 import UsersSection from './UsersSection';
 import InboxSection from './InboxSection';
@@ -13,7 +14,13 @@ const NAV_ITEMS = [
 ];
 
 export default function AdminShell({ supabase, user, profile }) {
-  const [section, setSection] = useState('overview');
+  const [section, setSection]             = useState('overview');
+  const [sectionParams, setSectionParams] = useState({});
+
+  const navigate = (newSection, params = {}) => {
+    setSection(newSection);
+    setSectionParams(params);
+  };
 
   return (
     <div style={{
@@ -67,7 +74,7 @@ export default function AdminShell({ supabase, user, profile }) {
             return (
               <button
                 key={item.id}
-                onClick={() => setSection(item.id)}
+                onClick={() => navigate(item.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -122,10 +129,12 @@ export default function AdminShell({ supabase, user, profile }) {
         overflow: section === 'inbox' ? 'hidden' : 'auto',
         padding: section === 'inbox' ? 0 : '28px 32px',
       }}>
-        {section === 'invites'
-          ? <InvitesSection supabase={supabase} />
+        {section === 'overview'
+          ? <OverviewSection supabase={supabase} onNavigate={navigate} />
           : section === 'users'
-          ? <UsersSection supabase={supabase} user={user} />
+          ? <UsersSection supabase={supabase} user={user} initialParams={sectionParams} />
+          : section === 'invites'
+          ? <InvitesSection supabase={supabase} />
           : section === 'inbox'
           ? <InboxSection supabase={supabase} />
           : <AdminSectionPlaceholder section={section} />

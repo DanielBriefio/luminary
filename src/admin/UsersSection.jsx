@@ -30,13 +30,13 @@ const STAGES = ['identified', 'credible', 'connected', 'active', 'visible'];
 const GHOSTS = ['stuck', 'almost'];
 const MODES  = ['researcher', 'clinician', 'industry', 'clinician_scientist'];
 
-export default function UsersSection({ supabase, user: adminUser }) {
+export default function UsersSection({ supabase, user: adminUser, initialParams = {} }) {
   const [users, setUsers]             = useState([]);
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState('');
-  const [stageFilter, setStageFilter] = useState('');
-  const [ghostFilter, setGhostFilter] = useState('');
-  const [modeFilter, setModeFilter]   = useState('');
+  const [stageFilter, setStageFilter] = useState(initialParams.stageFilter || '');
+  const [ghostFilter, setGhostFilter] = useState(initialParams.ghostFilter || '');
+  const [modeFilter, setModeFilter]   = useState(initialParams.modeFilter  || '');
   const [selected, setSelected]       = useState(new Set());
   const [detailUser, setDetailUser]   = useState(null);
   const [showNudge, setShowNudge]     = useState(false);
