@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-22 (rev 8)_
+_Last updated: 2026-04-23 (rev 9)_
 
 ## What exists and works
 
@@ -12,7 +12,7 @@ _Last updated: 2026-04-22 (rev 8)_
 
 ### Feed
 - For You / Following toggle; All / Papers tab filter
-- Rich post types: text (rich text), paper (DOI or EPMC lookup), link, upload (image/video/audio/PDF/CSV), tip
+- Post types: `text` (rich text, with live link preview) and `paper` (DOI or EPMC lookup); file attachments (image/video/audio/PDF/CSV/file) can be added to text posts and set the stored `post_type` to the upload category
 - Like, comment (threaded, inline), edit, delete, repost
 - AI auto-tagging via `auto-tag` edge function; manual hashtags; visibility (Everyone / Followers only)
 - Right sidebar: Paper of the Week (live, most-commented DOI via CrossRef) + Founding Fellows banner
@@ -33,7 +33,7 @@ _Last updated: 2026-04-22 (rev 8)_
 ### Groups
 - Create public or closed groups (name, description, research_topic)
 - **GroupScreen**: 200px sidebar + Feed / Members / Library / Projects / Profile tabs
-- **GroupFeed**: sticky posts first; post types text/paper/link; file uploads; auto-tag; notifies all members
+- **GroupFeed**: sticky posts first; post types text/paper; file uploads; auto-tag; notifies all members
 - **GroupPostCard**: like, comment, edit, delete, sticky toggle, repost to public feed
 - **GroupMembers**: admin list + member list; promote/demote/remove; join requests with approve/reject; closed groups show JoinRequestPanel; public groups show PublicJoinPanel
 - **GroupLibrary**: Search PMC, DOI, upload, .ris/.bib import, ClinicalTrials.gov search; 3-dot menu (move/remove); "Share this paper"
@@ -158,6 +158,13 @@ _Last updated: 2026-04-22 (rev 8)_
 - Sidebar: static "Lv.1 — Researcher, 0 XP" badge — decorative
 - `ProfileCompletionMeter`: live milestone system (5 stages, confetti) — wired to real DB counts
 
+### Analytics
+- PostHog consent-gated analytics via `analytics_consent_at` on profiles (separate from `marketing_consent_at` for email marketing)
+- Opt-in asked at sign-up; togglable in Account Settings
+- `opt_out_capturing_by_default: true` — no data sent until user consents
+- 15 events instrumented: `signed_up`, `invite_code_used`, `post_created`, `post_liked`, `comment_posted`, `group_created`, `group_joined`, `group_left`, `publication_added`, `library_item_added`, `project_created`, `template_used`, `template_submitted`, `dm_sent`, `onboarding_completed`, `profile_stage_reached`
+- Requires `REACT_APP_POSTHOG_KEY` in Vercel env vars (Production scope)
+
 ---
 
 ## Known gaps / not yet built
@@ -165,7 +172,6 @@ _Last updated: 2026-04-22 (rev 8)_
 - **Mobile layout**: No responsive design. Desktop-only (200px sidebar + multi-column grids break on phones). `useWindowSize` hook exists but not wired to layout yet.
 - **XP / leveling system**: Sidebar badge is decorative. ProfileCompletionMeter stages are real but don't write to the `xp`/`level` columns.
 - **Push notifications / email digests**: No push; no email. `email_notifications` preference stored but not actioned.
-- **Analytics / usage tracking**: PostHog integrated (Phase 6H). Consent-gated via `analytics_consent_at` on profiles — separate from email marketing consent. Key events tracked across all major flows. Requires `REACT_APP_POSTHOG_KEY` in Vercel env vars.
 - **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state; pending nav reorganisation.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.

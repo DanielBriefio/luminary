@@ -121,13 +121,14 @@ src/
 Both use the anon JWT from `EDGE_HEADERS` in constants.js.
 
 - **`extract-publications`** (`EDGE_FN`): `mode:'full_cv'` or `mode:'publications'`; input `{ base64, mediaType }` for PDF or `{ text }` for plain text; returns `{ result: { profile, work_history, education, honors, languages, skills, publications } }`
-- **`auto-tag`**: input `{ content, paperTitle, paperJournal, paperAbstract, linkTitle }`; returns `{ tags: string[] }`; enabled by `AUTO_TAG_ENABLED` in constants.js; always best-effort (never blocks publish)
+- **`auto-tag`**: input `{ content, paperTitle, paperJournal, paperAbstract }`; returns `{ tags: string[] }`; enabled by `AUTO_TAG_ENABLED` in constants.js; always best-effort (never blocks publish)
 
 ## Conventions
 
 - **Always use `T.*` tokens** — never hardcode colours
 - **No CSS files** — all styles inline
 - **No React Router** — screen switching via `setScreen(id)` in App; Supabase queries use `.from()` chained calls; no ORM
+- **Post types**: only `text` and `paper` are selectable in NewPostScreen/GroupNewPost. File uploads (image/video/audio/pdf/data/file) attach to text posts and set `post_type` to the upload category. `link` and `tip` types no longer exist.
 - **paper_citation** stored at post-creation time (NewPostScreen, GroupNewPost); never fetched lazily in feed cards. Format: `AbbrevJournal. Year Mon;Volume(Issue):Pages. doi: DOI`. Builders: `buildCitationFromCrossRef`/`buildCitationFromEpmc` (utils.js), `buildCitationFromRef` (referenceUtils.js).
 - **library_items.folder_id** NULL = Unsorted; query with `.is('folder_id', null)` not `.eq('folder_id', null)`
 - **work_mode** adapts UI but never restricts access. `clinician_scientist` shows researcher view (h-index, citations), not clinical stats. `WORK_MODE_MAP` in constants.js maps id → `{ icon, label }`.
@@ -140,5 +141,6 @@ Both use the anon JWT from `EDGE_HEADERS` in constants.js.
 - **Fuzzy dedup** for profile imports: `deduplicateSectionFuzzy` + `scoreWorkMatch`/`scoreEduMatch` in utils.js
 - **projectTemplates.js**: `FAST_TEMPLATES` (fast-4 picker), `GALLERY_TEMPLATES` (gallery-only); `galleryOnly: true` excluded from fast-4 picker; `applyTemplate(template, name, projectId, userId)` → `{ folders, posts }`
 - **Public routes** (no auth, no sidebar): `/p/:slug` → PublicProfilePage, `/s/:postId` → PublicPostPage, `/paper/:doi` → PaperDetailPage, `/g/:slug` → PublicGroupProfileScreen, `/c/:slug` → CardPage
+- **Analytics**: PostHog consent-gated via `analytics_consent_at` on profiles. `capture(event, properties)` from `src/lib/analytics.js` — import and call after successful Supabase operations. Never call before the await or in an error branch.
 - **Gamification**: XP/level badge in sidebar is decorative — not wired to real activity yet
 - **Responsive**: no media queries; `useWindowSize` hook returns `{ isMobile }` (< 768px)
