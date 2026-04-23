@@ -189,8 +189,6 @@ _Last updated: 2026-04-24 (rev 11)_
 
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
 - **`migration_admin_interventions.sql`**: Creates `admin_config` table + RLS; seeds `luminary_board`, `paper_of_week`, `milestone_post_template` rows; adds `get_admin_config`, `set_admin_config`, `send_admin_post` RPCs; adds `is_admin_post` + `target_user_id` columns to `posts`; DROP+CREATE `posts_with_meta` view to include new columns.
-- **`migration_potw_public_read.sql`**: Widens `admin_config` RLS select policy to include `paper_of_week` for all authenticated users; updates `get_admin_config` RPC to allow non-admins to read `luminary_board`, `milestone_post_template`, `paper_of_week`.
-- **`migration_potw_public_stats.sql`**: Creates `get_paper_stats_public()` RPC (accessible to all authenticated users) — aggregates `discussions`, `participants`, `total_comments` per DOI for the POTW algorithm; excludes hidden/admin posts, requires non-empty DOI + title, min engagement (≥2 posts OR ≥1 comment).
 
 ---
 
