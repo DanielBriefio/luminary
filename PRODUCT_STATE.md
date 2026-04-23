@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-23 (rev 10)_
+_Last updated: 2026-04-24 (rev 11)_
 
 ## What exists and works
 
@@ -15,7 +15,7 @@ _Last updated: 2026-04-23 (rev 10)_
 - Post types: `text` (rich text, with live link preview) and `paper` (DOI or EPMC lookup); file attachments (image/video/audio/PDF/CSV/file) can be added to text posts and set the stored `post_type` to the upload category
 - Like, comment (threaded, inline), edit, delete, repost
 - AI auto-tagging via `auto-tag` edge function; manual hashtags; visibility (Everyone / Followers only)
-- Right sidebar: Paper of the Week (config-driven — `most_discussed` distinct users, `most_commented` comment total, or admin manual DOI pick) + Founding Fellows banner
+- Right sidebar: Paper of the Week (config-driven — `most_discussed` total posts, `most_commented` total comments, or admin manual DOI pick; uses `get_paper_stats_public()` RPC; min engagement filter ≥2 posts OR ≥1 comment) + Founding Fellows banner
 - `FeedTipCard` / Luminary Board: shows admin-configured board message (title, message, optional CTA) when `admin_config.luminary_board.enabled = true`; falls back to cycling `FEED_TIPS` from constants.js when board is off or unconfigured
 
 ### Explore
@@ -136,7 +136,7 @@ _Last updated: 2026-04-23 (rev 10)_
 - Overview at-risk alert "Review templates →" links directly to this section
 
 **Content** (fully implemented):
-- Posts tab: paginated table (50/page), search + type/featured/hidden filters, reported posts highlighted amber; Feature (24h/48h/7d/permanent), Unfeature, Hide/Unhide, Delete actions
+- Posts tab: paginated table (50/page), search + type/hidden filters, reported posts highlighted amber; Hide/Unhide, Delete, View actions
 - Groups tab: health table (🟢 Active / 🟡 Quiet / 🔴 Dead); member count, posts/week, last active; filter by health
 - Projects tab: same as groups for active projects
 - Moderation tab: reported posts queue with Dismiss / Hide / Delete actions; status filter (pending/dismissed/actioned)
@@ -145,7 +145,6 @@ _Last updated: 2026-04-23 (rev 10)_
 - Non-owner ··· menu in PostCard and GroupPostCard includes 🚩 Report option
 - ReportModal: 5 reason options, optional note, duplicate detection
 - Admin report badge on PostCard (visible to admins only)
-- Featured posts: violet tinted wrapper + ✦ FEATURED header in PostCard — visual distinction only, normal chronological sort order
 - Admin posts (`is_admin_post = true`): violet left border + ✦ FROM LUMINARY TEAM header in PostCard
 - Targeted posts (`target_user_id`): filtered client-side — only the recipient sees them in their feed
 
@@ -190,6 +189,8 @@ _Last updated: 2026-04-23 (rev 10)_
 
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
 - **`migration_admin_interventions.sql`**: Creates `admin_config` table + RLS; seeds `luminary_board`, `paper_of_week`, `milestone_post_template` rows; adds `get_admin_config`, `set_admin_config`, `send_admin_post` RPCs; adds `is_admin_post` + `target_user_id` columns to `posts`; DROP+CREATE `posts_with_meta` view to include new columns.
+- **`migration_potw_public_read.sql`**: Widens `admin_config` RLS select policy to include `paper_of_week` for all authenticated users; updates `get_admin_config` RPC to allow non-admins to read `luminary_board`, `milestone_post_template`, `paper_of_week`.
+- **`migration_potw_public_stats.sql`**: Creates `get_paper_stats_public()` RPC (accessible to all authenticated users) — aggregates `discussions`, `participants`, `total_comments` per DOI for the POTW algorithm; excludes hidden/admin posts, requires non-empty DOI + title, min engagement (≥2 posts OR ≥1 comment).
 
 ---
 
