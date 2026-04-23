@@ -95,8 +95,8 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       const algorithm = config.algorithm || 'most_discussed';
       const best = Object.values(byDoi).sort((a, b) =>
         algorithm === 'most_discussed'
-          ? b.userIds.size   - a.userIds.size
-          : b.commentCount   - a.commentCount
+          ? (b.userIds.size - a.userIds.size) || (b.commentCount - a.commentCount)
+          : b.commentCount - a.commentCount
       )[0];
 
       if (!best) return;
