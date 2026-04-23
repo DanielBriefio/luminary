@@ -2,12 +2,12 @@
 -- get_paper_health is admin-only; this function is readable by all authenticated users.
 create or replace function get_paper_stats_public()
 returns table (
-  paper_doi     text,
-  paper_title   text,
-  paper_journal text,
-  paper_year    int,
-  discussions   bigint,
-  participants  bigint,
+  paper_doi      text,
+  paper_title    text,
+  paper_journal  text,
+  paper_year     int,
+  discussions    bigint,
+  participants   bigint,
   total_comments bigint
 )
 language sql
@@ -17,25 +17,23 @@ set search_path = public
 as $$
   select
     p.paper_doi,
-    max(p.paper_title)                     as paper_title,
-    max(p.paper_journal)                   as paper_journal,
-    max(p.paper_year)::int                 as paper_year,
-    count(*)                               as discussions,
-    count(distinct p.user_id)              as participants,
-    coalesce(sum(c.cnt), 0)                as total_comments
+    max(p.paper_title)         as paper_title,
+    max(p.paper_journal)       as paper_journal,
+    max(p.paper_year)::int     as paper_year,
+    count(distinct p.id)       as discussions,
+    count(distinct p.user_id)  as participants,
+    count(c.id)                as total_comments
   from posts p
-  left join (
-    select post_id, count(*) as cnt from comments group by post_id
-  ) c on c.post_id = p.id
-  where p.post_type   = 'paper'
-    and p.is_hidden   = false
+  left join comments c on c.post_id = p.id
+  where p.post_type     = 'paper'
+    and p.is_hidden     = false
     and p.is_admin_post = false
-    and p.paper_doi   is not null
-    and p.paper_doi  != ''
-    and p.paper_title is not null
-    and p.paper_title != ''
+    and p.paper_doi     is not null
+    and p.paper_doi    != ''
+    and p.paper_title   is not null
+    and p.paper_title  != ''
   group by p.paper_doi
-  order by participants desc, total_comments desc;
+  order by discussions desc, total_comments desc;
 $$;
 
 grant execute on function get_paper_stats_public() to authenticated;
