@@ -3,11 +3,12 @@ import { supabase } from '../supabase';
 import { T, FEED_TIPS } from '../lib/constants';
 
 export default function FeedTipCard({ profile }) {
-  const [board,     setBoard]     = useState(null);  // null = loading, false = use tips
+  const [board,     setBoard]     = useState(null);
+  const [pageIndex, setPageIndex] = useState(0);
   const [dismissed, setDismissed] = useState(
     () => !!localStorage.getItem('luminary_tips_dismissed')
   );
-  const [index, setIndex] = useState(
+  const [tipIndex, setTipIndex] = useState(
     () => parseInt(localStorage.getItem('luminary_tips_index') || '0', 10) % FEED_TIPS.length
   );
 
@@ -20,70 +21,92 @@ export default function FeedTipCard({ profile }) {
       .catch(() => setBoard(false));
   }, []);
 
-  if (board === null) return null; // loading — render nothing briefly
+  if (board === null) return null;
 
-  // Admin board disabled
-  if (board && board.enabled === false) return null;
+  const boardOn    = !!(board && board.enabled);
+  const tipsOn     = board ? board.tips_enabled !== false : true;
 
-  // Dismissed tips (only applies to the tips fallback)
-  if (!board && (dismissed || !FEED_TIPS.length)) return null;
+  // Normalise pages: support old flat config { title, message, cta_label, cta_url }
+  let boardPages = [];
+  if (boardOn) {
+    const raw = board.pages?.length
+      ? board.pages
+      : [{ title: board.title, message: board.message, cta_label: board.cta_label, cta_url: board.cta_url }];
+    boardPages = raw.filter(p => p.title || p.message);
+  }
 
-  // ── Luminary Board (admin-configured content) ────────────────────────────
-  if (board && board.enabled) {
+  const showBoard = boardOn && boardPages.length > 0;
+  const showTips  = !showBoard && tipsOn && !dismissed && FEED_TIPS.length > 0;
+
+  if (!showBoard && !showTips) return null;
+
+  // ── Luminary Board ───────────────────────────────────────────────────────────
+  if (showBoard) {
+    const safeIdx = Math.min(pageIndex, boardPages.length - 1);
+    const page    = boardPages[safeIdx];
+    const multi   = boardPages.length > 1;
+
+    const nextPage = () => setPageIndex(i => (i + 1) % boardPages.length);
+    const goTo     = (i) => setPageIndex(i);
+
     return (
       <div style={{
-        background: T.v2,
-        border: `1px solid rgba(108,99,255,.3)`,
-        borderRadius: 12,
-        padding: '14px 16px',
-        marginBottom: 12,
+        background: T.v2, border: `1px solid rgba(108,99,255,.3)`,
+        borderRadius: 12, padding: '14px 16px', marginBottom: 12,
       }}>
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', marginBottom: board.title ? 8 : 0,
-        }}>
-          <div style={{ fontSize: 14, color: T.v3, fontWeight: 700 }}>✦ Luminary</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: T.v, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: page.title ? 8 : 4 }}>
+          ✦ Luminary
         </div>
 
-        {board.title && (
-          <div style={{
-            fontFamily: "'DM Serif Display', serif",
-            fontSize: 15, color: T.text, marginBottom: 6,
-          }}>
-            {board.title}
+        {page.title && (
+          <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 15, color: T.text, marginBottom: 6 }}>
+            {page.title}
           </div>
         )}
 
-        <div style={{
-          fontSize: 13, color: T.mu, lineHeight: 1.6,
-          marginBottom: (board.cta_label && board.cta_url) ? 10 : 0,
-        }}>
-          {board.message}
+        <div style={{ fontSize: 13, color: T.mu, lineHeight: 1.6, marginBottom: (page.cta_label && page.cta_url) ? 10 : (multi ? 10 : 0) }}>
+          {page.message}
         </div>
 
-        {board.cta_label && board.cta_url && (
-          <a href={board.cta_url} target="_blank" rel="noopener noreferrer"
-            style={{
-              display: 'inline-block', fontSize: 12.5,
-              color: T.v, fontWeight: 700, textDecoration: 'none',
-            }}
-          >
-            {board.cta_label} →
+        {page.cta_label && page.cta_url && (
+          <a href={page.cta_url} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-block', fontSize: 12.5, color: T.v, fontWeight: 700, textDecoration: 'none', marginBottom: multi ? 10 : 0 }}>
+            {page.cta_label} →
           </a>
+        )}
+
+        {multi && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {boardPages.map((_, i) => (
+                <div key={i} onClick={() => goTo(i)} style={{
+                  width: i === safeIdx ? 14 : 6, height: 6, borderRadius: 3,
+                  background: i === safeIdx ? T.v : 'rgba(108,99,255,.25)',
+                  cursor: 'pointer', transition: 'all .2s',
+                }}/>
+              ))}
+            </div>
+            <button onClick={nextPage} style={{
+              fontSize: 11.5, color: T.v, fontWeight: 700,
+              border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+            }}>
+              Next →
+            </button>
+          </div>
         )}
       </div>
     );
   }
 
-  // ── Fallback: cycling FEED_TIPS ───────────────────────────────────────────
-  const tip    = FEED_TIPS[index];
+  // ── Fallback: cycling FEED_TIPS ───────────────────────────────────────────────
+  const tip    = FEED_TIPS[tipIndex];
   const cardUrl = profile?.profile_slug
     ? `${window.location.origin}/c/${profile.profile_slug}`
     : null;
 
-  const next = () => {
-    const ni = (index + 1) % FEED_TIPS.length;
-    setIndex(ni);
+  const nextTip = () => {
+    const ni = (tipIndex + 1) % FEED_TIPS.length;
+    setTipIndex(ni);
     localStorage.setItem('luminary_tips_index', String(ni));
   };
 
@@ -127,16 +150,16 @@ export default function FeedTipCard({ profile }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 4 }}>
             {FEED_TIPS.map((_, i) => (
-              <div key={i} onClick={() => { setIndex(i); localStorage.setItem('luminary_tips_index', String(i)); }}
+              <div key={i} onClick={() => { setTipIndex(i); localStorage.setItem('luminary_tips_index', String(i)); }}
                 style={{
-                  width: i === index ? 14 : 6, height: 6, borderRadius: 3,
-                  background: i === index ? T.v : T.bdr,
+                  width: i === tipIndex ? 14 : 6, height: 6, borderRadius: 3,
+                  background: i === tipIndex ? T.v : T.bdr,
                   cursor: 'pointer', transition: 'all .2s',
                 }}
               />
             ))}
           </div>
-          <button onClick={next}
+          <button onClick={nextTip}
             style={{ fontSize: 11.5, color: T.v, fontWeight: 700, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
             Next tip →
           </button>
