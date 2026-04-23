@@ -35,9 +35,8 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   useEffect(() => {
     const fetchPotw = async () => {
       // Fetch admin config for Paper of the Week settings
-      const { data: configRow } = await supabase
-        .from('admin_config').select('value').eq('key', 'paper_of_week').single();
-      const config = configRow?.value || { mode: 'algorithm', algorithm: 'most_discussed' };
+      const { data: configData } = await supabase.rpc('get_admin_config', { p_key: 'paper_of_week' });
+      const config = configData || { mode: 'algorithm', algorithm: 'most_discussed' };
 
       if (config.mode === 'manual' && config.manual_doi) {
         // Manual pick: look up the post with this DOI
