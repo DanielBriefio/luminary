@@ -292,15 +292,24 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     let bgColorMap    = {};
     let featuredMap   = {};
     if (allItems.length) {
-      const { data: extraCols } = await supabase
+      const postIds = allItems.map(p => p.id);
+      // Try with featured_at first; fall back if column not yet migrated
+      let { data: extraCols, error: extraErr } = await supabase
         .from('posts')
         .select('id, group_id, group_name, is_deep_dive, bg_color, is_featured, featured_until, featured_at')
-        .in('id', allItems.map(p => p.id));
+        .in('id', postIds);
+      if (extraErr) {
+        const { data: fallback } = await supabase
+          .from('posts')
+          .select('id, group_id, group_name, is_deep_dive, bg_color, is_featured, featured_until')
+          .in('id', postIds);
+        extraCols = fallback;
+      }
       (extraCols || []).forEach(p => {
         if (p.group_id)     groupRefMap[p.id] = { group_id: p.group_id, group_name: p.group_name };
         if (p.is_deep_dive) deepDiveMap[p.id] = true;
         if (p.bg_color)     bgColorMap[p.id]  = p.bg_color;
-        featuredMap[p.id] = { is_featured: p.is_featured, featured_until: p.featured_until, featured_at: p.featured_at };
+        featuredMap[p.id] = { is_featured: p.is_featured, featured_until: p.featured_until, featured_at: p.featured_at || null };
       });
     }
 

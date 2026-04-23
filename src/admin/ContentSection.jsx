@@ -129,13 +129,15 @@ function PostsTab({ supabase }) {
 
   const featurePost = async (post, hours) => {
     setActing(post.id);
+    // Core update — always works even without migration_featured_at.sql
     await supabase.from('posts').update({
       is_featured:    true,
-      featured_at:    new Date().toISOString(),
       featured_until: hours
         ? new Date(Date.now() + hours * 3600 * 1000).toISOString()
         : null,
     }).eq('id', post.id);
+    // featured_at for sort positioning — fire-and-forget, ignored if column not yet migrated
+    supabase.from('posts').update({ featured_at: new Date().toISOString() }).eq('id', post.id);
     capture('post_featured', { duration_hours: hours || 'permanent' });
     setActing(null);
     setFeaturingId(null);
