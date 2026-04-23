@@ -321,16 +321,9 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
   return (
     <div style={{
-      background: isFeatured ? T.v2 : 'transparent',
-      borderRadius: isFeatured ? 16 : 0,
       border: isFeatured ? `1.5px solid ${T.v}` : 'none',
-      marginBottom: isFeatured ? 2 : 0,
+      borderRadius: isFeatured ? 16 : 0,
     }}>
-    {isFeatured && (
-      <div style={{ padding: '6px 14px 4px', fontSize: 11, fontWeight: 700, color: T.v, letterSpacing: 0.3 }}>
-        ✦ FEATURED
-      </div>
-    )}
     <div style={{
       borderLeft: post.is_admin_post ? `3px solid ${T.v}` : 'none',
       paddingLeft: post.is_admin_post ? 12 : 0,
@@ -347,8 +340,21 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       borderLeft: post.is_deep_dive ? `4px solid ${T.v}` : undefined,
       borderRadius: 14,
       overflow: "hidden",
-      boxShadow: "0 2px 12px rgba(108,99,255,.07)",
+      boxShadow: isFeatured ? `0 4px 20px rgba(108,99,255,.18)` : "0 2px 12px rgba(108,99,255,.07)",
     }}>
+
+      {/* Featured banner */}
+      {isFeatured && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '7px 14px',
+          background: `linear-gradient(90deg, ${T.v}, #764ba2)`,
+          borderBottom: `1px solid rgba(108,99,255,.2)`,
+          fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: 0.5,
+        }}>
+          ✦ FEATURED
+        </div>
+      )}
 
       {/* Group source banner — entire row is clickable */}
       {post.group_id && post.group_name && (

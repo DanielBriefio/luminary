@@ -347,8 +347,11 @@ function PostRow({
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', position: 'relative' }}>
         {/* Feature / Unfeature */}
         {post.is_featured ? (
-          <button onClick={onUnfeature} disabled={acting} style={actionBtn(T.v, acting)}>
-            Unfeature
+          <button onClick={onUnfeature} disabled={acting} style={{
+            ...actionBtn(T.v, acting),
+            background: T.v, color: '#fff',
+          }}>
+            ✦ Featured · Remove
           </button>
         ) : (
           <div style={{ position: 'relative' }}>
