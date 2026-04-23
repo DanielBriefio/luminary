@@ -113,10 +113,7 @@ create or replace function send_admin_post(
   p_paper_authors    text    default null,
   p_paper_abstract   text    default null,
   p_paper_year       int     default null,
-  p_paper_citation   text    default null,
-  p_link_url         text    default null,
-  p_link_title       text    default null,
-  p_link_description text    default null
+  p_paper_citation   text    default null
 )
 returns jsonb
 language plpgsql
@@ -141,14 +138,12 @@ begin
       user_id, post_type, content, visibility,
       is_admin_post,
       paper_doi, paper_title, paper_journal, paper_authors,
-      paper_abstract, paper_year, paper_citation,
-      link_url, link_title, link_description
+      paper_abstract, paper_year, paper_citation
     ) values (
       p_bot_user_id, p_post_type, p_content, 'everyone',
       true,
       p_paper_doi, p_paper_title, p_paper_journal, p_paper_authors,
-      p_paper_abstract, p_paper_year, p_paper_citation,
-      p_link_url, p_link_title, p_link_description
+      p_paper_abstract, p_paper_year, p_paper_citation
     )
     returning id into v_post_id;
     v_sent := 1;
@@ -159,14 +154,12 @@ begin
         user_id, target_user_id, post_type, content, visibility,
         is_admin_post,
         paper_doi, paper_title, paper_journal, paper_authors,
-        paper_abstract, paper_year, paper_citation,
-        link_url, link_title, link_description
+        paper_abstract, paper_year, paper_citation
       ) values (
         p_bot_user_id, v_target_id, p_post_type, p_content, 'everyone',
         true,
         p_paper_doi, p_paper_title, p_paper_journal, p_paper_authors,
-        p_paper_abstract, p_paper_year, p_paper_citation,
-        p_link_url, p_link_title, p_link_description
+        p_paper_abstract, p_paper_year, p_paper_citation
       )
       returning id into v_post_id;
 
@@ -183,13 +176,11 @@ begin
     insert into group_posts (
       group_id, user_id, post_type, content,
       paper_doi, paper_title, paper_journal, paper_authors,
-      paper_abstract, paper_year, paper_citation,
-      link_url, link_title, link_description
+      paper_abstract, paper_year, paper_citation
     ) values (
       p_group_id, p_bot_user_id, p_post_type, p_content,
       p_paper_doi, p_paper_title, p_paper_journal, p_paper_authors,
-      p_paper_abstract, p_paper_year, p_paper_citation,
-      p_link_url, p_link_title, p_link_description
+      p_paper_abstract, p_paper_year, p_paper_citation
     )
     returning id into v_post_id;
     v_sent := 1;
