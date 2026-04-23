@@ -342,8 +342,8 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     );
 
     const filtered = fp === 'sug'
-      ? applyModeFilter(visibleFinal, modeFilter, profile?.work_mode || 'researcher')
-      : visibleFinal;
+      ? applyModeFilter(visible, modeFilter, profile?.work_mode || 'researcher')
+      : visible;
 
     setPosts(filtered);
     setLoading(false);
