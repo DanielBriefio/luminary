@@ -9,7 +9,7 @@ export default function BoardTab({ supabase }) {
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
   const [board,   setBoard]   = useState({
-    enabled: true, tips_enabled: true,
+    enabled: true,
     pages: [{ ...EMPTY_PAGE }],
   });
 
@@ -22,8 +22,7 @@ export default function BoardTab({ supabase }) {
             ? data.pages
             : [{ title: data.title || '', message: data.message || '', cta_label: data.cta_label || '', cta_url: data.cta_url || '' }];
           setBoard({
-            enabled:      data.enabled !== false,
-            tips_enabled: data.tips_enabled !== false,
+            enabled: data.enabled !== false,
             pages,
           });
         }
@@ -58,9 +57,9 @@ export default function BoardTab({ supabase }) {
       <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12, padding: '20px 22px', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 16, borderBottom: `1px solid ${T.bdr}` }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Luminary Board</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Show Luminary Board</div>
             <div style={{ fontSize: 12, color: T.mu, marginTop: 2 }}>
-              Shown in the right sidebar. Supports multiple pages users can swipe through.
+              When on, shows board pages in the sidebar. Falls back to cycling tips if no pages are set.
             </div>
           </div>
           <button onClick={() => setTop('enabled', !board.enabled)} style={{
@@ -123,26 +122,6 @@ export default function BoardTab({ supabase }) {
         }}>
           + Add page
         </button>
-      </div>
-
-      {/* Luminary Tips — fallback toggle */}
-      <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12, padding: '18px 22px', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Luminary Tips</div>
-            <div style={{ fontSize: 12, color: T.mu, marginTop: 2 }}>
-              Cycling tip cards shown in the sidebar when the Board is off
-            </div>
-          </div>
-          <button onClick={() => setTop('tips_enabled', !board.tips_enabled)} style={{
-            padding: '7px 16px', borderRadius: 8, border: 'none',
-            background: board.tips_enabled ? T.gr : T.s3,
-            color: board.tips_enabled ? '#fff' : T.mu,
-            fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
-          }}>
-            {board.tips_enabled ? 'On' : 'Off'}
-          </button>
-        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

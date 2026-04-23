@@ -21,10 +21,15 @@ export default function FeedTipCard({ profile }) {
       .catch(() => setBoard(false));
   }, []);
 
-  if (board === null) return null;
+  const dismiss = () => {
+    setDismissed(true);
+    localStorage.setItem('luminary_tips_dismissed', '1');
+  };
 
-  const boardOn    = !!(board && board.enabled);
-  const tipsOn     = board ? board.tips_enabled !== false : true;
+  if (board === null) return null;
+  if (dismissed) return null;
+
+  const boardOn = !!(board && board.enabled);
 
   // Normalise pages: support old flat config { title, message, cta_label, cta_url }
   let boardPages = [];
@@ -36,7 +41,7 @@ export default function FeedTipCard({ profile }) {
   }
 
   const showBoard = boardOn && boardPages.length > 0;
-  const showTips  = !showBoard && tipsOn && !dismissed && FEED_TIPS.length > 0;
+  const showTips  = !showBoard && boardOn && FEED_TIPS.length > 0;
 
   if (!showBoard && !showTips) return null;
 
@@ -47,15 +52,20 @@ export default function FeedTipCard({ profile }) {
     const multi   = boardPages.length > 1;
 
     const nextPage = () => setPageIndex(i => (i + 1) % boardPages.length);
-    const goTo     = (i) => setPageIndex(i);
 
     return (
       <div style={{
         background: T.v2, border: `1px solid rgba(108,99,255,.3)`,
         borderRadius: 12, padding: '14px 16px', marginBottom: 12,
       }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: T.v, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: page.title ? 8 : 4 }}>
-          ✦ Luminary
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: page.title ? 8 : 4 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.v, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+            ✦ Luminary
+          </div>
+          <button onClick={dismiss} title="Dismiss"
+            style={{ fontSize: 13, color: T.v, border: 'none', background: 'transparent', cursor: 'pointer', lineHeight: 1, padding: 0, opacity: .5 }}>
+            ✕
+          </button>
         </div>
 
         {page.title && (
@@ -79,7 +89,7 @@ export default function FeedTipCard({ profile }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', gap: 4 }}>
               {boardPages.map((_, i) => (
-                <div key={i} onClick={() => goTo(i)} style={{
+                <div key={i} onClick={() => setPageIndex(i)} style={{
                   width: i === safeIdx ? 14 : 6, height: 6, borderRadius: 3,
                   background: i === safeIdx ? T.v : 'rgba(108,99,255,.25)',
                   cursor: 'pointer', transition: 'all .2s',
@@ -110,11 +120,6 @@ export default function FeedTipCard({ profile }) {
     localStorage.setItem('luminary_tips_index', String(ni));
   };
 
-  const dismiss = () => {
-    setDismissed(true);
-    localStorage.setItem('luminary_tips_dismissed', '1');
-  };
-
   return (
     <div style={{
       background: T.w, border: `1px solid ${T.bdr}`,
@@ -131,11 +136,8 @@ export default function FeedTipCard({ profile }) {
               Tip
             </span>
           </div>
-          <button
-            onClick={dismiss}
-            title="Dismiss tips"
-            style={{ fontSize: 13, color: T.mu, border: 'none', background: 'transparent', cursor: 'pointer', lineHeight: 1, padding: 0, opacity: .6 }}
-          >
+          <button onClick={dismiss} title="Dismiss"
+            style={{ fontSize: 13, color: T.mu, border: 'none', background: 'transparent', cursor: 'pointer', lineHeight: 1, padding: 0, opacity: .6 }}>
             ✕
           </button>
         </div>
