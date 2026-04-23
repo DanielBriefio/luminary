@@ -130,6 +130,8 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     if (filter === 'all') return posts;
     if (filter === 'myfield') {
       return [...posts].sort((a, b) => {
+        if (a.is_admin_post && !b.is_admin_post) return -1;
+        if (!a.is_admin_post && b.is_admin_post) return 1;
         const aMatch = a.author_work_mode === userWorkMode || userWorkMode === 'clinician_scientist';
         const bMatch = b.author_work_mode === userWorkMode || userWorkMode === 'clinician_scientist';
         if (aMatch && !bMatch) return -1;
@@ -143,7 +145,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       industry: ['industry'],
     };
     const allowed = modeMap[filter] || [];
-    return posts.filter(p => !p.author_work_mode || allowed.includes(p.author_work_mode));
+    return posts.filter(p => p.is_admin_post || !p.author_work_mode || allowed.includes(p.author_work_mode));
   }, []);
 
   const withSlugs = useCallback(async (data) => {
