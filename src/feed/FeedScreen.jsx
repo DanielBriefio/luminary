@@ -290,46 +290,28 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     let groupRefMap   = {};
     let deepDiveMap   = {};
     let bgColorMap    = {};
-    let featuredMap   = {};
     if (allItems.length) {
       const postIds = allItems.map(p => p.id);
-      // Try with featured_at first; fall back if column not yet migrated
-      let { data: extraCols, error: extraErr } = await supabase
+      const { data: extraCols } = await supabase
         .from('posts')
-        .select('id, group_id, group_name, is_deep_dive, bg_color, is_featured, featured_until, featured_at')
+        .select('id, group_id, group_name, is_deep_dive, bg_color')
         .in('id', postIds);
-      if (extraErr) {
-        const { data: fallback } = await supabase
-          .from('posts')
-          .select('id, group_id, group_name, is_deep_dive, bg_color, is_featured, featured_until')
-          .in('id', postIds);
-        extraCols = fallback;
-      }
       (extraCols || []).forEach(p => {
         if (p.group_id)     groupRefMap[p.id] = { group_id: p.group_id, group_name: p.group_name };
         if (p.is_deep_dive) deepDiveMap[p.id] = true;
         if (p.bg_color)     bgColorMap[p.id]  = p.bg_color;
-        featuredMap[p.id] = { is_featured: p.is_featured, featured_until: p.featured_until, featured_at: p.featured_at || null };
       });
     }
 
-    const now = new Date();
-    const enriched = allItems.map(item => {
-      const feat = featuredMap[item.id] || {};
-      const isFeaturedNow = feat.is_featured && (!feat.featured_until || new Date(feat.featured_until) > now);
-      return {
-        ...item,
-        ...(groupRefMap[item.id] || {}),
-        ...feat,
-        is_deep_dive:  deepDiveMap[item.id] || false,
-        bg_color:      bgColorMap[item.id]  || null,
-        user_liked:    likedSet.has(item.id),
-        repost_count:  repostCountMap[item.id] || 0,
-        user_reposted: userRepostedSet.has(item.id),
-        // Featured posts sort by when they were featured, not when created
-        _sortTime: (isFeaturedNow && feat.featured_at) ? feat.featured_at : item._sortTime,
-      };
-    });
+    const enriched = allItems.map(item => ({
+      ...item,
+      ...(groupRefMap[item.id] || {}),
+      is_deep_dive:  deepDiveMap[item.id] || false,
+      bg_color:      bgColorMap[item.id]  || null,
+      user_liked:    likedSet.has(item.id),
+      repost_count:  repostCountMap[item.id] || 0,
+      user_reposted: userRepostedSet.has(item.id),
+    }));
 
     // ── 7. Slugs + sort ──────────────────────────────────────────────────
     const withSlugData = await withSlugs(enriched);
@@ -584,7 +566,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                     <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                   </div>
                 )
-              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled} isFeatured={!!(p.is_featured && (!p.featured_until || new Date(p.featured_until) > new Date()))}/>)}
+              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
             </div>
             {!isMobile && (
               <div>

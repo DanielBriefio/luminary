@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { T } from '../lib/constants';
-import { capture } from '../lib/analytics';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import { timeAgo } from '../lib/utils';
@@ -20,13 +19,6 @@ const HEALTH_STYLES = {
 };
 
 const POST_TYPES = ['text', 'paper', 'link', 'upload', 'tip'];
-
-const FEATURE_DURATIONS = [
-  { label: '24 hours',  hours: 24   },
-  { label: '48 hours',  hours: 48   },
-  { label: '7 days',    hours: 168  },
-  { label: 'Permanent', hours: null },
-];
 
 export default function ContentSection({ supabase }) {
   const [tab, setTab] = useState('posts');
@@ -83,10 +75,8 @@ function PostsTab({ supabase }) {
   const [page, setPage]                     = useState(0);
   const [search, setSearch]                 = useState('');
   const [typeFilter, setTypeFilter]         = useState('');
-  const [featuredFilter, setFeaturedFilter] = useState('');
   const [hiddenFilter, setHiddenFilter]     = useState('');
   const [acting, setActing]                 = useState(null);
-  const [featuringId, setFeaturingId]       = useState(null);
 
   const PAGE_SIZE = 50;
 
@@ -97,20 +87,19 @@ function PostsTab({ supabase }) {
       p_offset:   page * PAGE_SIZE,
       p_search:   search || null,
       p_type:     typeFilter || null,
-      p_featured: featuredFilter === 'true'  ? true
-                : featuredFilter === 'false' ? false : null,
+      p_featured: null,
       p_hidden:   hiddenFilter   === 'true'  ? true
                 : hiddenFilter   === 'false' ? false : null,
     });
     setPosts(data?.posts || []);
     setTotal(data?.total || 0);
     setLoading(false);
-  }, [supabase, page, search, typeFilter, featuredFilter, hiddenFilter]);
+  }, [supabase, page, search, typeFilter, hiddenFilter]);
 
   useEffect(() => { load(); }, [load]);
 
   // Reset to page 0 when filters change
-  useEffect(() => { setPage(0); }, [search, typeFilter, featuredFilter, hiddenFilter]);
+  useEffect(() => { setPage(0); }, [search, typeFilter, hiddenFilter]);
 
   const deletePost = async (id) => {
     if (!window.confirm('Delete this post? This cannot be undone.')) return;
@@ -123,30 +112,6 @@ function PostsTab({ supabase }) {
   const toggleHidden = async (post) => {
     setActing(post.id);
     await supabase.from('posts').update({ is_hidden: !post.is_hidden }).eq('id', post.id);
-    setActing(null);
-    load();
-  };
-
-  const featurePost = async (post, hours) => {
-    setActing(post.id);
-    // Core update — always works even without migration_featured_at.sql
-    await supabase.from('posts').update({
-      is_featured:    true,
-      featured_until: hours
-        ? new Date(Date.now() + hours * 3600 * 1000).toISOString()
-        : null,
-    }).eq('id', post.id);
-    // featured_at for sort positioning — fire-and-forget, ignored if column not yet migrated
-    supabase.from('posts').update({ featured_at: new Date().toISOString() }).eq('id', post.id);
-    capture('post_featured', { duration_hours: hours || 'permanent' });
-    setActing(null);
-    setFeaturingId(null);
-    load();
-  };
-
-  const unfeaturePost = async (id) => {
-    setActing(id);
-    await supabase.from('posts').update({ is_featured: false, featured_until: null, featured_at: null }).eq('id', id);
     setActing(null);
     load();
   };
@@ -171,11 +136,6 @@ function PostsTab({ supabase }) {
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={selectStyle}>
           <option value="">All types</option>
           {POST_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select value={featuredFilter} onChange={e => setFeaturedFilter(e.target.value)} style={selectStyle}>
-          <option value="">All posts</option>
-          <option value="true">Featured only</option>
-          <option value="false">Not featured</option>
         </select>
         <select value={hiddenFilter} onChange={e => setHiddenFilter(e.target.value)} style={selectStyle}>
           <option value="">All visibility</option>
@@ -223,10 +183,6 @@ function PostsTab({ supabase }) {
                 post={post}
                 isLast={i === posts.length - 1}
                 acting={acting === post.id}
-                featuringThis={featuringId === post.id}
-                onFeatureClick={() => setFeaturingId(featuringId === post.id ? null : post.id)}
-                onFeatureDuration={(h) => featurePost(post, h)}
-                onUnfeature={() => unfeaturePost(post.id)}
                 onToggleHidden={() => toggleHidden(post)}
                 onDelete={() => deletePost(post.id)}
               />
@@ -269,11 +225,7 @@ function postHealth(participants) {
   return                         { label: '⚪ Quiet',   bg: T.s3,  color: T.mu  };
 }
 
-function PostRow({
-  post, isLast, acting, featuringThis,
-  onFeatureClick, onFeatureDuration, onUnfeature,
-  onToggleHidden, onDelete,
-}) {
+function PostRow({ post, isLast, acting, onToggleHidden, onDelete }) {
   const participants = post.participant_count || 0;
   const health       = postHealth(participants);
   const hasReports   = post.report_count > 0;
@@ -332,57 +284,18 @@ function PostRow({
         )}
       </div>
 
-      {/* Status: health + featured/hidden indicators */}
+      {/* Status: health + hidden indicator */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: health.bg, color: health.color, alignSelf: 'flex-start' }}>
           {health.label}
         </span>
-        {post.is_featured && (
-          <span style={{ fontSize: 10, color: T.v, fontWeight: 600 }}>✦ Featured</span>
-        )}
         {post.is_hidden && (
           <span style={{ fontSize: 10, color: T.mu, fontWeight: 600 }}>👁 Hidden</span>
         )}
       </div>
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', position: 'relative' }}>
-        {/* Feature / Unfeature */}
-        {post.is_featured ? (
-          <button onClick={onUnfeature} disabled={acting} style={{
-            ...actionBtn(T.v, acting),
-            background: T.v, color: '#fff',
-          }}>
-            ✦ Featured · Remove
-          </button>
-        ) : (
-          <div style={{ position: 'relative' }}>
-            <button onClick={onFeatureClick} disabled={acting} style={actionBtn(T.v, acting)}>
-              ✦ Feature
-            </button>
-            {featuringThis && (
-              <div style={{
-                position: 'absolute', top: 30, left: 0, zIndex: 10,
-                background: T.w, border: `1px solid ${T.bdr}`,
-                borderRadius: 9, padding: '6px 0', minWidth: 140,
-                boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-              }}>
-                {FEATURE_DURATIONS.map(d => (
-                  <button key={d.label} onClick={() => onFeatureDuration(d.hours)} style={{
-                    display: 'block', width: '100%',
-                    padding: '8px 14px', textAlign: 'left',
-                    background: 'transparent', border: 'none',
-                    fontSize: 13, color: T.text, cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}>
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
         {/* Hide / Unhide */}
         <button onClick={onToggleHidden} disabled={acting} style={actionBtn(T.mu, acting)}>
           {post.is_hidden ? 'Unhide' : 'Hide'}

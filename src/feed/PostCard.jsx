@@ -37,7 +37,7 @@ function GranularTags({ tags, onTagClick }) {
   );
 }
 
-export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup, isSaved = false, onSaveToggled, isFeatured = false }) {
+export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup, isSaved = false, onSaveToggled }) {
   const { isMobile } = useWindowSize();
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
@@ -321,10 +321,6 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
   return (
     <div style={{
-      border: isFeatured ? `1.5px solid ${T.v}` : 'none',
-      borderRadius: isFeatured ? 16 : 0,
-    }}>
-    <div style={{
       borderLeft: post.is_admin_post ? `3px solid ${T.v}` : 'none',
       paddingLeft: post.is_admin_post ? 12 : 0,
       marginLeft: post.is_admin_post ? -12 : 0,
@@ -340,21 +336,8 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       borderLeft: post.is_deep_dive ? `4px solid ${T.v}` : undefined,
       borderRadius: 14,
       overflow: "hidden",
-      boxShadow: isFeatured ? `0 4px 20px rgba(108,99,255,.18)` : "0 2px 12px rgba(108,99,255,.07)",
+      boxShadow: "0 2px 12px rgba(108,99,255,.07)",
     }}>
-
-      {/* Featured banner */}
-      {isFeatured && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '7px 14px',
-          background: `linear-gradient(90deg, ${T.v}, #764ba2)`,
-          borderBottom: `1px solid rgba(108,99,255,.2)`,
-          fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: 0.5,
-        }}>
-          ✦ FEATURED
-        </div>
-      )}
 
       {/* Group source banner — entire row is clickable */}
       {post.group_id && post.group_name && (
@@ -789,7 +772,6 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
       {showShare && <ShareModal post={post} onClose={()=>setShowShare(false)}/>}
       {showReport && <ReportModal supabase={supabase} postId={post.id} onClose={()=>setShowReport(false)}/>}
-    </div>
     </div>
     </div>
   );
