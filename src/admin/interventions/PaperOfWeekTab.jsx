@@ -64,7 +64,7 @@ export default function PaperOfWeekTab({ supabase }) {
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>Algorithm</div>
             {[
-              { id: 'most_discussed', label: '👥 Most discussed', desc: 'Paper posted by the most distinct researchers' },
+              { id: 'most_discussed', label: '👥 Most discussed', desc: 'Paper with the most total posts on Luminary' },
               { id: 'most_commented', label: '💬 Most commented', desc: 'Paper with the most total comments' },
             ].map(a => (
               <button key={a.id} onClick={() => set('algorithm', a.id)} style={{

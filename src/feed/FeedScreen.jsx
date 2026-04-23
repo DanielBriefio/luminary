@@ -68,8 +68,8 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
 
       const best = [...papers].sort((a, b) =>
         algorithm === 'most_discussed'
-          ? (b.participants   - a.participants)   || (b.total_comments - a.total_comments)
-          : (b.total_comments - a.total_comments) || (b.participants   - a.participants)
+          ? (b.discussions    - a.discussions)    || (b.total_comments - a.total_comments)
+          : (b.total_comments - a.total_comments) || (b.discussions    - a.discussions)
       )[0];
 
       if (!best) return;
@@ -79,7 +79,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         title:        best.paper_title,
         journal:      best.paper_journal || '',
         year:         best.paper_year    || '',
-        discussCount: algorithm === 'most_discussed' ? best.participants : best.total_comments,
+        discussCount: algorithm === 'most_discussed' ? best.discussions : best.total_comments,
         mode:         algorithm,
       });
     };
@@ -552,7 +552,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                     </div>
                     <div style={{fontSize:11.5,color:T.v,fontWeight:700}}>
                       {potw.mode === 'most_discussed'
-                        ? `${potw.discussCount} researcher${potw.discussCount !== 1 ? 's' : ''} discussing this →`
+                        ? `${potw.discussCount} post${potw.discussCount !== 1 ? 's' : ''} discussing this →`
                         : `${potw.discussCount} comment${potw.discussCount !== 1 ? 's' : ''} across all posts →`
                       }
                     </div>
