@@ -65,7 +65,10 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         .from('posts_with_meta')
         .select('paper_doi, paper_title, paper_journal, paper_year, user_id, comment_count')
         .eq('post_type', 'paper')
+        .eq('is_hidden', false)
+        .eq('is_admin_post', false)
         .not('paper_doi', 'is', null)
+        .not('paper_title', 'is', null)
         .limit(200);
 
       if (!posts?.length) return;
