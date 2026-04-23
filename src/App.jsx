@@ -353,6 +353,22 @@ export default function App() {
     }
   }, [session]);
 
+  // Handle luminary:// deep links dispatched by FeedTipCard board CTAs
+  useEffect(() => {
+    const handler = (e) => {
+      const to = e.detail?.to;
+      if (!to || !session) return;
+      if (to === 'card') {
+        if (profile?.profile_slug) window.open(`/c/${profile.profile_slug}`, '_blank');
+        else setScreen('profile');
+      } else {
+        setScreen(to);
+      }
+    };
+    window.addEventListener('luminary:navigate', handler);
+    return () => window.removeEventListener('luminary:navigate', handler);
+  }, [session, profile?.profile_slug]);
+
   // Capture group invite token from URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
