@@ -33,6 +33,7 @@ as $$
     and p.paper_title   is not null
     and p.paper_title  != ''
   group by p.paper_doi
+  having count(distinct p.id) > 1 or count(c.id) > 0
   order by discussions desc, total_comments desc;
 $$;
 
