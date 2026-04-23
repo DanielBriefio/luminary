@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-23 (rev 9)_
+_Last updated: 2026-04-23 (rev 10)_
 
 ## What exists and works
 
@@ -15,8 +15,8 @@ _Last updated: 2026-04-23 (rev 9)_
 - Post types: `text` (rich text, with live link preview) and `paper` (DOI or EPMC lookup); file attachments (image/video/audio/PDF/CSV/file) can be added to text posts and set the stored `post_type` to the upload category
 - Like, comment (threaded, inline), edit, delete, repost
 - AI auto-tagging via `auto-tag` edge function; manual hashtags; visibility (Everyone / Followers only)
-- Right sidebar: Paper of the Week (live, most-commented DOI via CrossRef) + Founding Fellows banner
-- Dismissible `FeedTipCard` cycling through `FEED_TIPS` from constants.js
+- Right sidebar: Paper of the Week (config-driven — `most_discussed` distinct users, `most_commented` comment total, or admin manual DOI pick) + Founding Fellows banner
+- `FeedTipCard` / Luminary Board: shows admin-configured board message (title, message, optional CTA) when `admin_config.luminary_board.enabled = true`; falls back to cycling `FEED_TIPS` from constants.js when board is off or unconfigured
 
 ### Explore
 - Tabs: Posts, Researchers, Papers, Groups
@@ -108,7 +108,7 @@ _Last updated: 2026-04-23 (rev 9)_
 
 ### Admin Panel (`/admin`)
 - Gated via `is_admin = true` on `profiles`; non-admins hit NotFoundScreen
-- Left nav (220px): Overview / Users / Invites / Templates / Content / Analytics — Analytics is placeholder; all others fully implemented
+- Left nav (220px): Overview / Users / Invites / Templates / Content / Interventions / Analytics — Analytics is placeholder; all others fully implemented
 
 **Invite management** (fully implemented):
 - Full invite code table loaded via `get_invite_codes_with_stats()` RPC
@@ -145,7 +145,15 @@ _Last updated: 2026-04-23 (rev 9)_
 - Non-owner ··· menu in PostCard and GroupPostCard includes 🚩 Report option
 - ReportModal: 5 reason options, optional note, duplicate detection
 - Admin report badge on PostCard (visible to admins only)
-- Featured posts (✦ Featured badge) sort to top of For You feed; hidden posts excluded from feed
+- Featured posts: violet tinted wrapper + ✦ FEATURED header in PostCard — visual distinction only, normal chronological sort order
+- Admin posts (`is_admin_post = true`): violet left border + ✦ FROM LUMINARY TEAM header in PostCard
+- Targeted posts (`target_user_id`): filtered client-side — only the recipient sees them in their feed
+
+**Interventions** (fully implemented):
+- **Compose tab**: broadcast / targeted / group post composer; text or paper (DOI lookup via CrossRef); sent as Luminary Team bot via `send_admin_post` RPC
+- **Luminary Board tab**: enable/disable + edit the sidebar board card (title, message, optional CTA URL/label); takes effect on next feed load
+- **Paper of Week tab**: algorithm mode (most_discussed or most_commented) or manual DOI pick; saved to `admin_config`
+- **Milestone post tab**: edit the heading/message/CTA labels used in the profile-completion milestone post; affects future milestone posts only
 
 **Inbox** (fully implemented):
 - Shows all conversations where the Luminary Team bot is a participant
@@ -172,7 +180,7 @@ _Last updated: 2026-04-23 (rev 9)_
 - **Mobile layout**: No responsive design. Desktop-only (200px sidebar + multi-column grids break on phones). `useWindowSize` hook exists but not wired to layout yet.
 - **XP / leveling system**: Sidebar badge is decorative. ProfileCompletionMeter stages are real but don't write to the `xp`/`level` columns.
 - **Push notifications / email digests**: No push; no email. `email_notifications` preference stored but not actioned.
-- **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state; pending nav reorganisation.
+- **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.
 
@@ -181,6 +189,7 @@ _Last updated: 2026-04-23 (rev 9)_
 ## Pending migrations (not yet run in production)
 
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
+- **`migration_admin_interventions.sql`**: Creates `admin_config` table + RLS; seeds `luminary_board`, `paper_of_week`, `milestone_post_template` rows; adds `get_admin_config`, `set_admin_config`, `send_admin_post` RPCs; adds `is_admin_post` + `target_user_id` columns to `posts`; DROP+CREATE `posts_with_meta` view to include new columns.
 
 ---
 

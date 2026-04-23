@@ -5,6 +5,19 @@ import { T } from '../lib/constants';
 import { MILESTONES, STAGES, STAGE_REWARDS, computeStage } from '../lib/profileMilestones';
 import { capture } from '../lib/analytics';
 
+function buildMilestoneHtml(heading, message, cta1Label, cta2Label) {
+  return `<div style="background:linear-gradient(135deg,#eeecff,#f0f9ff);border-radius:12px;padding:20px 22px;font-family:'DM Sans',sans-serif">` +
+    `<div style="height:4px;background:linear-gradient(90deg,#667eea,#764ba2,#f093fb);border-radius:2px;margin-bottom:16px"></div>` +
+    `<div style="font-size:32px;margin-bottom:8px">🎉</div>` +
+    `<div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:6px;color:#1b1d36">${heading}</div>` +
+    `<div style="font-size:13px;color:#7a7fa8;line-height:1.6;margin-bottom:14px">${message}</div>` +
+    `<div style="display:flex;gap:8px;flex-wrap:wrap">` +
+    `<span style="font-size:13px;font-weight:700;color:#6c63ff">${cta1Label}</span>` +
+    `<span style="font-size:13px;color:#7a7fa8">·</span>` +
+    `<span style="font-size:13px;font-weight:700;color:#6c63ff">${cta2Label}</span>` +
+    `</div></div>`;
+}
+
 export default function ProfileCompletionMeter({ profile, user, onAction }) {
   const [stats,    setStats]    = useState({});
   const [expanded, setExpanded] = useState(false);
@@ -60,12 +73,23 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
           ? supabase.from('posts').delete().in('id', staleIds)
           : Promise.resolve();
 
-        cleanup.then(() => supabase.from('posts').insert({
-          user_id:    user.id,
-          post_type:  'milestone',
-          visibility: 'everyone',
-          content:    `<h3>🎉 Profile complete!</h3><p>You've built your Luminary profile. Share it with colleagues so they can follow your work and publications.</p>`,
-        }));
+        cleanup.then(async () => {
+          const { data: configRow } = await supabase
+            .from('admin_config').select('value')
+            .eq('key', 'milestone_post_template').single();
+          const tpl       = configRow?.value || {};
+          const heading   = tpl.heading    || 'Your profile is complete! 🎉';
+          const message   = tpl.message    || "You've built your Luminary profile. Share it with colleagues so they can follow your work and publications.";
+          const cta1Label = tpl.cta1_label || 'View my profile →';
+          const cta2Label = tpl.cta2_label || '🪪 Virtual business card';
+          return supabase.from('posts').insert({
+            user_id:        user.id,
+            target_user_id: user.id,
+            post_type:      'milestone',
+            visibility:     'everyone',
+            content:        buildMilestoneHtml(heading, message, cta1Label, cta2Label),
+          });
+        });
       });
   }, [loading, profile, stats, user.id]);
 

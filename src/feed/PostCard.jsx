@@ -321,6 +321,27 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
   return (
     <div style={{
+      background: isFeatured ? T.v2 : 'transparent',
+      borderRadius: isFeatured ? 16 : 0,
+      border: isFeatured ? `1.5px solid ${T.v}` : 'none',
+      marginBottom: isFeatured ? 2 : 0,
+    }}>
+    {isFeatured && (
+      <div style={{ padding: '6px 14px 4px', fontSize: 11, fontWeight: 700, color: T.v, letterSpacing: 0.3 }}>
+        ✦ FEATURED
+      </div>
+    )}
+    <div style={{
+      borderLeft: post.is_admin_post ? `3px solid ${T.v}` : 'none',
+      paddingLeft: post.is_admin_post ? 12 : 0,
+      marginLeft: post.is_admin_post ? -12 : 0,
+    }}>
+    {post.is_admin_post && (
+      <div style={{ fontSize: 11, fontWeight: 700, color: T.v, marginBottom: 4, letterSpacing: 0.3, paddingLeft: 2 }}>
+        ✦ FROM LUMINARY TEAM
+      </div>
+    )}
+    <div style={{
       background: T.w,
       border: post.is_deep_dive ? `1.5px solid rgba(108,99,255,.25)` : `1px solid ${T.bdr}`,
       borderLeft: post.is_deep_dive ? `4px solid ${T.v}` : undefined,
@@ -371,18 +392,11 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
               {post.author_institution&&`${post.author_institution} · `}{timeAgo(post.created_at)}
               {post.edited_at&&<span style={{color:T.mu,fontSize:10}}> · edited</span>}
             </div>
-            {(isFeatured || (currentProfile?.is_admin && post.report_count > 0)) && (
+            {currentProfile?.is_admin && post.report_count > 0 && (
               <div style={{display:'flex',gap:4,marginTop:3,flexWrap:'wrap'}}>
-                {isFeatured && (
-                  <span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,fontWeight:700,color:T.v,background:T.v2,padding:'2px 8px',borderRadius:20}}>
-                    ✦ Featured
-                  </span>
-                )}
-                {currentProfile?.is_admin && post.report_count > 0 && (
-                  <span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,fontWeight:700,color:T.am,background:T.am2,padding:'2px 8px',borderRadius:20}}>
-                    🚩 {post.report_count} report{post.report_count > 1 ? 's' : ''}
-                  </span>
-                )}
+                <span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,fontWeight:700,color:T.am,background:T.am2,padding:'2px 8px',borderRadius:20}}>
+                  🚩 {post.report_count} report{post.report_count > 1 ? 's' : ''}
+                </span>
               </div>
             )}
           </div>
@@ -769,6 +783,8 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
       {showShare && <ShareModal post={post} onClose={()=>setShowShare(false)}/>}
       {showReport && <ReportModal supabase={supabase} postId={post.id} onClose={()=>setShowReport(false)}/>}
+    </div>
+    </div>
     </div>
   );
 }

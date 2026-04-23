@@ -33,73 +33,97 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   useEffect(()=>{ localStorage.setItem('luminary_mode_filter',modeFilter); },[modeFilter]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // Fetch all paper posts with a DOI to aggregate comments across posts per DOI
-      const { data: papers } = await supabase
+    const fetchPotw = async () => {
+      // Fetch admin config for Paper of the Week settings
+      const { data: configRow } = await supabase
+        .from('admin_config').select('value').eq('key', 'paper_of_week').single();
+      const config = configRow?.value || { mode: 'algorithm', algorithm: 'most_discussed' };
+
+      if (config.mode === 'manual' && config.manual_doi) {
+        // Manual pick: look up the post with this DOI
+        const { data: post } = await supabase
+          .from('posts_with_meta')
+          .select('paper_doi, paper_title, paper_journal, paper_year')
+          .eq('post_type', 'paper')
+          .eq('paper_doi', config.manual_doi)
+          .limit(1)
+          .maybeSingle();
+        if (post?.paper_doi) {
+          setPotw({
+            doi:          post.paper_doi,
+            title:        post.paper_title || config.manual_doi,
+            journal:      post.paper_journal || '',
+            year:         post.paper_year || '',
+            discussCount: 1,
+            mode:         'manual',
+          });
+        }
+        return;
+      }
+
+      // Algorithm mode: fetch paper posts and aggregate by DOI
+      const { data: posts } = await supabase
         .from('posts_with_meta')
-        .select('paper_doi, paper_title, paper_journal, paper_year, comment_count')
+        .select('paper_doi, paper_title, paper_journal, paper_year, user_id, comment_count')
         .eq('post_type', 'paper')
         .not('paper_doi', 'is', null)
         .limit(200);
 
-      if (cancelled || !papers?.length) return;
+      if (!posts?.length) return;
 
-      // Aggregate total comments per DOI; keep the most metadata-complete post per DOI
-      const doiMap = {};
-      for (const p of papers) {
-        const d = p.paper_doi;
-        if (!doiMap[d]) {
-          doiMap[d] = { ...p, totalComments: 0 };
+      const byDoi = {};
+      posts.forEach(p => {
+        if (!byDoi[p.paper_doi]) {
+          byDoi[p.paper_doi] = {
+            doi:          p.paper_doi,
+            title:        p.paper_title,
+            journal:      p.paper_journal,
+            year:         p.paper_year,
+            userIds:      new Set(),
+            commentCount: 0,
+          };
         }
-        doiMap[d].totalComments += p.comment_count || 0;
-        // Prefer whichever row has more metadata
-        if (!doiMap[d].paper_title && p.paper_title) Object.assign(doiMap[d], p);
+        byDoi[p.paper_doi].userIds.add(p.user_id);
+        byDoi[p.paper_doi].commentCount += (p.comment_count || 0);
+        if (!byDoi[p.paper_doi].title && p.paper_title) byDoi[p.paper_doi].title = p.paper_title;
+      });
+
+      const algorithm = config.algorithm || 'most_discussed';
+      const best = Object.values(byDoi).sort((a, b) =>
+        algorithm === 'most_discussed'
+          ? b.userIds.size   - a.userIds.size
+          : b.commentCount   - a.commentCount
+      )[0];
+
+      if (!best) return;
+
+      let title   = best.title;
+      let journal = best.journal;
+
+      if (!title || !journal) {
+        try {
+          const res  = await fetch(`https://api.crossref.org/works/${encodeURIComponent(best.doi)}`);
+          const json = await res.json();
+          const w    = json.message;
+          title   = title   || w.title?.[0]              || best.doi;
+          journal = journal || w['container-title']?.[0] || '';
+        } catch {
+          title   = title   || best.doi;
+          journal = journal || '';
+        }
       }
 
-      // Pick the DOI with the most total comments
-      const best = Object.values(doiMap).reduce((a, b) =>
-        b.totalComments > a.totalComments ? b : a
-      );
+      setPotw({
+        doi:          best.doi,
+        title,
+        journal,
+        year:         best.year,
+        discussCount: algorithm === 'most_discussed' ? best.userIds.size : best.commentCount,
+        mode:         algorithm,
+      });
+    };
 
-      if (cancelled) return;
-
-      // If we already have title + journal from the posts, skip CrossRef
-      if (best.paper_title && best.paper_journal) {
-        setPotw({
-          doi: best.paper_doi,
-          title: best.paper_title,
-          journal: best.paper_journal,
-          year: best.paper_year,
-          discussCount: best.totalComments,
-        });
-        return;
-      }
-
-      // Otherwise fetch from CrossRef
-      try {
-        const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(best.paper_doi)}`);
-        if (!res.ok || cancelled) return;
-        const { message: m } = await res.json();
-        if (cancelled) return;
-        setPotw({
-          doi: best.paper_doi,
-          title: m.title?.[0] || best.paper_title || 'Untitled',
-          journal: m['container-title']?.[0] || best.paper_journal || '',
-          year: m.published?.['date-parts']?.[0]?.[0] || best.paper_year || '',
-          discussCount: best.totalComments,
-        });
-      } catch {
-        if (!cancelled) setPotw({
-          doi: best.paper_doi,
-          title: best.paper_title || 'Untitled',
-          journal: best.paper_journal || '',
-          year: best.paper_year || '',
-          discussCount: best.totalComments,
-        });
-      }
-    })();
-    return () => { cancelled = true; };
+    fetchPotw();
   }, []);
 
   const applyModeFilter = useCallback((posts, filter, userWorkMode) => {
@@ -311,25 +335,11 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       }
     }
 
-    // Strip milestone posts from other users (they're personal celebration cards)
+    // Strip milestone posts from other users; hide targeted posts not meant for this user
     const visible = withSlugData.filter(p =>
-      p.post_type !== 'milestone' || p.user_id === user?.id
+      (p.post_type !== 'milestone' || p.user_id === user?.id) &&
+      (p.target_user_id == null || p.target_user_id === user?.id)
     );
-
-    // Featured post elevation (For You tab only)
-    let visibleFinal = visible;
-    if (fp === 'sug') {
-      const now = new Date();
-      const featuredPosts = visible.filter(p =>
-        p.is_featured && (!p.featured_until || new Date(p.featured_until) > now)
-      );
-      if (featuredPosts.length > 0) {
-        const normalPosts = visible.filter(p =>
-          !p.is_featured || (p.featured_until != null && new Date(p.featured_until) <= now)
-        );
-        visibleFinal = [...featuredPosts, ...normalPosts];
-      }
-    }
 
     const filtered = fp === 'sug'
       ? applyModeFilter(visibleFinal, modeFilter, profile?.work_mode || 'researcher')
@@ -579,7 +589,10 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                       {[potw.journal, potw.year].filter(Boolean).join(' · ')}
                     </div>
                     <div style={{fontSize:11,color:T.v,fontWeight:700}}>
-                      {potw.discussCount} {potw.discussCount === 1 ? 'comment' : 'comments'} across all posts →
+                      {potw.mode === 'most_discussed'
+                        ? `${potw.discussCount} researcher${potw.discussCount !== 1 ? 's' : ''} discussing this →`
+                        : `${potw.discussCount} comment${potw.discussCount !== 1 ? 's' : ''} across all posts →`
+                      }
                     </div>
                   </button>
                 )}

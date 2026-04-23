@@ -6,14 +6,16 @@ import TemplatesSection from './TemplatesSection';
 import UsersSection from './UsersSection';
 import InboxSection from './InboxSection';
 import ContentSection from './ContentSection';
+import InterventionsSection from './InterventionsSection';
 
 const NAV_ITEMS = [
-  { id: 'overview',   label: 'Overview',  icon: '📊' },
-  { id: 'users',      label: 'Users',     icon: '👥' },
-  { id: 'invites',    label: 'Invites',   icon: '🎟️' },
-  { id: 'templates',  label: 'Templates', icon: '📋' },
-  { id: 'content',    label: 'Content',   icon: '🗂️' },
-  { id: 'analytics',  label: 'Analytics', icon: '📈' },
+  { id: 'overview',      label: 'Overview',      icon: '📊' },
+  { id: 'users',         label: 'Users',         icon: '👥' },
+  { id: 'invites',       label: 'Invites',       icon: '🎟️' },
+  { id: 'templates',     label: 'Templates',     icon: '📋' },
+  { id: 'content',       label: 'Content',       icon: '🗂️' },
+  { id: 'interventions', label: 'Interventions', icon: '⚡' },
+  { id: 'analytics',     label: 'Analytics',     icon: '📈' },
 ];
 
 export default function AdminShell({ supabase, user, profile }) {
@@ -142,6 +144,8 @@ export default function AdminShell({ supabase, user, profile }) {
           ? <TemplatesSection supabase={supabase} />
           : section === 'content'
           ? <ContentSection supabase={supabase} />
+          : section === 'interventions'
+          ? <InterventionsSection supabase={supabase} user={user} />
           : section === 'inbox'
           ? <InboxSection supabase={supabase} />
           : <AdminSectionPlaceholder section={section} />

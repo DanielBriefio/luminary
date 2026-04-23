@@ -70,7 +70,8 @@ src/
   projects/   — ProjectsScreen, ProjectScreen, ProjectFeed, ProjectPostCard, ProjectMembers,
                 CreateProjectModal, TemplateGallery, SaveAsTemplateModal
   admin/      — AdminShell, InvitesSection, CreateCodeModal, UsersSection, UserDetailPanel,
-                BulkNudgeModal, TemplatesSection, ContentSection, InboxSection
+                BulkNudgeModal, TemplatesSection, ContentSection, InboxSection, InterventionsSection
+  admin/interventions/ — ComposeTab, BoardTab, PaperOfWeekTab, MilestoneTab
 ```
 
 > `src/screens/GroupsScreen.jsx` is legacy — do not edit; active groups screen is `src/groups/GroupsScreen.jsx`.
@@ -85,7 +86,7 @@ src/
 
 **Projects:** `projects`, `project_members`, `project_folders`, `project_posts` (`project_posts_with_meta` view), `project_post_likes`, `project_post_comments`, `community_templates`, `community_template_ratings`
 
-**Admin/Auth:** `invite_codes`, `invite_code_uses`, `invite_rate_limits`, `post_reports`, `orcid_pending`, `waitlist`
+**Admin/Auth:** `invite_codes`, `invite_code_uses`, `invite_rate_limits`, `post_reports`, `orcid_pending`, `waitlist`, `admin_config`
 
 **Non-obvious schema facts:**
 - `profiles.work_mode`: `'researcher'|'clinician'|'industry'|'clinician_scientist'` (`'clinician_scientist'` replaced legacy `'both'`)
@@ -98,7 +99,10 @@ src/
 - `post_reports`: CHECK exactly one of `post_id`/`group_post_id` must be set; UNIQUE(post_id, reporter_id)
 - `invite_codes`: personal = single-use via `claimed_by`; event = `is_multi_use=true`, tracked in `invite_code_uses`
 - `conversations`: `user_id_a/b` sorted canonically to prevent duplicates
-- `posts_with_meta` and `group_posts_with_meta` views were DROP+CREATE'd (not `CREATE OR REPLACE`) to add `paper_citation` mid-definition
+- `posts_with_meta` and `group_posts_with_meta` views were DROP+CREATE'd (not `CREATE OR REPLACE`) to add `paper_citation` mid-definition; `posts_with_meta` was DROP+CREATE'd again to pick up `is_admin_post` and `target_user_id` columns
+- `posts.is_admin_post` (bool, default false) — set on posts created via `send_admin_post` RPC; shown with ✦ FROM LUMINARY TEAM header in PostCard
+- `posts.target_user_id` (uuid, FK profiles) — targeted posts are filtered client-side: only shown to the specific user; milestone posts also use this
+- `admin_config` — key/value store for admin-controlled settings; keys: `luminary_board`, `paper_of_week`, `milestone_post_template`; read via `get_admin_config(p_key)`, written via `set_admin_config(p_key, p_value)`
 
 ## RPCs (all SECURITY DEFINER, require `is_admin = true`)
 
@@ -115,6 +119,9 @@ src/
 - `get_admin_posts(p_limit, p_offset, p_search, p_type, p_featured, p_hidden)` — paginated posts + report_count; returns `{ total, posts }`
 - `get_content_health()` — returns `{ groups, projects }` each with posts_this_week + health (active/quiet/dead)
 - `get_moderation_queue(p_status)` — reported posts aggregated with reports array (reporter/reason/note)
+- `get_admin_config(p_key)` — returns `value` JSONB for given key; users can read `luminary_board` + `milestone_post_template`; admins can read all
+- `set_admin_config(p_key, p_value)` — upserts admin config; admin only
+- `send_admin_post(p_mode, p_content, p_bot_user_id, p_post_type, ...)` — broadcast (one post, no target_user_id), targeted (per-user post + notification), group (group_posts insert); sets `is_admin_post=true`
 
 ## Edge Functions
 
