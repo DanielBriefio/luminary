@@ -287,29 +287,40 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     // ── 6b. Fetch group_id / group_name + is_deep_dive from posts directly ──
     // posts_with_meta view was compiled before these columns were added;
     // SELECT * on a view does not auto-include new columns in PostgreSQL.
-    let groupRefMap = {};
-    let deepDiveMap = {};
-    let bgColorMap  = {};
+    let groupRefMap   = {};
+    let deepDiveMap   = {};
+    let bgColorMap    = {};
+    let featuredMap   = {};
     if (allItems.length) {
       const { data: extraCols } = await supabase
-        .from('posts').select('id, group_id, group_name, is_deep_dive, bg_color')
+        .from('posts')
+        .select('id, group_id, group_name, is_deep_dive, bg_color, is_featured, featured_until, featured_at')
         .in('id', allItems.map(p => p.id));
       (extraCols || []).forEach(p => {
         if (p.group_id)     groupRefMap[p.id] = { group_id: p.group_id, group_name: p.group_name };
         if (p.is_deep_dive) deepDiveMap[p.id] = true;
         if (p.bg_color)     bgColorMap[p.id]  = p.bg_color;
+        featuredMap[p.id] = { is_featured: p.is_featured, featured_until: p.featured_until, featured_at: p.featured_at };
       });
     }
 
-    const enriched = allItems.map(item=>({
-      ...item,
-      ...(groupRefMap[item.id] || {}),
-      is_deep_dive:  deepDiveMap[item.id] || false,
-      bg_color:      bgColorMap[item.id]  || null,
-      user_liked:    likedSet.has(item.id),
-      repost_count:  repostCountMap[item.id]||0,
-      user_reposted: userRepostedSet.has(item.id),
-    }));
+    const now = new Date();
+    const enriched = allItems.map(item => {
+      const feat = featuredMap[item.id] || {};
+      const isFeaturedNow = feat.is_featured && (!feat.featured_until || new Date(feat.featured_until) > now);
+      return {
+        ...item,
+        ...(groupRefMap[item.id] || {}),
+        ...feat,
+        is_deep_dive:  deepDiveMap[item.id] || false,
+        bg_color:      bgColorMap[item.id]  || null,
+        user_liked:    likedSet.has(item.id),
+        repost_count:  repostCountMap[item.id] || 0,
+        user_reposted: userRepostedSet.has(item.id),
+        // Featured posts sort by when they were featured, not when created
+        _sortTime: (isFeaturedNow && feat.featured_at) ? feat.featured_at : item._sortTime,
+      };
+    });
 
     // ── 7. Slugs + sort ──────────────────────────────────────────────────
     const withSlugData = await withSlugs(enriched);

@@ -131,6 +131,7 @@ function PostsTab({ supabase }) {
     setActing(post.id);
     await supabase.from('posts').update({
       is_featured:    true,
+      featured_at:    new Date().toISOString(),
       featured_until: hours
         ? new Date(Date.now() + hours * 3600 * 1000).toISOString()
         : null,
@@ -143,7 +144,7 @@ function PostsTab({ supabase }) {
 
   const unfeaturePost = async (id) => {
     setActing(id);
-    await supabase.from('posts').update({ is_featured: false, featured_until: null }).eq('id', id);
+    await supabase.from('posts').update({ is_featured: false, featured_until: null, featured_at: null }).eq('id', id);
     setActing(null);
     load();
   };
