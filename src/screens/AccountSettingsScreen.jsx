@@ -146,8 +146,8 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Show tips in feed</div>
-          <div style={{ fontSize: 12, color: T.mu }}>Feature tips shown in the right sidebar of your feed</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Show Luminary Board in sidebar</div>
+          <div style={{ fontSize: 12, color: T.mu }}>Receive irregular announcements and tips from the Luminary team</div>
         </div>
         <Toggle value={tipsOn} onChange={toggle} label="" sublabel=""/>
       </div>

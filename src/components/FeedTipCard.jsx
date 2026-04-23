@@ -41,7 +41,7 @@ export default function FeedTipCard({ profile }) {
   }
 
   const showBoard = boardOn && boardPages.length > 0;
-  const showTips  = !showBoard && boardOn && FEED_TIPS.length > 0;
+  const showTips  = !showBoard && FEED_TIPS.length > 0;
 
   if (!showBoard && !showTips) return null;
 
