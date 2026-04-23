@@ -60,69 +60,26 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         return;
       }
 
-      // Algorithm mode: fetch paper posts and aggregate by DOI
-      const { data: posts } = await supabase
-        .from('posts_with_meta')
-        .select('paper_doi, paper_title, paper_journal, paper_year, user_id, comment_count')
-        .eq('post_type', 'paper')
-        .eq('is_hidden', false)
-        .eq('is_admin_post', false)
-        .not('paper_doi', 'is', null)
-        .neq('paper_doi', '')
-        .not('paper_title', 'is', null)
-        .neq('paper_title', '')
-        .limit(200);
-
-      if (!posts?.length) return;
-
-      const byDoi = {};
-      posts.forEach(p => {
-        if (!byDoi[p.paper_doi]) {
-          byDoi[p.paper_doi] = {
-            doi:          p.paper_doi,
-            title:        p.paper_title,
-            journal:      p.paper_journal,
-            year:         p.paper_year,
-            userIds:      new Set(),
-            commentCount: 0,
-          };
-        }
-        byDoi[p.paper_doi].userIds.add(p.user_id);
-        byDoi[p.paper_doi].commentCount += (p.comment_count || 0);
-        if (!byDoi[p.paper_doi].title && p.paper_title) byDoi[p.paper_doi].title = p.paper_title;
-      });
-
+      // Algorithm mode: use get_paper_stats_public so counts match exactly what admin sees
       const algorithm = config.algorithm || 'most_discussed';
-      const best = Object.values(byDoi).sort((a, b) =>
+      const { data: papers } = await supabase.rpc('get_paper_stats_public');
+
+      if (!papers?.length) return;
+
+      const best = [...papers].sort((a, b) =>
         algorithm === 'most_discussed'
-          ? (b.userIds.size - a.userIds.size) || (b.commentCount - a.commentCount)
-          : b.commentCount - a.commentCount
+          ? (b.participants   - a.participants)   || (b.total_comments - a.total_comments)
+          : (b.total_comments - a.total_comments) || (b.participants   - a.participants)
       )[0];
 
       if (!best) return;
 
-      let title   = best.title;
-      let journal = best.journal;
-
-      if (!title || !journal) {
-        try {
-          const res  = await fetch(`https://api.crossref.org/works/${encodeURIComponent(best.doi)}`);
-          const json = await res.json();
-          const w    = json.message;
-          title   = title   || w.title?.[0]              || best.doi;
-          journal = journal || w['container-title']?.[0] || '';
-        } catch {
-          title   = title   || best.doi;
-          journal = journal || '';
-        }
-      }
-
       setPotw({
-        doi:          best.doi,
-        title,
-        journal,
-        year:         best.year,
-        discussCount: algorithm === 'most_discussed' ? best.userIds.size : best.commentCount,
+        doi:          best.paper_doi,
+        title:        best.paper_title,
+        journal:      best.paper_journal || '',
+        year:         best.paper_year    || '',
+        discussCount: algorithm === 'most_discussed' ? best.participants : best.total_comments,
         mode:         algorithm,
       });
     };
