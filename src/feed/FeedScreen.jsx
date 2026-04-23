@@ -563,32 +563,26 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
             </div>
             {!isMobile && (
               <div>
-                <div style={{background:T.w,border:`1px solid ${T.bdr}`,borderRadius:14,padding:15,boxShadow:"0 2px 12px rgba(108,99,255,.07)",marginBottom:12}}>
-                  <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",color:T.mu,marginBottom:11,fontWeight:700}}>🎉 Founding Fellows</div>
-                  <div style={{fontSize:12,color:T.mu,lineHeight:1.7}}>You're one of the first people on Luminary. Every post you share helps build the scientific community we've been missing.</div>
-                </div>
-
-                <FeedTipCard profile={profile}/>
                 {potw && (
                   <button
                     onClick={() => onViewPaper && onViewPaper(potw.doi)}
                     style={{
                       background:`linear-gradient(135deg,${T.v2},${T.bl2})`,
-                      border:"1px solid rgba(108,99,255,.15)",borderRadius:14,padding:15,
+                      border:"1px solid rgba(108,99,255,.15)",borderRadius:14,padding:18,
                       textAlign:'left', width:'100%', cursor:'pointer', fontFamily:'inherit',
-                      transition:'box-shadow .15s',
+                      transition:'box-shadow .15s', marginBottom:12,
                     }}
                     onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 18px rgba(108,99,255,.18)'}
                     onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}
                   >
-                    <div style={{fontSize:10,fontWeight:700,color:T.v,marginBottom:6,letterSpacing:'.06em',textTransform:'uppercase'}}>Paper of the Week</div>
-                    <div style={{fontSize:12,fontWeight:700,lineHeight:1.45,marginBottom:5,color:T.text}}>
-                      {potw.title.length > 90 ? potw.title.slice(0,90)+'…' : potw.title}
+                    <div style={{fontSize:10,fontWeight:700,color:T.v,marginBottom:8,letterSpacing:'.06em',textTransform:'uppercase'}}>Paper of the Week</div>
+                    <div style={{fontSize:13,fontWeight:700,lineHeight:1.5,marginBottom:6,color:T.text}}>
+                      {potw.title.length > 110 ? potw.title.slice(0,110)+'…' : potw.title}
                     </div>
-                    <div style={{fontSize:10,color:T.mu,marginBottom:8}}>
+                    <div style={{fontSize:11,color:T.mu,marginBottom:10}}>
                       {[potw.journal, potw.year].filter(Boolean).join(' · ')}
                     </div>
-                    <div style={{fontSize:11,color:T.v,fontWeight:700}}>
+                    <div style={{fontSize:11.5,color:T.v,fontWeight:700}}>
                       {potw.mode === 'most_discussed'
                         ? `${potw.discussCount} researcher${potw.discussCount !== 1 ? 's' : ''} discussing this →`
                         : `${potw.discussCount} comment${potw.discussCount !== 1 ? 's' : ''} across all posts →`
@@ -596,6 +590,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                     </div>
                   </button>
                 )}
+                <FeedTipCard profile={profile}/>
               </div>
             )}
           </div>
