@@ -289,13 +289,15 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     // SELECT * on a view does not auto-include new columns in PostgreSQL.
     let groupRefMap = {};
     let deepDiveMap = {};
+    let bgColorMap  = {};
     if (allItems.length) {
       const { data: extraCols } = await supabase
-        .from('posts').select('id, group_id, group_name, is_deep_dive')
+        .from('posts').select('id, group_id, group_name, is_deep_dive, bg_color')
         .in('id', allItems.map(p => p.id));
       (extraCols || []).forEach(p => {
         if (p.group_id)     groupRefMap[p.id] = { group_id: p.group_id, group_name: p.group_name };
         if (p.is_deep_dive) deepDiveMap[p.id] = true;
+        if (p.bg_color)     bgColorMap[p.id]  = p.bg_color;
       });
     }
 
@@ -303,6 +305,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       ...item,
       ...(groupRefMap[item.id] || {}),
       is_deep_dive:  deepDiveMap[item.id] || false,
+      bg_color:      bgColorMap[item.id]  || null,
       user_liked:    likedSet.has(item.id),
       repost_count:  repostCountMap[item.id]||0,
       user_reposted: userRepostedSet.has(item.id),

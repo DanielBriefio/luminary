@@ -342,7 +342,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       </div>
     )}
     <div style={{
-      background: T.w,
+      background: post.bg_color || T.w,
       border: post.is_deep_dive ? `1.5px solid rgba(108,99,255,.25)` : `1px solid ${T.bdr}`,
       borderLeft: post.is_deep_dive ? `4px solid ${T.v}` : undefined,
       borderRadius: 14,

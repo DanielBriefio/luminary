@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { T, LUMINARY_TEAM_USER_ID } from '../../lib/constants';
 import Av from '../../components/Av';
 import Spinner from '../../components/Spinner';
+import RichTextEditor from '../../components/RichTextEditor';
 import { buildCitationFromCrossRef } from '../../lib/utils';
 import { capture } from '../../lib/analytics';
 
@@ -16,10 +17,24 @@ const POST_TYPES = [
   { id: 'paper', label: '📄 Paper' },
 ];
 
+const BG_COLORS = [
+  { hex: null,      label: 'White'  },
+  { hex: '#eeecff', label: 'Violet' },
+  { hex: '#f0f9ff', label: 'Teal'   },
+  { hex: '#ecfdf5', label: 'Green'  },
+  { hex: '#fef3c7', label: 'Amber'  },
+  { hex: '#e8f0fe', label: 'Blue'   },
+];
+
+// Strip HTML tags to check for actual content
+const hasText = (html) => (html || '').replace(/<[^>]+>/g, '').trim().length > 0;
+
 export default function ComposeTab({ supabase, user }) {
   const [mode, setMode]         = useState('broadcast');
   const [postType, setPostType] = useState('text');
   const [content, setContent]   = useState('');
+  const [isDeepDive, setIsDeepDive] = useState(false);
+  const [bgColor, setBgColor]   = useState(null);
 
   const [users, setUsers]                     = useState([]);
   const [groups, setGroups]                   = useState([]);
@@ -28,13 +43,13 @@ export default function ComposeTab({ supabase, user }) {
   const [userSearch, setUserSearch]           = useState('');
   const [loadingUsers, setLoadingUsers]       = useState(false);
 
-  const [doi, setDoi]             = useState('');
+  const [doi, setDoi]               = useState('');
   const [doiLoading, setDoiLoading] = useState(false);
-  const [paperData, setPaperData] = useState(null);
-  const [doiError, setDoiError]   = useState('');
+  const [paperData, setPaperData]   = useState(null);
+  const [doiError, setDoiError]     = useState('');
 
-  const [sending, setSending]   = useState(false);
-  const [sent, setSent]         = useState(false);
+  const [sending, setSending]     = useState(false);
+  const [sent, setSent]           = useState(false);
   const [sendError, setSendError] = useState('');
 
   useEffect(() => {
@@ -90,7 +105,7 @@ export default function ComposeTab({ supabase, user }) {
   };
 
   const canSend = () => {
-    if (!content.trim()) return false;
+    if (!hasText(content)) return false;
     if (mode === 'targeted' && selectedUserIds.size === 0) return false;
     if (mode === 'group' && !selectedGroupId) return false;
     if (postType === 'paper' && !paperData) return false;
@@ -102,10 +117,12 @@ export default function ComposeTab({ supabase, user }) {
     setSending(true); setSendError('');
 
     const payload = {
-      p_mode:        mode,
-      p_content:     content.trim(),
-      p_bot_user_id: LUMINARY_TEAM_USER_ID,
-      p_post_type:   postType,
+      p_mode:         mode,
+      p_content:      content.trim(),
+      p_bot_user_id:  LUMINARY_TEAM_USER_ID,
+      p_post_type:    postType,
+      p_is_deep_dive: isDeepDive,
+      p_bg_color:     bgColor || null,
     };
     if (mode === 'targeted') payload.p_target_user_ids = Array.from(selectedUserIds);
     if (mode === 'group')    payload.p_group_id = selectedGroupId;
@@ -125,7 +142,9 @@ export default function ComposeTab({ supabase, user }) {
 
     capture('admin_post_sent', {
       mode,
-      post_type: postType,
+      post_type:       postType,
+      is_deep_dive:    isDeepDive,
+      has_bg_color:    !!bgColor,
       recipient_count: mode === 'targeted' ? selectedUserIds.size : 1,
     });
 
@@ -133,6 +152,7 @@ export default function ComposeTab({ supabase, user }) {
     setTimeout(() => {
       setSent(false); setContent(''); setPaperData(null);
       setDoi(''); setSelectedUserIds(new Set()); setSelectedGroupId('');
+      setIsDeepDive(false); setBgColor(null);
     }, 2000);
   };
 
@@ -210,6 +230,8 @@ export default function ComposeTab({ supabase, user }) {
 
       {/* Right: compose */}
       <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12, padding: 20 }}>
+
+        {/* Post type */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
           {POST_TYPES.map(t => (
             <button key={t.id} onClick={() => setPostType(t.id)} style={{
@@ -224,18 +246,59 @@ export default function ComposeTab({ supabase, user }) {
           ))}
         </div>
 
-        <textarea
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          rows={5}
-          placeholder={
-            postType === 'paper' ? 'Add a note about this paper (optional)…'
-            : mode === 'broadcast' ? 'Write a message to all users…'
-            : 'Write your message…'
-          }
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: `1px solid ${T.bdr}`, background: T.s2, fontSize: 13, color: T.text, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 14 }}
-        />
+        {/* Deep Dive toggle — text posts only */}
+        {postType === 'text' && (
+          <div onClick={() => setIsDeepDive(d => !d)} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '9px 12px', marginBottom: 12,
+            borderRadius: 10,
+            background: isDeepDive ? T.v2 : T.s2,
+            border: `1.5px solid ${isDeepDive ? T.v : T.bdr}`,
+            cursor: 'pointer',
+          }}>
+            <div style={{
+              width: 38, height: 20, borderRadius: 10,
+              background: isDeepDive ? T.v : T.bdr,
+              position: 'relative', flexShrink: 0, transition: 'background .2s',
+            }}>
+              <div style={{
+                position: 'absolute', top: 2,
+                left: isDeepDive ? 19 : 2,
+                width: 16, height: 16, borderRadius: '50%',
+                background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                transition: 'left .2s',
+              }}/>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: isDeepDive ? T.v : T.text }}>
+                🔬 Deep Dive {isDeepDive ? '— on' : ''}
+              </div>
+              <div style={{ fontSize: 11, color: T.mu }}>
+                {isDeepDive
+                  ? 'H2/H3 headings, blockquotes, horizontal dividers, and inline DOI citations enabled'
+                  : 'Enable for structured posts with headings, blockquotes, and paper citations'}
+              </div>
+            </div>
+          </div>
+        )}
 
+        {/* Rich text editor */}
+        <div style={{ marginBottom: 14 }}>
+          <RichTextEditor
+            value={content}
+            onChange={setContent}
+            isDeepDive={isDeepDive}
+            minHeight={120}
+            placeholder={
+              postType === 'paper' ? 'Add a note about this paper (optional)…'
+              : isDeepDive         ? 'Use H2 headings for sections, ❝ for pull quotes, 📄 Cite to add paper references…'
+              : mode === 'broadcast' ? 'Write a message to all users…'
+              : 'Write your message…'
+            }
+          />
+        </div>
+
+        {/* Paper DOI lookup */}
         {postType === 'paper' && (
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -259,6 +322,28 @@ export default function ComposeTab({ supabase, user }) {
           </div>
         )}
 
+        {/* Background color */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: T.mu }}>Card background</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {BG_COLORS.map(c => (
+              <div key={String(c.hex)} onClick={() => setBgColor(c.hex)}
+                title={c.label}
+                style={{
+                  width: 20, height: 20, borderRadius: '50%',
+                  background: c.hex || '#ffffff',
+                  border: `2px solid ${bgColor === c.hex ? T.v : '#d0d3e8'}`,
+                  cursor: 'pointer',
+                  boxShadow: bgColor === c.hex ? `0 0 0 2px rgba(108,99,255,.3)` : 'none',
+                  transition: 'all .15s',
+                  outline: c.hex === null ? `1px solid ${T.bdr}` : 'none',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Delivery summary */}
         <div style={{ fontSize: 12, color: T.mu, marginBottom: 14, padding: '8px 12px', background: T.s2, borderRadius: 8, border: `1px solid ${T.bdr}` }}>
           {mode === 'broadcast' && "📢 Will appear in all users' For You feeds"}
           {mode === 'targeted'  && `🎯 Will appear only for ${selectedUserIds.size} selected user${selectedUserIds.size !== 1 ? 's' : ''}`}
@@ -267,7 +352,7 @@ export default function ComposeTab({ supabase, user }) {
         </div>
 
         {sendError && <div style={{ padding: '8px 12px', borderRadius: 8, background: T.ro2, color: T.ro, fontSize: 13, marginBottom: 10 }}>{sendError}</div>}
-        {sent && <div style={{ padding: '8px 12px', borderRadius: 8, background: T.gr2, color: T.gr, fontSize: 13, fontWeight: 600, marginBottom: 10, textAlign: 'center' }}>✓ Sent successfully</div>}
+        {sent      && <div style={{ padding: '8px 12px', borderRadius: 8, background: T.gr2, color: T.gr, fontSize: 13, fontWeight: 600, marginBottom: 10, textAlign: 'center' }}>✓ Sent successfully</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button onClick={handleSend} disabled={sending || sent || !canSend()} style={{
