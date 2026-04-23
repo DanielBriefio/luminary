@@ -102,10 +102,14 @@ src/
 - `posts_with_meta` and `group_posts_with_meta` views were DROP+CREATE'd (not `CREATE OR REPLACE`) to add `paper_citation` mid-definition; `posts_with_meta` was DROP+CREATE'd again to pick up `is_admin_post` and `target_user_id` columns
 - `posts.is_admin_post` (bool, default false) — set on posts created via `send_admin_post` RPC; shown with ✦ FROM LUMINARY TEAM header in PostCard
 - `posts.target_user_id` (uuid, FK profiles) — targeted posts are filtered client-side: only shown to the specific user; milestone posts also use this
-- `admin_config` — key/value store for admin-controlled settings; keys: `luminary_board`, `paper_of_week`, `milestone_post_template`; read via `get_admin_config(p_key)`, written via `set_admin_config(p_key, p_value)`
+- `admin_config` — key/value store for admin-controlled settings; keys: `luminary_board`, `paper_of_week`, `milestone_post_template`; read via `get_admin_config(p_key)`, written via `set_admin_config(p_key, p_value)`; RLS + RPC both allow all authenticated users to read `luminary_board`, `paper_of_week`, `milestone_post_template`; admins can read/write all keys
+- `posts.is_featured`, `posts.featured_until`, `posts.featured_at` — columns exist in DB but are unused; featured post feature was removed from the frontend
 
-## RPCs (all SECURITY DEFINER, require `is_admin = true`)
+## RPCs
 
+All are SECURITY DEFINER. Admin-only RPCs require `is_admin = true` on the caller's profile.
+
+**Admin-only:**
 - `get_admin_user_list()` — all users with activation_stage, ghost_segment, last_active; bot excluded
 - `get_user_activation_stages()` — funnel counts per activation stage
 - `get_ghost_users()` — users with ≤2 actions, inactive 5+ days
@@ -115,13 +119,16 @@ src/
 - `get_bot_conversation_messages(p_conversation_id, p_bot_user_id)` — messages for a bot conversation
 - `get_invite_codes_with_stats()` — all codes with computed status + creator name
 - `get_invite_tree(p_code)` — per-signup flags + level-2 invitees; branches on `is_multi_use`
-- `claim_invite_code(p_code)` — personal codes only; sets `claimed_by`/`claimed_at`
 - `get_admin_posts(p_limit, p_offset, p_search, p_type, p_featured, p_hidden)` — paginated posts + report_count; returns `{ total, posts }`
 - `get_content_health()` — returns `{ groups, projects }` each with posts_this_week + health (active/quiet/dead)
 - `get_moderation_queue(p_status)` — reported posts aggregated with reports array (reporter/reason/note)
-- `get_admin_config(p_key)` — returns `value` JSONB for given key; users can read `luminary_board` + `milestone_post_template`; admins can read all
+- `get_admin_config(p_key)` — returns `value` JSONB; non-admins may read `luminary_board`, `paper_of_week`, `milestone_post_template`; admins read all
 - `set_admin_config(p_key, p_value)` — upserts admin config; admin only
 - `send_admin_post(p_mode, p_content, p_bot_user_id, p_post_type, ...)` — broadcast (one post, no target_user_id), targeted (per-user post + notification), group (group_posts insert); sets `is_admin_post=true`
+
+**Authenticated users:**
+- `claim_invite_code(p_code)` — personal codes only; sets `claimed_by`/`claimed_at`
+- `get_paper_stats_public()` — paper aggregates for POTW algorithm; filters hidden/admin posts, requires non-empty DOI+title, min engagement (≥2 posts OR ≥1 comment); returns `{ paper_doi, paper_title, paper_journal, paper_year, discussions, participants, total_comments }`
 
 ## Edge Functions
 
