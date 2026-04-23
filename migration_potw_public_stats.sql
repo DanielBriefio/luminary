@@ -22,8 +22,11 @@ as $$
     max(p.paper_year)::int                 as paper_year,
     count(*)                               as discussions,
     count(distinct p.user_id)              as participants,
-    coalesce(sum(p.comment_count), 0)      as total_comments
+    coalesce(sum(c.cnt), 0)                as total_comments
   from posts p
+  left join (
+    select post_id, count(*) as cnt from comments group by post_id
+  ) c on c.post_id = p.id
   where p.post_type   = 'paper'
     and p.is_hidden   = false
     and p.is_admin_post = false
