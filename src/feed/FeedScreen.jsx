@@ -68,7 +68,9 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         .eq('is_hidden', false)
         .eq('is_admin_post', false)
         .not('paper_doi', 'is', null)
+        .neq('paper_doi', '')
         .not('paper_title', 'is', null)
+        .neq('paper_title', '')
         .limit(200);
 
       if (!posts?.length) return;
