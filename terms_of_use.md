@@ -118,6 +118,15 @@ Platform is intended for professional scientific discussion among
 qualified individuals and does not constitute medical advice, clinical
 guidance, or a substitute for professional judgement.
 
+> **⚠️ Important — HIPAA and patient data:** Luminary is not a
+> HIPAA-compliant platform and is not designed or intended for the
+> transmission or storage of protected health information (PHI). Users
+> who are healthcare professionals are solely responsible for ensuring
+> their posts, uploads, and communications comply with all applicable
+> patient privacy laws, including HIPAA (United States), UK GDPR, and
+> local regulations in their jurisdiction. Do not share identifiable
+> patient information on Luminary under any circumstances.
+
 You must not:
 
 - Share content intended to be interpreted as advice for specific patient
