@@ -10,7 +10,7 @@ _Effective date: April 24, 2026_
 
 Welcome to Luminary ("the Platform", "we", "us", "our"). Luminary is a
 professional network for researchers, clinicians, and medical affairs
-scientists, operated by [COMPANY NAME] ("Luminary", "we", "us").
+scientists, operated by Qurio LLC ("Luminary", "we", "us").
 
 By creating an account, accessing, or using the Platform, you ("User",
 "you") agree to be bound by these Terms of Use ("Terms"), our Privacy
@@ -60,7 +60,7 @@ as such.
 
 You are responsible for maintaining the confidentiality of your login
 credentials and for all activity that occurs under your account. You
-must notify us immediately at [CONTACT EMAIL] if you suspect any
+must notify us immediately at legal@luminary.to if you suspect any
 unauthorised use of your account.
 
 ### 2.5 ORCID authentication
@@ -235,7 +235,7 @@ third party. This includes but is not limited to:
   personal or confidential information without appropriate consent.
 
 Luminary will respond to valid copyright notices in accordance with
-applicable law. To submit a copyright notice, contact [CONTACT EMAIL].
+applicable law. To submit a copyright notice, contact legal@luminary.to.
 
 ### 4.5 Paper metadata
 
@@ -339,7 +339,7 @@ by contacting legal@luminary.to. Upon deletion:
 
 The Platform, including its design, code, branding, logo, name
 "Luminary", features, and content created by Luminary (but not User
-Content), are the intellectual property of [COMPANY NAME] and are
+Content), are the intellectual property of Qurio LLC and are
 protected by applicable copyright, trademark, and other intellectual
 property laws.
 
@@ -545,5 +545,5 @@ the full Terms above.
 
 ---
 
-_Qurio LLC · Yakumo 2-20-2, Meguro-ku, Tokyo 152-0023 · [COMPANY REGISTRATION NUMBER]_
+_Qurio LLC · Yakumo 2-20-2, Meguro-ku, Tokyo 152-0023 · 0110-03-021185_
 _For questions: team@luminary.to_
