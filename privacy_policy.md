@@ -470,6 +470,15 @@ We aim to respond to all privacy-related enquiries within 30 days.
 | ORCID data | ORCID iD, public publications | Only if connected |
 | Patient data | Any patient-identifiable information | **Never — strictly prohibited** |
 
+> **⚠️ Important — HIPAA and patient data:** Luminary is not a
+> HIPAA-compliant platform and is not designed or intended for the
+> transmission or storage of protected health information (PHI). Users
+> who are healthcare professionals are solely responsible for ensuring
+> their posts, uploads, and communications comply with all applicable
+> patient privacy laws, including HIPAA (United States), UK GDPR, and
+> local regulations in their jurisdiction. Do not share identifiable
+> patient information on Luminary under any circumstances.
+
 ---
 
 ## Appendix B — Legal bases summary (GDPR)
