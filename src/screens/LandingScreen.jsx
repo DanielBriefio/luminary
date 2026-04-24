@@ -5,6 +5,7 @@ import {
   ORCID_AUTHORIZE_URL,
   ORCID_REDIRECT_URI,
 } from '../lib/constants';
+import { useWindowSize } from '../lib/useWindowSize';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -131,6 +132,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
   const [showInviteForm, setShowInviteForm] = useState(false);
   const inviteRef   = useRef(null);
   const waitlistRef = useRef(null);
+  const { isMobile } = useWindowSize();
 
   const scrollToWaitlist = () => {
     waitlistRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -170,49 +172,52 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${T.bdr}`,
-        padding: '0 32px',
+        padding: isMobile ? '0 14px' : '0 32px',
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
-        height: 56,
+        height: isMobile ? 52 : 56,
       }}>
         <div style={{
           fontFamily: "'DM Serif Display', serif",
-          fontSize: 22, color: T.text, letterSpacing: -0.3,
+          fontSize: isMobile ? 20 : 22, color: T.text, letterSpacing: -0.3,
         }}>
           Lumi<span style={{ color: T.v }}>nary</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            onClick={handleInviteClick}
-            style={{
-              padding: '7px 14px', borderRadius: 8,
-              border: `1px solid ${T.bdr}`, background: 'transparent',
-              color: T.mu, fontSize: 13, cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            Have an invite code?
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8 }}>
+          {!isMobile && (
+            <button
+              onClick={handleInviteClick}
+              style={{
+                padding: '7px 14px', borderRadius: 8,
+                border: `1px solid ${T.bdr}`, background: 'transparent',
+                color: T.mu, fontSize: 13, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Have an invite code?
+            </button>
+          )}
           <button
             onClick={handleOrcid}
+            title="Join with ORCID"
             style={{
-              padding: '7px 14px', borderRadius: 8,
+              padding: isMobile ? '7px 10px' : '7px 14px', borderRadius: 8,
               border: `1px solid ${T.bdr}`, background: T.w,
-              color: T.text, fontSize: 13, cursor: 'pointer',
+              color: T.text, fontSize: isMobile ? 12 : 13, cursor: 'pointer',
               fontFamily: 'inherit', fontWeight: 600,
               display: 'flex', alignItems: 'center', gap: 6,
             }}
           >
-            <span style={{ fontSize: 15 }}>🔬</span>
-            Join with ORCID
+            <span style={{ fontSize: isMobile ? 13 : 15 }}>🔬</span>
+            {isMobile ? 'ORCID' : 'Join with ORCID'}
           </button>
           <button
             onClick={onShowAuth}
             style={{
-              padding: '7px 16px', borderRadius: 8,
+              padding: isMobile ? '7px 14px' : '7px 16px', borderRadius: 8,
               border: 'none', background: T.v,
-              color: '#fff', fontSize: 13, fontWeight: 600,
+              color: '#fff', fontSize: isMobile ? 12 : 13, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
@@ -224,33 +229,42 @@ export default function LandingScreen({ supabase, onShowAuth }) {
       {/* ── Hero ── */}
       <section style={{
         maxWidth: 720, margin: '0 auto',
-        padding: '80px 32px 64px',
+        padding: isMobile ? '48px 20px 40px' : '80px 32px 64px',
         textAlign: 'center',
       }}>
         <div style={{
           display: 'inline-block',
-          fontSize: 12, fontWeight: 700, letterSpacing: 1.2,
+          fontSize: isMobile ? 11 : 12, fontWeight: 700, letterSpacing: 1.2,
           textTransform: 'uppercase', color: T.v,
           background: T.v2, padding: '4px 14px', borderRadius: 20,
-          marginBottom: 24,
+          marginBottom: isMobile ? 18 : 24,
         }}>
           Early access — by invitation
         </div>
 
         <h1 style={{
           fontFamily: "'DM Serif Display', serif",
-          fontSize: 52, lineHeight: 1.15,
-          color: T.text, margin: '0 0 20px',
+          fontSize: isMobile ? 32 : 52,
+          lineHeight: 1.15,
+          color: T.text, margin: '0 0 16px',
           letterSpacing: -0.5,
           fontWeight: 400,
         }}>
-          Where research meets practice,<br />
-          and evidence becomes conversation.
+          {isMobile ? (
+            'Where research meets practice, and evidence becomes conversation.'
+          ) : (
+            <>
+              Where research meets practice,<br />
+              and evidence becomes conversation.
+            </>
+          )}
         </h1>
 
         <p style={{
-          fontSize: 18, color: T.mu, lineHeight: 1.7,
-          margin: '0 auto 36px', maxWidth: 560,
+          fontSize: isMobile ? 15 : 18,
+          color: T.mu, lineHeight: 1.6,
+          margin: isMobile ? '0 auto 28px' : '0 auto 36px',
+          maxWidth: 560,
         }}>
           Luminary is a professional network for researchers, clinicians,
           and medical affairs scientists — built for the way science
@@ -258,17 +272,22 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         </p>
 
         <div style={{
-          display: 'flex', gap: 12,
-          justifyContent: 'center', flexWrap: 'wrap',
-          marginBottom: showInviteForm ? 32 : 0,
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 10 : 12,
+          justifyContent: 'center',
+          alignItems: 'stretch',
+          flexWrap: 'wrap',
+          marginBottom: showInviteForm ? (isMobile ? 24 : 32) : 0,
         }}>
           <button
             onClick={handleInviteClick}
             style={{
-              padding: '13px 28px', borderRadius: 10, border: 'none',
+              padding: isMobile ? '12px 24px' : '13px 28px', borderRadius: 10, border: 'none',
               background: T.v, color: '#fff',
-              fontSize: 15, fontWeight: 700, cursor: 'pointer',
+              fontSize: isMobile ? 14 : 15, fontWeight: 700, cursor: 'pointer',
               fontFamily: 'inherit',
+              width: isMobile ? '100%' : 'auto',
             }}
           >
             I have an invite code →
@@ -276,10 +295,11 @@ export default function LandingScreen({ supabase, onShowAuth }) {
           <button
             onClick={scrollToWaitlist}
             style={{
-              padding: '13px 28px', borderRadius: 10,
+              padding: isMobile ? '12px 24px' : '13px 28px', borderRadius: 10,
               border: `1.5px solid ${T.bdr}`, background: T.w,
-              color: T.text, fontSize: 15, fontWeight: 600,
+              color: T.text, fontSize: isMobile ? 14 : 15, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'inherit',
+              width: isMobile ? '100%' : 'auto',
             }}
           >
             Request early access
@@ -288,10 +308,13 @@ export default function LandingScreen({ supabase, onShowAuth }) {
 
         {showInviteForm && (
           <div ref={inviteRef} style={{
-            marginTop: 24, display: 'inline-block',
+            marginTop: 24,
+            display: isMobile ? 'block' : 'inline-block',
             background: T.w, border: `1.5px solid ${T.v}`,
-            borderRadius: 12, padding: '20px 24px',
-            textAlign: 'left', minWidth: 320,
+            borderRadius: 12,
+            padding: isMobile ? '16px 16px' : '20px 24px',
+            textAlign: 'left',
+            minWidth: isMobile ? 0 : 320,
             boxShadow: '0 4px 20px rgba(108,99,255,0.10)',
           }}>
             <div style={{
@@ -327,38 +350,38 @@ export default function LandingScreen({ supabase, onShowAuth }) {
       {/* ── Feature pillars ── */}
       <section style={{
         maxWidth: 860, margin: '0 auto',
-        padding: '72px 32px',
+        padding: isMobile ? '48px 20px' : '72px 32px',
       }}>
         <h2 style={{
           fontFamily: "'DM Serif Display', serif",
-          fontSize: 34, color: T.text, fontWeight: 400,
-          textAlign: 'center', margin: '0 0 48px',
+          fontSize: isMobile ? 26 : 34, color: T.text, fontWeight: 400,
+          textAlign: 'center', margin: isMobile ? '0 0 32px' : '0 0 48px',
         }}>
           Built for how science works
         </h2>
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 24,
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+          gap: isMobile ? 14 : 24,
         }}>
           {FEATURES.map(f => (
             <div key={f.title} style={{
               background: T.w, borderRadius: 14,
               border: `1px solid ${T.bdr}`,
-              padding: '28px 24px',
+              padding: isMobile ? '22px 20px' : '28px 24px',
             }}>
-              <div style={{ fontSize: 32, marginBottom: 14 }}>
+              <div style={{ fontSize: isMobile ? 28 : 32, marginBottom: 12 }}>
                 {f.icon}
               </div>
               <div style={{
                 fontFamily: "'DM Serif Display', serif",
-                fontSize: 20, color: T.text, marginBottom: 10,
+                fontSize: isMobile ? 18 : 20, color: T.text, marginBottom: 8,
               }}>
                 {f.title}
               </div>
               <div style={{
-                fontSize: 14, color: T.mu, lineHeight: 1.7,
+                fontSize: isMobile ? 13.5 : 14, color: T.mu, lineHeight: 1.65,
               }}>
                 {f.desc}
               </div>
@@ -372,19 +395,19 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         background: T.w,
         borderTop: `1px solid ${T.bdr}`,
         borderBottom: `1px solid ${T.bdr}`,
-        padding: '72px 0',
+        padding: isMobile ? '48px 0' : '72px 0',
         overflow: 'hidden',
       }}>
-        <div style={{ maxWidth: 860, margin: '0 auto', padding: '0 32px' }}>
+        <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '0 20px' : '0 32px' }}>
           <h2 style={{
             fontFamily: "'DM Serif Display', serif",
-            fontSize: 34, color: T.text, fontWeight: 400,
-            textAlign: 'center', margin: '0 0 48px',
+            fontSize: isMobile ? 26 : 34, color: T.text, fontWeight: 400,
+            textAlign: 'center', margin: isMobile ? '0 0 28px' : '0 0 48px',
           }}>
             How people use Luminary
           </h2>
         </div>
-        <UseCasesCarousel />
+        <UseCasesCarousel isMobile={isMobile} />
       </section>
 
       {/* ── Who it's for ── */}
@@ -394,44 +417,44 @@ export default function LandingScreen({ supabase, onShowAuth }) {
       }}>
         <div style={{
           maxWidth: 860, margin: '0 auto',
-          padding: '72px 32px',
+          padding: isMobile ? '48px 20px' : '72px 32px',
         }}>
           <h2 style={{
             fontFamily: "'DM Serif Display', serif",
-            fontSize: 34, color: T.text, fontWeight: 400,
-            textAlign: 'center', margin: '0 0 48px',
+            fontSize: isMobile ? 26 : 34, color: T.text, fontWeight: 400,
+            textAlign: 'center', margin: isMobile ? '0 0 32px' : '0 0 48px',
           }}>
             Who Luminary is for
           </h2>
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 20,
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+            gap: isMobile ? 14 : 20,
           }}>
             {WHO_FOR.map(w => (
               <div key={w.role} style={{
                 borderRadius: 14,
                 border: `1px solid ${T.bdr}`,
-                padding: '28px 24px',
+                padding: isMobile ? '22px 20px' : '28px 24px',
                 background: T.bg,
               }}>
                 <div style={{
-                  width: 44, height: 44, borderRadius: 12,
+                  width: isMobile ? 40 : 44, height: isMobile ? 40 : 44, borderRadius: 12,
                   background: w.bg, display: 'flex',
                   alignItems: 'center', justifyContent: 'center',
-                  fontSize: 22, marginBottom: 14,
+                  fontSize: isMobile ? 20 : 22, marginBottom: 12,
                 }}>
                   {w.icon}
                 </div>
                 <div style={{
                   fontFamily: "'DM Serif Display', serif",
-                  fontSize: 20, color: T.text, marginBottom: 10,
+                  fontSize: isMobile ? 18 : 20, color: T.text, marginBottom: 8,
                 }}>
                   {w.role}
                 </div>
                 <div style={{
-                  fontSize: 14, color: T.mu, lineHeight: 1.7,
+                  fontSize: isMobile ? 13.5 : 14, color: T.mu, lineHeight: 1.65,
                 }}>
                   {w.desc}
                 </div>
@@ -446,34 +469,36 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         ref={waitlistRef}
         style={{
           maxWidth: 560, margin: '0 auto',
-          padding: '80px 32px',
+          padding: isMobile ? '56px 20px' : '80px 32px',
           textAlign: 'center',
         }}
       >
         <h2 style={{
           fontFamily: "'DM Serif Display', serif",
-          fontSize: 34, color: T.text, fontWeight: 400, margin: '0 0 12px',
+          fontSize: isMobile ? 26 : 34, color: T.text, fontWeight: 400, margin: '0 0 12px',
         }}>
           Join the founding community
         </h2>
         <p style={{
-          fontSize: 15, color: T.mu, lineHeight: 1.7,
-          margin: '0 0 36px',
+          fontSize: isMobile ? 14 : 15, color: T.mu, lineHeight: 1.65,
+          margin: isMobile ? '0 0 24px' : '0 0 36px',
         }}>
           Luminary is growing by invitation. Leave your details and
           we'll reach out when a spot opens up for your field.
         </p>
 
-        <WaitlistForm supabase={supabase} />
+        <WaitlistForm supabase={supabase} isMobile={isMobile} />
       </section>
 
       {/* ── Footer ── */}
       <footer style={{
         borderTop: `1px solid ${T.bdr}`,
-        padding: '24px 32px',
-        display: 'flex', alignItems: 'center',
+        padding: isMobile ? '20px' : '24px 32px',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'flex-start' : 'center',
         justifyContent: 'space-between',
-        flexWrap: 'wrap', gap: 12,
+        flexWrap: 'wrap', gap: isMobile ? 14 : 12,
       }}>
         <div style={{
           fontFamily: "'DM Serif Display', serif",
@@ -481,7 +506,11 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         }}>
           Luminary
         </div>
-        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex',
+          gap: isMobile ? '10px 16px' : 20,
+          flexWrap: 'wrap',
+        }}>
           {[
             { label: 'Privacy Policy', href: '/privacy' },
             { label: 'Terms of Use',   href: '/terms' },
@@ -489,7 +518,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
             { label: 'Contact',        href: 'mailto:team@luminary.to' },
           ].map(link => (
             <a key={link.label} href={link.href} style={{
-              fontSize: 13, color: T.mu, textDecoration: 'none',
+              fontSize: isMobile ? 12.5 : 13, color: T.mu, textDecoration: 'none',
             }}>
               {link.label}
             </a>
@@ -505,7 +534,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
 
 // ─── UseCasesCarousel ─────────────────────────────────────────────────────────
 
-function UseCasesCarousel() {
+function UseCasesCarousel({ isMobile }) {
   const [active, setActive]     = useState(0);
   const [paused, setPaused]     = useState(false);
   const [progress, setProgress] = useState(0);
@@ -561,14 +590,14 @@ function UseCasesCarousel() {
     >
       <div style={{
         maxWidth: 680, margin: '0 auto',
-        padding: '0 32px',
-        minHeight: 220,
+        padding: isMobile ? '0 20px' : '0 32px',
+        minHeight: isMobile ? 260 : 220,
       }}>
         <div style={{
           background: T.bg,
           border: `1px solid ${T.bdr}`,
           borderRadius: 16,
-          padding: '32px 36px',
+          padding: isMobile ? '24px 20px' : '32px 36px',
           position: 'relative',
           overflow: 'hidden',
         }}>
@@ -590,24 +619,25 @@ function UseCasesCarousel() {
             fontSize: 11, fontWeight: 700, letterSpacing: 0.8,
             textTransform: 'uppercase', color: T.v,
             background: T.v2, padding: '3px 10px',
-            borderRadius: 20, marginBottom: 18,
+            borderRadius: 20, marginBottom: isMobile ? 14 : 18,
           }}>
             {card.tag}
           </div>
 
           <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: 16,
-            marginBottom: 16,
+            display: 'flex', alignItems: 'flex-start',
+            gap: isMobile ? 12 : 16,
+            marginBottom: isMobile ? 12 : 16,
           }}>
             <div style={{
-              fontSize: 36, lineHeight: 1, flexShrink: 0,
+              fontSize: isMobile ? 30 : 36, lineHeight: 1, flexShrink: 0,
               marginTop: 2,
             }}>
               {card.icon}
             </div>
             <h3 style={{
               fontFamily: "'DM Serif Display', serif",
-              fontSize: 24, color: T.text,
+              fontSize: isMobile ? 20 : 24, color: T.text,
               margin: 0, lineHeight: 1.25, fontWeight: 400,
             }}>
               {card.headline}
@@ -615,8 +645,9 @@ function UseCasesCarousel() {
           </div>
 
           <p style={{
-            fontSize: 15, color: T.mu, lineHeight: 1.7,
-            margin: 0, paddingLeft: 52,
+            fontSize: isMobile ? 14 : 15, color: T.mu, lineHeight: 1.65,
+            margin: 0,
+            paddingLeft: isMobile ? 0 : 52,
           }}>
             {card.scenario}
           </p>
@@ -625,14 +656,16 @@ function UseCasesCarousel() {
 
       <div style={{
         maxWidth: 680, margin: '20px auto 0',
-        padding: '0 32px',
+        padding: isMobile ? '0 20px' : '0 32px',
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
+        gap: isMobile ? 8 : 0,
       }}>
         <button
           onClick={prev}
+          aria-label="Previous"
           style={{
-            width: 36, height: 36, borderRadius: '50%',
+            width: isMobile ? 34 : 36, height: isMobile ? 34 : 36, borderRadius: '50%',
             border: `1px solid ${T.bdr}`, background: T.w,
             display: 'flex', alignItems: 'center',
             justifyContent: 'center',
@@ -644,14 +677,15 @@ function UseCasesCarousel() {
         </button>
 
         <div style={{
-          display: 'flex', gap: 6, alignItems: 'center',
+          display: 'flex', gap: isMobile ? 5 : 6, alignItems: 'center',
           flexWrap: 'wrap', justifyContent: 'center',
-          maxWidth: 560,
+          maxWidth: 560, flex: 1,
         }}>
           {USE_CASES.map((_, i) => (
             <button
               key={i}
               onClick={() => goTo(i)}
+              aria-label={`Go to card ${i + 1}`}
               style={{
                 width: i === active ? 20 : 8,
                 height: 8, borderRadius: 4,
@@ -666,8 +700,9 @@ function UseCasesCarousel() {
 
         <button
           onClick={next}
+          aria-label="Next"
           style={{
-            width: 36, height: 36, borderRadius: '50%',
+            width: isMobile ? 34 : 36, height: isMobile ? 34 : 36, borderRadius: '50%',
             border: `1px solid ${T.bdr}`, background: T.w,
             display: 'flex', alignItems: 'center',
             justifyContent: 'center',
@@ -791,7 +826,7 @@ function InviteCodeForm({ supabase, onShowAuth }) {
 
 // ─── WaitlistForm ─────────────────────────────────────────────────────────────
 
-function WaitlistForm({ supabase }) {
+function WaitlistForm({ supabase, isMobile }) {
   const [form, setForm] = useState({
     full_name:       '',
     email:           '',
@@ -875,11 +910,16 @@ function WaitlistForm({ supabase }) {
   return (
     <div style={{
       background: T.w, border: `1px solid ${T.bdr}`,
-      borderRadius: 14, padding: '28px 28px',
+      borderRadius: 14,
+      padding: isMobile ? '20px 18px' : '28px 28px',
       textAlign: 'left',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: 12,
+        }}>
           <WaitlistField
             label="Full name *"
             value={form.full_name}
@@ -894,7 +934,11 @@ function WaitlistForm({ supabase }) {
             type="email"
           />
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: 12,
+        }}>
           <WaitlistField
             label="Institution"
             value={form.institution}
