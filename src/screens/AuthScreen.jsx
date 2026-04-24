@@ -586,9 +586,9 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           style={{ marginTop: 2, accentColor: T.v, flexShrink: 0 }}/>
         <span style={{ fontSize: 12.5, color: T.text, lineHeight: 1.55 }}>
           I agree to the{' '}
-          <a href="https://luminary.to/terms" target="_blank" rel="noopener noreferrer" style={{ color: T.v, fontWeight: 600 }}>Terms of Service</a>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: T.v, fontWeight: 600 }}>Terms of Service</a>
           {' '}and{' '}
-          <a href="https://luminary.to/privacy" target="_blank" rel="noopener noreferrer" style={{ color: T.v, fontWeight: 600 }}>Privacy Policy</a>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: T.v, fontWeight: 600 }}>Privacy Policy</a>
           <span style={{ color: T.ro }}> *</span>
         </span>
       </label>

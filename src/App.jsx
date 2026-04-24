@@ -25,6 +25,7 @@ import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
+import LegalPage from './screens/LegalPage';
 import PublicGroupProfileScreen from './groups/PublicGroupProfileScreen';
 import LibraryScreen from './library/LibraryScreen';
 import ProjectsScreen from './projects/ProjectsScreen';
@@ -63,6 +64,12 @@ const getPublicGroupSlug = () => {
   return m ? m[1] : null;
 };
 
+// Detect legal document routes: /privacy, /terms, /cookies
+const getLegalDoc = () => {
+  const m = window.location.pathname.match(/^\/(privacy|terms|cookies)\/?$/);
+  return m ? m[1] : null;
+};
+
 // Inject deep-dive-content CSS once at module level
 (function injectDeepDiveStyles() {
   if (document.getElementById('deep-dive-styles')) return;
@@ -88,6 +95,7 @@ export default function App() {
   const [publicPaperDoi]  = useState(getPublicPaperDoi);
   const [publicCardSlug]  = useState(getPublicCardSlug);
   const [publicGroupSlug] = useState(getPublicGroupSlug);
+  const [legalDoc]        = useState(getLegalDoc);
   const [isAdminRoute]    = useState(() => window.location.pathname === '/admin');
   const { isMobile } = useWindowSize();
   const [session,setSession]=useState(null);
@@ -131,7 +139,7 @@ export default function App() {
   };
 
   useEffect(()=>{
-    if(publicSlug || publicPostId || publicPaperDoi || publicCardSlug || publicGroupSlug) return; // no auth needed for public pages
+    if(publicSlug || publicPostId || publicPaperDoi || publicCardSlug || publicGroupSlug || legalDoc) return; // no auth needed for public pages
     supabase.auth.getSession().then(({data})=>{ setSession(data.session); setAuthChecked(true); });
     const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{
       setSession(s);
@@ -418,6 +426,7 @@ export default function App() {
   if(publicPaperDoi)  return <>{fonts}<PaperDetailPage doi={publicPaperDoi} isPublicPage={true}/></>;
   if(publicCardSlug)  return <>{fonts}<CardPage slug={publicCardSlug}/></>;
   if(publicGroupSlug) return <>{fonts}<PublicGroupProfileScreen slug={publicGroupSlug}/></>;
+  if(legalDoc)        return <>{fonts}<LegalPage doc={legalDoc}/></>;
 
   if(isPasswordRecovery) return <>{fonts}<ResetPasswordScreen onDone={()=>setIsPasswordRecovery(false)}/></>;
   if(!authChecked) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;

@@ -115,9 +115,9 @@ export default function SettingsScreen({ user, onClose, onDeleted, onSignOut }) 
           {/* Legal links */}
           <div style={{ display: 'flex', gap: 8 }}>
             {[
-              { label: 'Privacy Policy',   href: 'https://luminary.to/privacy' },
-              { label: 'Terms of Service', href: 'https://luminary.to/terms' },
-              { label: 'Cookie Policy',    href: 'https://luminary.to/cookies' },
+              { label: 'Privacy Policy',   href: '/privacy' },
+              { label: 'Terms of Service', href: '/terms' },
+              { label: 'Cookie Policy',    href: '/cookies' },
             ].map(({ label, href }) => (
               <a
                 key={href}

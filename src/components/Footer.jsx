@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { T } from '../lib/constants';
 
 const links = [
-  { label: 'Privacy Policy',   href: 'https://luminary.to/privacy' },
-  { label: 'Terms of Service', href: 'https://luminary.to/terms' },
-  { label: 'Cookie Policy',    href: 'https://luminary.to/cookies' },
+  { label: 'Privacy Policy',   href: '/privacy' },
+  { label: 'Terms of Service', href: '/terms' },
+  { label: 'Cookie Policy',    href: '/cookies' },
 ];
 
 const linkStyle = { fontSize: 11.5, color: T.mu, textDecoration: 'none', fontWeight: 500 };

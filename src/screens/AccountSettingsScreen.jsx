@@ -311,7 +311,7 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
           </div>
           <div style={{ marginTop: 10, fontSize: 11.5, color: T.mu, lineHeight: 1.6 }}>
             We will never share your email address with third parties.{' '}
-            <a href="https://luminary.to/privacy" target="_blank" rel="noopener noreferrer" style={{ color: T.v }}>
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: T.v }}>
               Privacy Policy
             </a>
           </div>
@@ -331,9 +331,9 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Legal</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {[
-                ['Privacy Policy',   'https://luminary.to/privacy'],
-                ['Terms of Service', 'https://luminary.to/terms'],
-                ['Cookie Policy',    'https://luminary.to/cookies'],
+                ['Privacy Policy',   '/privacy'],
+                ['Terms of Service', '/terms'],
+                ['Cookie Policy',    '/cookies'],
               ].map(([label, href]) => (
                 <a key={label} href={href} target="_blank" rel="noopener noreferrer"
                   style={{ fontSize: 12.5, color: T.v, fontWeight: 600 }}>
