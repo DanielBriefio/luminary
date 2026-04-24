@@ -7,6 +7,7 @@ import Spinner from './components/Spinner';
 import BottomNav from './components/BottomNav';
 import { useWindowSize } from './lib/useWindowSize';
 import AuthScreen from './screens/AuthScreen';
+import LandingScreen from './screens/LandingScreen';
 import FeedScreen from './feed/FeedScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import GroupsScreen from './groups/GroupsScreen';
@@ -127,6 +128,7 @@ export default function App() {
   const [showDrawer,         setShowDrawer]         = useState(false);
   const [savedPostIds,       setSavedPostIds]       = useState(new Set());
   const [savedGroupPostIds,  setSavedGroupPostIds]  = useState(new Set());
+  const [showAuthScreen,     setShowAuthScreen]     = useState(false);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -430,12 +432,18 @@ export default function App() {
 
   if(isPasswordRecovery) return <>{fonts}<ResetPasswordScreen onDone={()=>setIsPasswordRecovery(false)}/></>;
   if(!authChecked) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;
-  if(!session) return <AuthScreen onAuth={()=>setScreen('feed')}
-    orcidPendingToken={orcidPendingToken}
-    orcidPendingName={orcidPendingName}
-    showOrcidEmailForm={showOrcidEmailForm}
-    orcidAuthError={orcidAuthError}
-  />;
+  if(!session) {
+    const showLanding = !showAuthScreen && !isAdminRoute && !showOrcidEmailForm && !orcidAuthError;
+    if (showLanding) {
+      return <>{fonts}<LandingScreen supabase={supabase} onShowAuth={()=>setShowAuthScreen(true)}/></>;
+    }
+    return <>{fonts}<AuthScreen onAuth={()=>setScreen('feed')}
+      orcidPendingToken={orcidPendingToken}
+      orcidPendingName={orcidPendingName}
+      showOrcidEmailForm={showOrcidEmailForm}
+      orcidAuthError={orcidAuthError}
+    /></>;
+  }
 
   const user=session.user;
 

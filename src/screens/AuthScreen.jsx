@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
 import { T, ORCID_CLIENT_ID, ORCID_AUTHORIZE_URL, ORCID_REDIRECT_URI } from '../lib/constants';
@@ -60,6 +60,17 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [waitlistRole,        setWaitlistRole]        = useState('');
   const [waitlistReferral,    setWaitlistReferral]    = useState('');
   const [waitlistSubmitted,   setWaitlistSubmitted]   = useState(false);
+
+  // Pre-fill invite code handoff from LandingScreen
+  useEffect(() => {
+    const prefill = sessionStorage.getItem('prefill_invite_code');
+    if (prefill) {
+      sessionStorage.removeItem('prefill_invite_code');
+      setMode('signup');
+      setSignupPath('invite');
+      setInviteCode(prefill);
+    }
+  }, []);
 
   const goToMode = (m) => {
     setMode(m); setError(''); setSuccess('');

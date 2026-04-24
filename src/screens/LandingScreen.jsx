@@ -1,94 +1,10 @@
-# Task: Landing Page — Unauthenticated Home Screen
-
-## Context
-
-Read CLAUDE.md and PRODUCT_STATE.md first.
-
-Currently, unauthenticated visitors to luminary.to see the AuthScreen
-directly. This task replaces that with a proper landing page that:
-
-- Introduces Luminary to first-time visitors
-- Provides visible auth options (Log in / Join with ORCID / Invite code)
-- Captures waitlist signups for visitors without an invite code
-- Keeps authenticated users routing as before (no change to app behaviour)
-
-Tagline: *"Where research meets practice, and evidence becomes
-conversation."*
-
-Scope:
-
-1. `src/screens/LandingScreen.jsx` — full landing page component
-2. `App.jsx` — show LandingScreen instead of AuthScreen for
-   unauthenticated visitors at root `/`
-3. No changes to AuthScreen, ORCID flow, or any authenticated routes
-
----
-
-## Step 1 — Understand the existing auth flow
-
-Before writing any code, read `App.jsx` and `AuthScreen.jsx` carefully:
-
-- How does `App.jsx` currently detect unauthenticated state and render
-  `AuthScreen`?
-- How does the ORCID OAuth redirect work? (LandingScreen needs to
-  trigger the same redirect)
-- Does `AuthScreen` receive any props from `App.jsx` that LandingScreen
-  will also need?
-
-Match the existing patterns exactly — do not restructure App.jsx's
-auth detection logic.
-
----
-
-## Step 2 — App.jsx — show LandingScreen for unauthed visitors
-
-Add import:
-
-```javascript
-import LandingScreen from './screens/LandingScreen';
-```
-
-Find the place in `App.jsx` where unauthenticated state renders
-`AuthScreen`. The landing page should replace `AuthScreen` only when:
-- User is not authenticated, AND
-- The current path is `/` (root)
-
-Public routes (`/p/:slug`, `/s/:postId`, `/paper/:doi`, `/c/:slug`,
-`/admin`) must continue to work for unauthenticated users as before.
-The ORCID callback path must also continue to work.
-
-Logic (adapt to match existing App.jsx structure):
-
-```javascript
-// If not authenticated and at root path → show landing page
-if (!user && !isPublicRoute && !isOrcidCallback && !isAdminRoute) {
-  return (
-    <LandingScreen
-      supabase={supabase}
-      onShowAuth={() => /* trigger existing auth screen */}
-    />
-  );
-}
-```
-
-The cleanest approach: add an `isLandingMode` state (default `true` for
-unauthed root visitors) that LandingScreen can set to `false` when the
-user clicks "Log in" — at which point `AuthScreen` renders instead.
-Match whatever state management pattern already exists in `App.jsx`.
-
----
-
-## Step 3 — LandingScreen.jsx
-
-Create `src/screens/LandingScreen.jsx`.
-
-This component uses only `T.*` tokens from `constants.js`, DM Sans
-(body) and DM Serif Display (headings) — matching the app's design
-system exactly. All styles are inline, no CSS files.
-
-```jsx
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { T } from '../lib/constants';
+import {
+  T,
+  ORCID_CLIENT_ID,
+  ORCID_AUTHORIZE_URL,
+  ORCID_REDIRECT_URI,
+} from '../lib/constants';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -213,7 +129,7 @@ const USE_CASES = [
 
 export default function LandingScreen({ supabase, onShowAuth }) {
   const [showInviteForm, setShowInviteForm] = useState(false);
-  const inviteRef  = useRef(null);
+  const inviteRef   = useRef(null);
   const waitlistRef = useRef(null);
 
   const scrollToWaitlist = () => {
@@ -227,21 +143,24 @@ export default function LandingScreen({ supabase, onShowAuth }) {
     }, 50);
   };
 
-  // Trigger ORCID OAuth — read the existing ORCID redirect URL from
-  // AuthScreen.jsx and replicate the same redirect here.
-  // Do NOT hardcode the client ID — import it from wherever AuthScreen
-  // reads it (constants.js or env var).
+  // Matches AuthScreen.handleOrcidOAuth exactly
   const handleOrcid = () => {
-    // Copy the exact ORCID redirect logic from AuthScreen.jsx
-    // It should look something like:
-    // window.location.href = `https://orcid.org/oauth/authorize?...`
+    const params = new URLSearchParams({
+      client_id:     ORCID_CLIENT_ID,
+      response_type: 'code',
+      scope:         '/authenticate',
+      redirect_uri:  ORCID_REDIRECT_URI,
+      state:         'signup',
+    });
+    window.location.href = `${ORCID_AUTHORIZE_URL}?${params}`;
   };
 
   return (
     <div style={{
       minHeight: '100vh',
       background: T.bg,
-      fontFamily: 'inherit',
+      fontFamily: "'DM Sans',sans-serif",
+      color: T.text,
     }}>
 
       {/* ── Sticky header ── */}
@@ -249,21 +168,20 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         position: 'sticky', top: 0, zIndex: 50,
         background: 'rgba(242,243,251,0.92)',
         backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${T.bdr}`,
         padding: '0 32px',
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
         height: 56,
       }}>
-        {/* Logo */}
         <div style={{
           fontFamily: "'DM Serif Display', serif",
           fontSize: 22, color: T.text, letterSpacing: -0.3,
         }}>
-          Luminary
+          Lumi<span style={{ color: T.v }}>nary</span>
         </div>
 
-        {/* Auth actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={handleInviteClick}
@@ -309,7 +227,6 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         padding: '80px 32px 64px',
         textAlign: 'center',
       }}>
-        {/* Eyebrow */}
         <div style={{
           display: 'inline-block',
           fontSize: 12, fontWeight: 700, letterSpacing: 1.2,
@@ -320,29 +237,26 @@ export default function LandingScreen({ supabase, onShowAuth }) {
           Early access — by invitation
         </div>
 
-        {/* Headline */}
         <h1 style={{
           fontFamily: "'DM Serif Display', serif",
           fontSize: 52, lineHeight: 1.15,
           color: T.text, margin: '0 0 20px',
           letterSpacing: -0.5,
+          fontWeight: 400,
         }}>
           Where research meets practice,<br />
           and evidence becomes conversation.
         </h1>
 
-        {/* Subhead */}
         <p style={{
           fontSize: 18, color: T.mu, lineHeight: 1.7,
-          margin: '0 0 36px', maxWidth: 560,
-          marginLeft: 'auto', marginRight: 'auto',
+          margin: '0 auto 36px', maxWidth: 560,
         }}>
           Luminary is a professional network for researchers, clinicians,
           and medical affairs scientists — built for the way science
           actually works.
         </p>
 
-        {/* Hero CTAs */}
         <div style={{
           display: 'flex', gap: 12,
           justifyContent: 'center', flexWrap: 'wrap',
@@ -372,7 +286,6 @@ export default function LandingScreen({ supabase, onShowAuth }) {
           </button>
         </div>
 
-        {/* Inline invite code form */}
         {showInviteForm && (
           <div ref={inviteRef} style={{
             marginTop: 24, display: 'inline-block',
@@ -406,7 +319,6 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         )}
       </section>
 
-      {/* ── Divider ── */}
       <div style={{
         height: 1, background: T.bdr,
         maxWidth: 680, margin: '0 auto',
@@ -419,7 +331,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
       }}>
         <h2 style={{
           fontFamily: "'DM Serif Display', serif",
-          fontSize: 34, color: T.text,
+          fontSize: 34, color: T.text, fontWeight: 400,
           textAlign: 'center', margin: '0 0 48px',
         }}>
           Built for how science works
@@ -466,7 +378,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         <div style={{ maxWidth: 860, margin: '0 auto', padding: '0 32px' }}>
           <h2 style={{
             fontFamily: "'DM Serif Display', serif",
-            fontSize: 34, color: T.text,
+            fontSize: 34, color: T.text, fontWeight: 400,
             textAlign: 'center', margin: '0 0 48px',
           }}>
             How people use Luminary
@@ -478,7 +390,6 @@ export default function LandingScreen({ supabase, onShowAuth }) {
       {/* ── Who it's for ── */}
       <section style={{
         background: T.w,
-        borderTop: `1px solid ${T.bdr}`,
         borderBottom: `1px solid ${T.bdr}`,
       }}>
         <div style={{
@@ -487,7 +398,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         }}>
           <h2 style={{
             fontFamily: "'DM Serif Display', serif",
-            fontSize: 34, color: T.text,
+            fontSize: 34, color: T.text, fontWeight: 400,
             textAlign: 'center', margin: '0 0 48px',
           }}>
             Who Luminary is for
@@ -541,7 +452,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
       >
         <h2 style={{
           fontFamily: "'DM Serif Display', serif",
-          fontSize: 34, color: T.text, margin: '0 0 12px',
+          fontSize: 34, color: T.text, fontWeight: 400, margin: '0 0 12px',
         }}>
           Join the founding community
         </h2>
@@ -570,11 +481,11 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         }}>
           Luminary
         </div>
-        <div style={{ display: 'flex', gap: 20 }}>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
           {[
-            /* TODO: Replace # with real URLs when pages are ready */
-            { label: 'Privacy Policy', href: '#' },
-            { label: 'Terms of Use',   href: '#' },
+            { label: 'Privacy Policy', href: '/privacy' },
+            { label: 'Terms of Use',   href: '/terms' },
+            { label: 'Cookie Policy',  href: '/cookies' },
             { label: 'Contact',        href: 'mailto:team@luminary.to' },
           ].map(link => (
             <a key={link.label} href={link.href} style={{
@@ -595,13 +506,13 @@ export default function LandingScreen({ supabase, onShowAuth }) {
 // ─── UseCasesCarousel ─────────────────────────────────────────────────────────
 
 function UseCasesCarousel() {
-  const [active, setActive]       = useState(0);
-  const [paused, setPaused]       = useState(false);
-  const [progress, setProgress]   = useState(0);
-  const intervalRef               = useRef(null);
-  const progressRef               = useRef(null);
-  const DURATION                  = 5000; // ms per card
-  const TICK                      = 50;   // progress update interval ms
+  const [active, setActive]     = useState(0);
+  const [paused, setPaused]     = useState(false);
+  const [progress, setProgress] = useState(0);
+  const intervalRef             = useRef(null);
+  const progressRef             = useRef(null);
+  const DURATION                = 5000;
+  const TICK                    = 50;
 
   const goTo = useCallback((index) => {
     setActive(index);
@@ -618,7 +529,6 @@ function UseCasesCarousel() {
     setProgress(0);
   }, []);
 
-  // Auto-advance
   useEffect(() => {
     if (paused) {
       clearInterval(intervalRef.current);
@@ -649,7 +559,6 @@ function UseCasesCarousel() {
       onMouseLeave={() => setPaused(false)}
       style={{ userSelect: 'none' }}
     >
-      {/* Main card */}
       <div style={{
         maxWidth: 680, margin: '0 auto',
         padding: '0 32px',
@@ -663,7 +572,6 @@ function UseCasesCarousel() {
           position: 'relative',
           overflow: 'hidden',
         }}>
-          {/* Progress bar */}
           <div style={{
             position: 'absolute', top: 0, left: 0, right: 0,
             height: 3, background: T.bdr,
@@ -677,7 +585,6 @@ function UseCasesCarousel() {
             }} />
           </div>
 
-          {/* Feature tag */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             fontSize: 11, fontWeight: 700, letterSpacing: 0.8,
@@ -688,7 +595,6 @@ function UseCasesCarousel() {
             {card.tag}
           </div>
 
-          {/* Icon + headline */}
           <div style={{
             display: 'flex', alignItems: 'flex-start', gap: 16,
             marginBottom: 16,
@@ -702,13 +608,12 @@ function UseCasesCarousel() {
             <h3 style={{
               fontFamily: "'DM Serif Display', serif",
               fontSize: 24, color: T.text,
-              margin: 0, lineHeight: 1.25,
+              margin: 0, lineHeight: 1.25, fontWeight: 400,
             }}>
               {card.headline}
             </h3>
           </div>
 
-          {/* Scenario */}
           <p style={{
             fontSize: 15, color: T.mu, lineHeight: 1.7,
             margin: 0, paddingLeft: 52,
@@ -718,14 +623,12 @@ function UseCasesCarousel() {
         </div>
       </div>
 
-      {/* Navigation row */}
       <div style={{
         maxWidth: 680, margin: '20px auto 0',
         padding: '0 32px',
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        {/* Prev button */}
         <button
           onClick={prev}
           style={{
@@ -740,7 +643,6 @@ function UseCasesCarousel() {
           ‹
         </button>
 
-        {/* Dot indicators */}
         <div style={{
           display: 'flex', gap: 6, alignItems: 'center',
           flexWrap: 'wrap', justifyContent: 'center',
@@ -762,7 +664,6 @@ function UseCasesCarousel() {
           ))}
         </div>
 
-        {/* Next button */}
         <button
           onClick={next}
           style={{
@@ -778,7 +679,6 @@ function UseCasesCarousel() {
         </button>
       </div>
 
-      {/* Counter */}
       <div style={{
         textAlign: 'center', marginTop: 12,
         fontSize: 12, color: T.mu,
@@ -790,14 +690,11 @@ function UseCasesCarousel() {
 }
 
 // ─── InviteCodeForm ───────────────────────────────────────────────────────────
-// Validates the invite code and hands off to the auth flow.
-// Does NOT handle signup itself — that stays in AuthScreen.
-// On valid code: calls onShowAuth() with the code pre-filled.
 
 function InviteCodeForm({ supabase, onShowAuth }) {
-  const [code, setCode]     = useState('');
+  const [code, setCode]       = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState('');
+  const [error, setError]     = useState('');
 
   const handleSubmit = async () => {
     if (!code.trim()) return;
@@ -806,7 +703,6 @@ function InviteCodeForm({ supabase, onShowAuth }) {
 
     const normalized = code.trim().toUpperCase();
 
-    // Check the code exists and is valid
     const { data: row, error: fetchErr } = await supabase
       .from('invite_codes')
       .select('id, claimed_by, is_multi_use, max_uses, uses_count, expires_at, locked_at')
@@ -844,8 +740,6 @@ function InviteCodeForm({ supabase, onShowAuth }) {
       return;
     }
 
-    // Valid — hand off to auth screen with code pre-filled
-    // Store in sessionStorage so AuthScreen can pick it up
     sessionStorage.setItem('prefill_invite_code', normalized);
     setLoading(false);
     onShowAuth();
@@ -868,6 +762,7 @@ function InviteCodeForm({ supabase, onShowAuth }) {
             color: T.text, outline: 'none',
             textTransform: 'uppercase',
             letterSpacing: 1,
+            boxSizing: 'border-box',
           }}
         />
         <button
@@ -908,8 +803,7 @@ function WaitlistForm({ supabase }) {
   const [submitted, setSubmitted]   = useState(false);
   const [error, setError]           = useState('');
 
-  // Auto-populate referral_source from URL param ?ref=...
-  React.useEffect(() => {
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref');
     if (ref) setForm(prev => ({ ...prev, referral_source: ref }));
@@ -923,7 +817,6 @@ function WaitlistForm({ supabase }) {
       setError('Name and email are required.');
       return;
     }
-    // Basic email validation
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       setError('Please enter a valid email address.');
       return;
@@ -1073,181 +966,3 @@ function WaitlistField({ label, value, onChange, placeholder, type = 'text' }) {
     </div>
   );
 }
-```
-
----
-
-## Step 4 — AuthScreen.jsx — read prefill_invite_code
-
-In `AuthScreen.jsx`, on component mount, check for
-`sessionStorage.getItem('prefill_invite_code')`. If present:
-- Pre-fill the invite code input field with that value
-- Clear it from sessionStorage immediately
-- Switch to the signup tab/mode if AuthScreen has tab state
-
-This makes the handoff from LandingScreen → AuthScreen seamless —
-the user clicks "Continue" on the landing page, the auth screen opens
-with their code already filled in.
-
-```javascript
-useEffect(() => {
-  const prefill = sessionStorage.getItem('prefill_invite_code');
-  if (prefill) {
-    sessionStorage.removeItem('prefill_invite_code');
-    // Set the invite code field value to prefill
-    // Switch to signup mode if applicable
-    // (match whatever state variables AuthScreen uses for these)
-  }
-}, []);
-```
-
----
-
-## Step 5 — ORCID redirect in LandingScreen
-
-Read the ORCID OAuth redirect URL construction from `AuthScreen.jsx`.
-Copy the exact same redirect logic into the `handleOrcid` function in
-`LandingScreen.jsx`. Do NOT duplicate constants — if the ORCID client
-ID or redirect URI is stored in `constants.js` or an env var, import
-it from there. The redirect should behave identically whether triggered
-from the landing page or from AuthScreen.
-
----
-
-## What NOT to change
-
-- `src/screens/GroupsScreen.jsx` — legacy file, do not touch
-- `AuthScreen.jsx` auth logic — only add the `prefill_invite_code`
-  sessionStorage read (Step 4)
-- ORCID callback handling in `App.jsx` — must continue to work
-- All public routes (`/p/:slug`, `/s/:postId`, `/paper/:doi`, `/c/:slug`)
-- Admin route (`/admin`)
-- Any authenticated app screens
-- Run `npm run build` when done
-
----
-
-## Deployment
-
-```bash
-# No migration needed — waitlist table already exists.
-
-# Verify waitlist table has correct columns:
-# select column_name from information_schema.columns
-# where table_name = 'waitlist' order by ordinal_position;
-# Expected: id, full_name, email, institution, role_title,
-#           referral_source, is_priority, created_at
-
-# Deploy:
-git add . && git commit -m "Landing page: unauthenticated home screen with waitlist, invite code flow, ORCID join" && git push
-```
-
----
-
-## Remind the user
-
-**Footer links:** Privacy Policy and Terms of Use currently use `href="#"`
-as placeholders. Search for `TODO: Replace #` in `LandingScreen.jsx`
-to find them. Update when those pages are ready.
-
-**Waitlist referral tracking:** Share links with `?ref=AHA2026` or
-`?ref=CARDIOLOGY_CONF` to track where signups come from. The
-`referral_source` column captures this automatically.
-
-**Prioritising waitlist applicants:** In Supabase → Table Editor →
-waitlist, set `is_priority = true` for applicants you want to invite
-next. Then generate an invite code and email them directly.
-
-**Contact email in footer:** Currently set to `team@luminary.to`.
-Update if this address changes.
-
----
-
-## Testing checklist
-
-**Routing:**
-- [ ] Unauthenticated visitor at `/` sees LandingScreen (not AuthScreen)
-- [ ] Authenticated user at `/` goes directly to app (LandingScreen not shown)
-- [ ] `/p/:slug` still works for unauthenticated visitors
-- [ ] `/s/:postId` still works for unauthenticated visitors
-- [ ] `/paper/:doi` still works for unauthenticated visitors
-- [ ] `/admin` still gate-checks correctly
-- [ ] ORCID callback still handled correctly after OAuth redirect
-
-**Header:**
-- [ ] Luminary wordmark shows in header
-- [ ] "Have an invite code?" button visible
-- [ ] "Join with ORCID" button visible
-- [ ] "Log in" button visible
-- [ ] Header is sticky on scroll
-
-**Hero:**
-- [ ] Tagline renders in DM Serif Display
-- [ ] "I have an invite code →" button shows inline form on click
-- [ ] "Request early access" scrolls to waitlist section
-- [ ] "Early access — by invitation" eyebrow badge visible
-
-**Invite code form (inline):**
-- [ ] Form appears below hero CTAs on click
-- [ ] Input auto-focuses
-- [ ] Input converts to uppercase as user types
-- [ ] Enter key submits
-- [ ] Invalid code → shows error message
-- [ ] Already-claimed code → shows error
-- [ ] Expired code → shows error
-- [ ] Locked code → shows error
-- [ ] Valid code → stores in sessionStorage, calls onShowAuth()
-- [ ] AuthScreen opens with invite code pre-filled
-- [ ] sessionStorage entry cleared after read
-
-**ORCID:**
-- [ ] "Join with ORCID" in header triggers ORCID OAuth redirect
-- [ ] Redirect URL matches exactly what AuthScreen uses
-- [ ] ORCID callback after auth still works correctly
-
-**Log in:**
-- [ ] "Log in" in header shows AuthScreen
-- [ ] "Already have an account? Log in" in invite form also shows AuthScreen
-
-**Use cases carousel:**
-- [ ] Carousel renders between feature pillars and "Who it's for" sections
-- [ ] First card shows on load
-- [ ] Progress bar fills over 5 seconds then advances to next card
-- [ ] Auto-advance pauses when mouse hovers over carousel
-- [ ] Auto-advance resumes when mouse leaves
-- [ ] "›" next button advances to next card and resets progress bar
-- [ ] "‹" prev button goes to previous card and resets progress bar
-- [ ] Dot indicators show active card (wider violet dot)
-- [ ] Clicking any dot jumps to that card
-- [ ] Counter shows "X / 12" correctly
-- [ ] All 12 use case cards render with correct icon, tag, headline, scenario
-- [ ] Card transitions feel smooth (no janky resets)
-
-**Feature pillars:**
-- [ ] Three cards render with correct icons, titles, descriptions
-- [ ] Cards use T.w background and T.bdr border
-
-**Who it's for:**
-- [ ] Three role cards render (Researchers / Clinicians / Industry)
-- [ ] Icon backgrounds use correct T.v2 / T.gr2 / T.bl2 colours
-
-**Waitlist form:**
-- [ ] Form renders with four fields
-- [ ] Name and email are required — submitting empty shows error
-- [ ] Invalid email format shows error
-- [ ] Valid submission inserts row in `waitlist` table
-- [ ] Success state shows confirmation card
-- [ ] Duplicate email shows "already on waitlist" message
-- [ ] `?ref=AHA2026` URL param pre-populates referral_source silently
-- [ ] Verify in Supabase: waitlist row has correct field values
-
-**Footer:**
-- [ ] Privacy Policy, Terms of Use, Contact links visible
-- [ ] Contact links to `mailto:team@luminary.to`
-- [ ] Copyright year is current
-
-**Visual:**
-- [ ] DM Serif Display used for all headings
-- [ ] All colours use T.* tokens (no hardcoded hex)
-- [ ] Page scrolls smoothly
-- [ ] `npm run build` succeeds with no new warnings
