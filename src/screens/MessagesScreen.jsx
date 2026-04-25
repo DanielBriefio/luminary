@@ -520,6 +520,30 @@ export default function MessagesScreen({ user, onViewUser }) {
     });
     capture('dm_sent');
 
+    // Notify the recipient — but only when there isn't already an unread
+    // notification for this conversation (avoids one bell entry / email
+    // per message in a back-and-forth thread).
+    if (activeOtherUser?.id) {
+      const { data: existing } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id',    activeOtherUser.id)
+        .eq('actor_id',   user.id)
+        .eq('notif_type', 'new_message')
+        .eq('target_id',  activeConvId)
+        .eq('read',       false)
+        .maybeSingle();
+      if (!existing) {
+        await supabase.from('notifications').insert({
+          user_id:    activeOtherUser.id,
+          actor_id:   user.id,
+          notif_type: 'new_message',
+          target_id:  activeConvId,
+          read:       false,
+        });
+      }
+    }
+
     await supabase.from('conversations').update({
       last_message: content.slice(0, 100),
       last_message_at: new Date().toISOString(),

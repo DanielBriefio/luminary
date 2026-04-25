@@ -94,6 +94,21 @@ function PublicJoinPanel({ group, user, onBack, onJoined }) {
     setJoining(false);
     if (e) { setError(e.message); return; }
     capture('group_joined', { group_id: group.id });
+    // Notify group admins that a new member joined
+    const { data: admins } = await supabase
+      .from('group_members').select('user_id')
+      .eq('group_id', group.id).eq('role', 'admin');
+    if (admins?.length) {
+      await supabase.from('notifications').insert(
+        admins.map(a => ({
+          user_id:    a.user_id,
+          actor_id:   user.id,
+          notif_type: 'group_member_joined',
+          target_id:  group.id,
+          meta:       { group_id: group.id, group_name: group.name },
+        }))
+      );
+    }
     onJoined();
   };
   return (
