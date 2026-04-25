@@ -36,27 +36,9 @@ export const MILESTONES = [
     cta: 'Write bio', ctaAction: 'edit_profile',
   },
   {
-    id: 'publication_added',
-    label: 'Publication or presentation added',
-    check: (p, s) => (s.publicationCount || 0) >= 1,
-    cta: 'Add publication', ctaAction: 'publications',
-    ctaLabels: {
-      researcher:          'Add publication',
-      clinician:           'Add a presentation or lecture',
-      clinician_scientist: 'Add publication or presentation',
-      industry:            'Add a publication or presentation',
-    },
-  },
-  {
-    id: 'orcid_linked',
-    label: 'ORCID added to profile',
-    check: (p) => !!p.orcid,
-    cta: 'Add ORCID', ctaAction: 'edit_profile',
-  },
-  {
-    id: 'following_3',
-    label: 'Following at least 3 researchers',
-    check: (p, s) => (s.followingCount || 0) >= 3,
+    id: 'following_1',
+    label: 'Following at least 1 researcher',
+    check: (p, s) => (s.followingCount || 0) >= 1,
     cta: 'Discover researchers', ctaAction: 'explore',
   },
   {
@@ -95,20 +77,14 @@ export const MILESTONES = [
     check: (p) => !!(p.card_email || p.card_linkedin || p.card_website),
     cta: 'Add contact details', ctaAction: 'edit_profile',
   },
-  {
-    id: 'publications_5',
-    label: '5 or more publications added',
-    check: (p, s) => (s.publicationCount || 0) >= 5,
-    cta: 'Add more publications', ctaAction: 'publications',
-  },
 ];
 
 export const STAGES = [
   { number: 1, label: 'Identified', icon: '🔬', threshold: 3  },
-  { number: 2, label: 'Credible',   icon: '📄', threshold: 6  },
-  { number: 3, label: 'Connected',  icon: '🔗', threshold: 9  },
-  { number: 4, label: 'Active',     icon: '💬', threshold: 12 },
-  { number: 5, label: 'Visible',    icon: '🌐', threshold: 15 },
+  { number: 2, label: 'Credible',   icon: '📄', threshold: 5  },
+  { number: 3, label: 'Connected',  icon: '🔗', threshold: 7  },
+  { number: 4, label: 'Active',     icon: '💬', threshold: 9  },
+  { number: 5, label: 'Visible',    icon: '🌐', threshold: 12 },
 ];
 
 export const STAGE_REWARDS = {
@@ -121,10 +97,10 @@ export const STAGE_REWARDS = {
 
 export function computeStage(profile, stats) {
   const completed = MILESTONES.filter(m => m.check(profile, stats)).length;
-  if (completed >= 15) return 5;
-  if (completed >= 12) return 4;
-  if (completed >= 9)  return 3;
-  if (completed >= 6)  return 2;
+  if (completed >= 12) return 5;
+  if (completed >= 9)  return 4;
+  if (completed >= 7)  return 3;
+  if (completed >= 5)  return 2;
   if (completed >= 3)  return 1;
   return 0;
 }
