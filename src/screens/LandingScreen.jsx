@@ -267,7 +267,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
           maxWidth: 560,
         }}>
           Luminary is a professional network for researchers, clinicians,
-          and medical affairs scientists — built for the way science
+          and industry scientists — built for the way science
           actually works.
         </p>
 
