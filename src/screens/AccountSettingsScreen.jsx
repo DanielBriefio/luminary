@@ -9,6 +9,9 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
   const [saving,         setSaving]         = useState(false);
   const [saved,          setSaved]          = useState(false);
   const [notifications,  setNotifications]  = useState(profile?.email_notifications ?? true);
+  const [emailFollower,  setEmailFollower]  = useState(profile?.email_notif_new_follower   ?? true);
+  const [emailMessage,   setEmailMessage]   = useState(profile?.email_notif_new_message    ?? true);
+  const [emailGroupReq,  setEmailGroupReq]  = useState(profile?.email_notif_group_request  ?? true);
   const [marketing,      setMarketing]      = useState(profile?.email_marketing ?? false);
   const [analytics,      setAnalytics]      = useState(!!profile?.analytics_consent_at);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
@@ -36,8 +39,11 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
   const savePreferences = async () => {
     setSaving(true);
     const updates = {
-      email_notifications:  notifications,
-      email_marketing:      marketing,
+      email_notifications:        notifications,
+      email_notif_new_follower:   emailFollower,
+      email_notif_new_message:    emailMessage,
+      email_notif_group_request:  emailGroupReq,
+      email_marketing:            marketing,
       marketing_consent_at: marketing
         ? (profile?.marketing_consent_at || new Date().toISOString())
         : null,
@@ -292,8 +298,30 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
           <Toggle
             value={notifications} onChange={setNotifications}
             label="Activity notifications"
-            sublabel="Likes, comments, new followers, and replies to your posts"
+            sublabel="Master switch — turns all activity emails on or off"
           />
+          {notifications && (
+            <div style={{
+              marginLeft: 12, paddingLeft: 14,
+              borderLeft: `2px solid ${T.bdr}`, marginTop: 4,
+            }}>
+              <Toggle
+                value={emailFollower} onChange={setEmailFollower}
+                label="New follower"
+                sublabel="When someone follows you"
+              />
+              <Toggle
+                value={emailMessage} onChange={setEmailMessage}
+                label="New message"
+                sublabel="When you receive a direct message"
+              />
+              <Toggle
+                value={emailGroupReq} onChange={setEmailGroupReq}
+                label="Group join requests"
+                sublabel="When someone requests to join a group you admin, or your request is approved"
+              />
+            </div>
+          )}
           <Toggle
             value={marketing} onChange={setMarketing}
             label="Product updates & news"

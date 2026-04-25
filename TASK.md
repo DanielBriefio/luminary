@@ -1,1128 +1,546 @@
-# Task: Landing Page — Unauthenticated Home Screen
+# Task: Email Notification System via Resend (Phase 7A)
 
 ## Context
 
 Read CLAUDE.md and PRODUCT_STATE.md first.
 
-Currently, unauthenticated visitors to luminary.to see the AuthScreen
-directly. This task replaces that with a proper landing page that:
+This task builds the transactional email notification system using
+Resend. Email templates are pre-built in the Resend dashboard and
+referenced by slug. A Supabase Edge Function listens to database
+webhooks and sends emails when relevant events occur.
 
-- Introduces Luminary to first-time visitors
-- Provides visible auth options (Log in / Join with ORCID / Invite code)
-- Captures waitlist signups for visitors without an invite code
-- Keeps authenticated users routing as before (no change to app behaviour)
-
-Tagline: *"Where research meets practice, and evidence becomes
-conversation."*
+Email notifications covered:
+- **Welcome** — sent once at signup (triggered by profiles insert)
+- **New follower** — when someone follows you
+- **New message** — when you receive a DM
+- **Group join request** — when someone requests to join your group
+- **Group request approved** — when your join request is approved
 
 Scope:
 
-1. `src/screens/LandingScreen.jsx` — full landing page component
-2. `App.jsx` — show LandingScreen instead of AuthScreen for
-   unauthenticated visitors at root `/`
-3. No changes to AuthScreen, ORCID flow, or any authenticated routes
+1. SQL migration — email preference columns + welcome_sent flag
+2. Verify group join request meta is correctly populated
+3. Edge Function `send-email-notification` — handles all notification types
+4. Edge Function `send-welcome-email` — triggered by profile creation
+5. Supabase webhook configuration (manual step for user)
+6. Settings screen — four individual email preference toggles
+7. NotifsScreen — verify group_join_request and group_request_approved display
+
+> ⚠️ The Edge Functions use the Resend API key stored in Supabase
+> Edge Function secrets as `RESEND_API_KEY`. Never hardcode this key.
+> The Resend template slugs are: `welcome`, `new-follower`,
+> `new-direct-message`, `group-join-request`.
 
 ---
 
-## Step 1 — Understand the existing auth flow
+## Prerequisites — manual steps (done by user before Claude Code runs)
 
-Before writing any code, read `App.jsx` and `AuthScreen.jsx` carefully:
-
-- How does `App.jsx` currently detect unauthenticated state and render
-  `AuthScreen`?
-- How does the ORCID OAuth redirect work? (LandingScreen needs to
-  trigger the same redirect)
-- Does `AuthScreen` receive any props from `App.jsx` that LandingScreen
-  will also need?
-
-Match the existing patterns exactly — do not restructure App.jsx's
-auth detection logic.
+- [x] Resend account created and domain verified
+- [x] Four email templates created in Resend dashboard with slugs:
+      `welcome`, `new-follower`, `new-direct-message`, `group-join-request`
+- [x] `RESEND_API_KEY` added to Supabase Edge Function secrets
+- [ ] Two database webhooks configured in Supabase (see Step 5)
 
 ---
 
-## Step 2 — App.jsx — show LandingScreen for unauthed visitors
+## Step 1 — SQL migration
 
-Add import:
+Create `migration_email_notifications.sql`:
 
-```javascript
-import LandingScreen from './screens/LandingScreen';
+```sql
+-- Granular email notification preferences (replaces single boolean)
+alter table profiles
+  add column if not exists email_notif_new_follower   boolean default true,
+  add column if not exists email_notif_new_message    boolean default true,
+  add column if not exists email_notif_group_request  boolean default true,
+  add column if not exists welcome_email_sent         boolean default false;
+
+-- Backfill: existing users who had email_notifications = true
+-- keep all granular preferences as true (already the default)
+-- existing users who had email_notifications = false get all set to false
+update profiles
+set
+  email_notif_new_follower  = coalesce(email_notifications, true),
+  email_notif_new_message   = coalesce(email_notifications, true),
+  email_notif_group_request = coalesce(email_notifications, true)
+where email_notifications = false;
+
+-- Mark existing users as already having received welcome email
+-- (they signed up before this system existed)
+update profiles
+set welcome_email_sent = true
+where created_at < now() - interval '1 hour';
 ```
 
-Find the place in `App.jsx` where unauthenticated state renders
-`AuthScreen`. The landing page should replace `AuthScreen` only when:
-- User is not authenticated, AND
-- The current path is `/` (root)
-
-Public routes (`/p/:slug`, `/s/:postId`, `/paper/:doi`, `/c/:slug`,
-`/admin`) must continue to work for unauthenticated users as before.
-The ORCID callback path must also continue to work.
-
-Logic (adapt to match existing App.jsx structure):
-
-```javascript
-// If not authenticated and at root path → show landing page
-if (!user && !isPublicRoute && !isOrcidCallback && !isAdminRoute) {
-  return (
-    <LandingScreen
-      supabase={supabase}
-      onShowAuth={() => /* trigger existing auth screen */}
-    />
-  );
-}
-```
-
-The cleanest approach: add an `isLandingMode` state (default `true` for
-unauthed root visitors) that LandingScreen can set to `false` when the
-user clicks "Log in" — at which point `AuthScreen` renders instead.
-Match whatever state management pattern already exists in `App.jsx`.
+Tell the user to run this in Supabase SQL Editor.
 
 ---
 
-## Step 3 — LandingScreen.jsx
+## Step 2 — Verify group join request notification meta
 
-Create `src/screens/LandingScreen.jsx`.
+Read the code that handles group join requests — likely in
+`GroupMembers.jsx` or `GroupScreen.jsx`. Find where a join request
+notification is inserted into the `notifications` table.
 
-This component uses only `T.*` tokens from `constants.js`, DM Sans
-(body) and DM Serif Display (headings) — matching the app's design
-system exactly. All styles are inline, no CSS files.
+Verify the insert includes `meta` with `group_id` and `group_name`:
 
-```jsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { T } from '../lib/constants';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const FEATURES = [
-  {
-    icon: '📄',
-    title: 'Share & Discuss',
-    desc: 'Post papers, preprints, and clinical insights. Discuss findings with peers who understand the science. Follow topics and authors that matter to your work.',
+```javascript
+await supabase.from('notifications').insert({
+  user_id:     groupOwnerId,        // admin who receives the notification
+  actor_id:    requestingUserId,    // person requesting to join
+  notif_type:  'group_join_request',
+  target_type: 'group',
+  target_id:   groupId,
+  meta: {
+    group_id:   groupId,
+    group_name: groupName,          // ← must be present for email
   },
-  {
-    icon: '🔬',
-    title: 'Connect & Collaborate',
-    desc: 'Build a verified scientific profile. Find researchers, clinicians, and medical affairs professionals in your field. Groups bring the right people together.',
-  },
-  {
-    icon: '📚',
-    title: 'Organise & Build',
-    desc: 'Your personal library for papers and references. Projects to coordinate research. Templates built for how scientific teams actually work.',
-  },
-];
+  read: false,
+});
+```
 
-const WHO_FOR = [
-  {
-    icon: '🔬',
-    role: 'Researchers',
-    desc: 'Share your work, follow the literature, connect with translational partners, and build a presence that reflects your full scientific identity.',
-    color: T.v,
-    bg:    T.v2,
-  },
-  {
-    icon: '🏥',
-    role: 'Clinicians',
-    desc: 'Stay current with evidence that matters to your practice. Connect with researchers and industry across the bench-to-bedside gap.',
-    color: T.gr,
-    bg:    T.gr2,
-  },
-  {
-    icon: '🏭',
-    role: 'Industry',
-    desc: 'Engage with the scientific community authentically. Whether in pharma, medtech, or biotech — build credibility, follow the evidence landscape, and connect with researchers doing work that matters to your field.',
-    color: T.bl,
-    bg:    T.bl2,
-  },
-];
+If `meta` is missing `group_id` or `group_name`, add them. Do not
+change any other logic — surgical addition only.
 
-const USE_CASES = [
-  {
-    icon: '📄',
-    tag: 'Paper posts',
-    headline: 'Discuss science around real papers',
-    scenario: 'You find a landmark trial that changes your thinking. Upload the DOI, write your takeaway, and invite colleagues to comment. Luminary was built around exactly this — sharing and debating evidence in context.',
-  },
-  {
-    icon: '✍️',
-    tag: 'Rich posts',
-    headline: 'Share more than papers',
-    scenario: 'Science lives beyond journals. Post images, videos, links, and data files. Write deep-dive posts with rich text formatting — structured, article-style content that lets your thinking breathe.',
-  },
-  {
-    icon: '🪪',
-    tag: 'Business card',
-    headline: 'Exchange profiles at conferences',
-    scenario: 'You\'re presenting at AHA 2026 and meet a colleague at your poster. They scan your QR code, instantly see your full profile and publications, and connect with you on Luminary — even after you\'ve moved on.',
-  },
-  {
-    icon: '📌',
-    tag: 'QR on posters',
-    headline: 'Let your poster find you',
-    scenario: 'Print your Luminary QR on your conference poster. Colleagues who visit when you\'re not there can scan it, explore your background, follow your work, and reach out directly — no business cards needed.',
-  },
-  {
-    icon: '🤖',
-    tag: 'AI profile import',
-    headline: 'Build your profile in minutes',
-    scenario: 'Upload your CV as a PDF and our AI fills in your work history, education, and publications automatically. Or import directly from ORCID or LinkedIn. Your scientific identity, properly represented.',
-  },
-  {
-    icon: '📖',
-    tag: 'Groups',
-    headline: 'Run your journal club on Luminary',
-    scenario: 'Create a private group for your research team. Announce the paper, share pre-reads, collect questions, and post a summary for everyone who couldn\'t attend. All in one place, searchable forever.',
-  },
-  {
-    icon: '🔭',
-    tag: 'Groups + Projects',
-    headline: 'Organise your research group',
-    scenario: 'Private group feed for day-to-day discussion. Separate project spaces for each initiative — grant applications, lab protocols, manuscript drafts. Your team\'s knowledge, structured and findable.',
-  },
-  {
-    icon: '✈️',
-    tag: 'Groups',
-    headline: 'Collaborate at conferences',
-    scenario: 'Create a temporary group before a major conference. Share the agenda, pre-reads, and booth assignments. Capture poster photos, insights, and contacts during the event. A living record of the conference for the whole team.',
-  },
-  {
-    icon: '🏛️',
-    tag: 'Projects',
-    headline: 'Manage your advisory board',
-    scenario: 'Prepare and run advisory boards with a structured project space. Share briefing documents, collect advisor input, track action items, and keep the whole team aligned — internally and with external advisors.',
-  },
-  {
-    icon: '🧪',
-    tag: 'Projects',
-    headline: 'Onboard new lab members',
-    scenario: 'Use a structured onboarding project with reading lists, protocols, introductions, and orientation posts. New members get up to speed faster; institutional knowledge stops living only in people\'s heads.',
-  },
-  {
-    icon: '⭐',
-    tag: 'Follow',
-    headline: 'Learn from scientific leaders',
-    scenario: 'Follow researchers you admire. Track their new publications as they\'re shared on Luminary. Read their posts, deep-dives, and paper annotations. Let the people doing the most interesting work inform yours.',
-  },
-  {
-    icon: '📚',
-    tag: 'Library',
-    headline: 'Build your evidence library',
-    scenario: 'Save papers from Europe PMC, enter DOIs, or import from .ris and .bib files. Organise into folders by topic or project. Your personal reference collection — searchable, shareable, always with you.',
-  },
-];
+Also verify `group_request_approved` notification (inserted when admin
+approves a join request) has the same meta structure. Fix if missing.
 
-// ─── LandingScreen ────────────────────────────────────────────────────────────
+---
 
-export default function LandingScreen({ supabase, onShowAuth }) {
-  const [showInviteForm, setShowInviteForm] = useState(false);
-  const inviteRef  = useRef(null);
-  const waitlistRef = useRef(null);
+## Step 3 — Edge Function: send-email-notification
 
-  const scrollToWaitlist = () => {
-    waitlistRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+Create `supabase/functions/send-email-notification/index.ts`:
 
-  const handleInviteClick = () => {
-    setShowInviteForm(true);
-    setTimeout(() => {
-      inviteRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 50);
-  };
+```typescript
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-  // Trigger ORCID OAuth — read the existing ORCID redirect URL from
-  // AuthScreen.jsx and replicate the same redirect here.
-  // Do NOT hardcode the client ID — import it from wherever AuthScreen
-  // reads it (constants.js or env var).
-  const handleOrcid = () => {
-    // Copy the exact ORCID redirect logic from AuthScreen.jsx
-    // It should look something like:
-    // window.location.href = `https://orcid.org/oauth/authorize?...`
-  };
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
+const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const FROM_EMAIL     = 'Luminary Team <team@luminary.to>';
+const APP_URL        = 'https://luminary.to';
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: T.bg,
-      fontFamily: 'inherit',
-    }}>
+// Notification types that trigger emails and their template slugs
+const EMAIL_TYPES: Record<string, string> = {
+  new_follower:          'new-follower',
+  new_message:           'new-direct-message',
+  group_join_request:    'group-join-request',
+  group_request_approved: 'group-join-request', // reuse template, different copy
+};
 
-      {/* ── Sticky header ── */}
-      <header style={{
-        position: 'sticky', top: 0, zIndex: 50,
-        background: 'rgba(242,243,251,0.92)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: `1px solid ${T.bdr}`,
-        padding: '0 32px',
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between',
-        height: 56,
-      }}>
-        {/* Logo */}
-        <div style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 22, color: T.text, letterSpacing: -0.3,
-        }}>
-          Luminary
-        </div>
+serve(async (req) => {
+  try {
+    const payload = await req.json();
 
-        {/* Auth actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            onClick={handleInviteClick}
-            style={{
-              padding: '7px 14px', borderRadius: 8,
-              border: `1px solid ${T.bdr}`, background: 'transparent',
-              color: T.mu, fontSize: 13, cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            Have an invite code?
-          </button>
-          <button
-            onClick={handleOrcid}
-            style={{
-              padding: '7px 14px', borderRadius: 8,
-              border: `1px solid ${T.bdr}`, background: T.w,
-              color: T.text, fontSize: 13, cursor: 'pointer',
-              fontFamily: 'inherit', fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <span style={{ fontSize: 15 }}>🔬</span>
-            Join with ORCID
-          </button>
-          <button
-            onClick={onShowAuth}
-            style={{
-              padding: '7px 16px', borderRadius: 8,
-              border: 'none', background: T.v,
-              color: '#fff', fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            Log in
-          </button>
-        </div>
-      </header>
+    // Supabase webhook sends { type, table, record, old_record }
+    const record = payload.record;
+    if (!record) return new Response('no record', { status: 200 });
 
-      {/* ── Hero ── */}
-      <section style={{
-        maxWidth: 720, margin: '0 auto',
-        padding: '80px 32px 64px',
-        textAlign: 'center',
-      }}>
-        {/* Eyebrow */}
-        <div style={{
-          display: 'inline-block',
-          fontSize: 12, fontWeight: 700, letterSpacing: 1.2,
-          textTransform: 'uppercase', color: T.v,
-          background: T.v2, padding: '4px 14px', borderRadius: 20,
-          marginBottom: 24,
-        }}>
-          Early access — by invitation
-        </div>
+    const { notif_type, user_id, actor_id, target_id, meta } = record;
 
-        {/* Headline */}
-        <h1 style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 52, lineHeight: 1.15,
-          color: T.text, margin: '0 0 20px',
-          letterSpacing: -0.5,
-        }}>
-          Where research meets practice,<br />
-          and evidence becomes conversation.
-        </h1>
+    // Only handle email-relevant notification types
+    const templateSlug = EMAIL_TYPES[notif_type];
+    if (!templateSlug) return new Response('not an email type', { status: 200 });
 
-        {/* Subhead */}
-        <p style={{
-          fontSize: 18, color: T.mu, lineHeight: 1.7,
-          margin: '0 0 36px', maxWidth: 560,
-          marginLeft: 'auto', marginRight: 'auto',
-        }}>
-          Luminary is a professional network for researchers, clinicians,
-          and medical affairs scientists — built for the way science
-          actually works.
-        </p>
+    // Create service-role Supabase client for DB lookups
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-        {/* Hero CTAs */}
-        <div style={{
-          display: 'flex', gap: 12,
-          justifyContent: 'center', flexWrap: 'wrap',
-          marginBottom: showInviteForm ? 32 : 0,
-        }}>
-          <button
-            onClick={handleInviteClick}
-            style={{
-              padding: '13px 28px', borderRadius: 10, border: 'none',
-              background: T.v, color: '#fff',
-              fontSize: 15, fontWeight: 700, cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            I have an invite code →
-          </button>
-          <button
-            onClick={scrollToWaitlist}
-            style={{
-              padding: '13px 28px', borderRadius: 10,
-              border: `1.5px solid ${T.bdr}`, background: T.w,
-              color: T.text, fontSize: 15, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            Request early access
-          </button>
-        </div>
-
-        {/* Inline invite code form */}
-        {showInviteForm && (
-          <div ref={inviteRef} style={{
-            marginTop: 24, display: 'inline-block',
-            background: T.w, border: `1.5px solid ${T.v}`,
-            borderRadius: 12, padding: '20px 24px',
-            textAlign: 'left', minWidth: 320,
-            boxShadow: '0 4px 20px rgba(108,99,255,0.10)',
-          }}>
-            <div style={{
-              fontSize: 13, fontWeight: 700, color: T.text,
-              marginBottom: 12,
-            }}>
-              Enter your invite code
-            </div>
-            <InviteCodeForm supabase={supabase} onShowAuth={onShowAuth} />
-            <div style={{
-              marginTop: 12, paddingTop: 12,
-              borderTop: `1px solid ${T.bdr}`,
-              fontSize: 12, color: T.mu, textAlign: 'center',
-            }}>
-              Already have an account?{' '}
-              <button onClick={onShowAuth} style={{
-                background: 'transparent', border: 'none',
-                color: T.v, fontWeight: 600, cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: 12, padding: 0,
-              }}>
-                Log in
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ── Divider ── */}
-      <div style={{
-        height: 1, background: T.bdr,
-        maxWidth: 680, margin: '0 auto',
-      }} />
-
-      {/* ── Feature pillars ── */}
-      <section style={{
-        maxWidth: 860, margin: '0 auto',
-        padding: '72px 32px',
-      }}>
-        <h2 style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 34, color: T.text,
-          textAlign: 'center', margin: '0 0 48px',
-        }}>
-          Built for how science works
-        </h2>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 24,
-        }}>
-          {FEATURES.map(f => (
-            <div key={f.title} style={{
-              background: T.w, borderRadius: 14,
-              border: `1px solid ${T.bdr}`,
-              padding: '28px 24px',
-            }}>
-              <div style={{ fontSize: 32, marginBottom: 14 }}>
-                {f.icon}
-              </div>
-              <div style={{
-                fontFamily: "'DM Serif Display', serif",
-                fontSize: 20, color: T.text, marginBottom: 10,
-              }}>
-                {f.title}
-              </div>
-              <div style={{
-                fontSize: 14, color: T.mu, lineHeight: 1.7,
-              }}>
-                {f.desc}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Use cases carousel ── */}
-      <section style={{
-        background: T.w,
-        borderTop: `1px solid ${T.bdr}`,
-        borderBottom: `1px solid ${T.bdr}`,
-        padding: '72px 0',
-        overflow: 'hidden',
-      }}>
-        <div style={{ maxWidth: 860, margin: '0 auto', padding: '0 32px' }}>
-          <h2 style={{
-            fontFamily: "'DM Serif Display', serif",
-            fontSize: 34, color: T.text,
-            textAlign: 'center', margin: '0 0 48px',
-          }}>
-            How people use Luminary
-          </h2>
-        </div>
-        <UseCasesCarousel />
-      </section>
-
-      {/* ── Who it's for ── */}
-      <section style={{
-        background: T.w,
-        borderTop: `1px solid ${T.bdr}`,
-        borderBottom: `1px solid ${T.bdr}`,
-      }}>
-        <div style={{
-          maxWidth: 860, margin: '0 auto',
-          padding: '72px 32px',
-        }}>
-          <h2 style={{
-            fontFamily: "'DM Serif Display', serif",
-            fontSize: 34, color: T.text,
-            textAlign: 'center', margin: '0 0 48px',
-          }}>
-            Who Luminary is for
-          </h2>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 20,
-          }}>
-            {WHO_FOR.map(w => (
-              <div key={w.role} style={{
-                borderRadius: 14,
-                border: `1px solid ${T.bdr}`,
-                padding: '28px 24px',
-                background: T.bg,
-              }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: 12,
-                  background: w.bg, display: 'flex',
-                  alignItems: 'center', justifyContent: 'center',
-                  fontSize: 22, marginBottom: 14,
-                }}>
-                  {w.icon}
-                </div>
-                <div style={{
-                  fontFamily: "'DM Serif Display', serif",
-                  fontSize: 20, color: T.text, marginBottom: 10,
-                }}>
-                  {w.role}
-                </div>
-                <div style={{
-                  fontSize: 14, color: T.mu, lineHeight: 1.7,
-                }}>
-                  {w.desc}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Waitlist ── */}
-      <section
-        ref={waitlistRef}
-        style={{
-          maxWidth: 560, margin: '0 auto',
-          padding: '80px 32px',
-          textAlign: 'center',
-        }}
-      >
-        <h2 style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 34, color: T.text, margin: '0 0 12px',
-        }}>
-          Join the founding community
-        </h2>
-        <p style={{
-          fontSize: 15, color: T.mu, lineHeight: 1.7,
-          margin: '0 0 36px',
-        }}>
-          Luminary is growing by invitation. Leave your details and
-          we'll reach out when a spot opens up for your field.
-        </p>
-
-        <WaitlistForm supabase={supabase} />
-      </section>
-
-      {/* ── Footer ── */}
-      <footer style={{
-        borderTop: `1px solid ${T.bdr}`,
-        padding: '24px 32px',
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap', gap: 12,
-      }}>
-        <div style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 16, color: T.text,
-        }}>
-          Luminary
-        </div>
-        <div style={{ display: 'flex', gap: 20 }}>
-          {[
-            /* TODO: Replace # with real URLs when pages are ready */
-            { label: 'Privacy Policy', href: '#' },
-            { label: 'Terms of Use',   href: '#' },
-            { label: 'Contact',        href: 'mailto:team@luminary.to' },
-          ].map(link => (
-            <a key={link.label} href={link.href} style={{
-              fontSize: 13, color: T.mu, textDecoration: 'none',
-            }}>
-              {link.label}
-            </a>
-          ))}
-        </div>
-        <div style={{ fontSize: 12, color: T.mu }}>
-          © {new Date().getFullYear()} Luminary
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-// ─── UseCasesCarousel ─────────────────────────────────────────────────────────
-
-function UseCasesCarousel() {
-  const [active, setActive]       = useState(0);
-  const [paused, setPaused]       = useState(false);
-  const [progress, setProgress]   = useState(0);
-  const intervalRef               = useRef(null);
-  const progressRef               = useRef(null);
-  const DURATION                  = 5000; // ms per card
-  const TICK                      = 50;   // progress update interval ms
-
-  const goTo = useCallback((index) => {
-    setActive(index);
-    setProgress(0);
-  }, []);
-
-  const next = useCallback(() => {
-    setActive(prev => (prev + 1) % USE_CASES.length);
-    setProgress(0);
-  }, []);
-
-  const prev = useCallback(() => {
-    setActive(prev => (prev - 1 + USE_CASES.length) % USE_CASES.length);
-    setProgress(0);
-  }, []);
-
-  // Auto-advance
-  useEffect(() => {
-    if (paused) {
-      clearInterval(intervalRef.current);
-      clearInterval(progressRef.current);
-      return;
-    }
-
-    progressRef.current = setInterval(() => {
-      setProgress(p => {
-        if (p >= 100) return 0;
-        return p + (TICK / DURATION) * 100;
-      });
-    }, TICK);
-
-    intervalRef.current = setInterval(next, DURATION);
-
-    return () => {
-      clearInterval(intervalRef.current);
-      clearInterval(progressRef.current);
-    };
-  }, [paused, active, next]);
-
-  const card = USE_CASES[active];
-
-  return (
-    <div
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      style={{ userSelect: 'none' }}
-    >
-      {/* Main card */}
-      <div style={{
-        maxWidth: 680, margin: '0 auto',
-        padding: '0 32px',
-        minHeight: 220,
-      }}>
-        <div style={{
-          background: T.bg,
-          border: `1px solid ${T.bdr}`,
-          borderRadius: 16,
-          padding: '32px 36px',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          {/* Progress bar */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0,
-            height: 3, background: T.bdr,
-          }}>
-            <div style={{
-              height: '100%',
-              width: `${progress}%`,
-              background: T.v,
-              transition: `width ${TICK}ms linear`,
-              borderRadius: '0 2px 2px 0',
-            }} />
-          </div>
-
-          {/* Feature tag */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontSize: 11, fontWeight: 700, letterSpacing: 0.8,
-            textTransform: 'uppercase', color: T.v,
-            background: T.v2, padding: '3px 10px',
-            borderRadius: 20, marginBottom: 18,
-          }}>
-            {card.tag}
-          </div>
-
-          {/* Icon + headline */}
-          <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: 16,
-            marginBottom: 16,
-          }}>
-            <div style={{
-              fontSize: 36, lineHeight: 1, flexShrink: 0,
-              marginTop: 2,
-            }}>
-              {card.icon}
-            </div>
-            <h3 style={{
-              fontFamily: "'DM Serif Display', serif",
-              fontSize: 24, color: T.text,
-              margin: 0, lineHeight: 1.25,
-            }}>
-              {card.headline}
-            </h3>
-          </div>
-
-          {/* Scenario */}
-          <p style={{
-            fontSize: 15, color: T.mu, lineHeight: 1.7,
-            margin: 0, paddingLeft: 52,
-          }}>
-            {card.scenario}
-          </p>
-        </div>
-      </div>
-
-      {/* Navigation row */}
-      <div style={{
-        maxWidth: 680, margin: '20px auto 0',
-        padding: '0 32px',
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
-        {/* Prev button */}
-        <button
-          onClick={prev}
-          style={{
-            width: 36, height: 36, borderRadius: '50%',
-            border: `1px solid ${T.bdr}`, background: T.w,
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer', fontSize: 16, color: T.mu,
-            flexShrink: 0,
-          }}
-        >
-          ‹
-        </button>
-
-        {/* Dot indicators */}
-        <div style={{
-          display: 'flex', gap: 6, alignItems: 'center',
-          flexWrap: 'wrap', justifyContent: 'center',
-          maxWidth: 560,
-        }}>
-          {USE_CASES.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => goTo(i)}
-              style={{
-                width: i === active ? 20 : 8,
-                height: 8, borderRadius: 4,
-                border: 'none',
-                background: i === active ? T.v : T.bdr,
-                cursor: 'pointer', padding: 0,
-                transition: 'width 0.2s ease, background 0.2s ease',
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Next button */}
-        <button
-          onClick={next}
-          style={{
-            width: 36, height: 36, borderRadius: '50%',
-            border: `1px solid ${T.bdr}`, background: T.w,
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer', fontSize: 16, color: T.mu,
-            flexShrink: 0,
-          }}
-        >
-          ›
-        </button>
-      </div>
-
-      {/* Counter */}
-      <div style={{
-        textAlign: 'center', marginTop: 12,
-        fontSize: 12, color: T.mu,
-      }}>
-        {active + 1} / {USE_CASES.length}
-      </div>
-    </div>
-  );
-}
-
-// ─── InviteCodeForm ───────────────────────────────────────────────────────────
-// Validates the invite code and hands off to the auth flow.
-// Does NOT handle signup itself — that stays in AuthScreen.
-// On valid code: calls onShowAuth() with the code pre-filled.
-
-function InviteCodeForm({ supabase, onShowAuth }) {
-  const [code, setCode]     = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState('');
-
-  const handleSubmit = async () => {
-    if (!code.trim()) return;
-    setLoading(true);
-    setError('');
-
-    const normalized = code.trim().toUpperCase();
-
-    // Check the code exists and is valid
-    const { data: row, error: fetchErr } = await supabase
-      .from('invite_codes')
-      .select('id, claimed_by, is_multi_use, max_uses, uses_count, expires_at, locked_at')
-      .eq('code', normalized)
+    // Fetch recipient profile
+    const { data: recipient } = await supabase
+      .from('profiles')
+      .select(`
+        id, name, email:id, profile_slug,
+        email_notif_new_follower,
+        email_notif_new_message,
+        email_notif_group_request
+      `)
+      .eq('id', user_id)
       .single();
 
-    if (fetchErr || !row) {
-      setError('Invalid invite code. Please check and try again.');
-      setLoading(false);
-      return;
+    if (!recipient) return new Response('recipient not found', { status: 200 });
+
+    // Fetch recipient email from auth.users
+    const { data: authUser } = await supabase.auth.admin.getUserById(user_id);
+    const recipientEmail = authUser?.user?.email;
+    if (!recipientEmail) return new Response('no email', { status: 200 });
+
+    // Check master email_notifications preference
+    const { data: prefCheck } = await supabase
+      .from('profiles')
+      .select('email_notifications')
+      .eq('id', user_id)
+      .single();
+
+    if (prefCheck?.email_notifications === false) {
+      return new Response('email notifications disabled', { status: 200 });
     }
 
-    if (row.locked_at) {
-      setError('This invite code has been locked.');
-      setLoading(false);
-      return;
+    // Check granular preference per notification type
+    const prefMap: Record<string, boolean> = {
+      new_follower:          recipient.email_notif_new_follower,
+      new_message:           recipient.email_notif_new_message,
+      group_join_request:    recipient.email_notif_group_request,
+      group_request_approved: recipient.email_notif_group_request,
+    };
+
+    if (prefMap[notif_type] === false) {
+      return new Response('notification type disabled', { status: 200 });
     }
 
-    if (row.expires_at && new Date(row.expires_at) < new Date()) {
-      setError('This invite code has expired.');
-      setLoading(false);
-      return;
+    // Fetch actor profile (the person who did the action)
+    const { data: actor } = await supabase
+      .from('profiles')
+      .select('id, name, profile_slug, title, institution')
+      .eq('id', actor_id)
+      .single();
+
+    if (!actor) return new Response('actor not found', { status: 200 });
+
+    // Build template variables per notification type
+    let templateVariables: Record<string, string> = {
+      name:         recipient.name || 'there',
+      settings_url: `${APP_URL}`,
+    };
+
+    if (notif_type === 'new_follower') {
+      templateVariables = {
+        ...templateVariables,
+        follower_name:        actor.name,
+        follower_profile_url: `${APP_URL}/p/${actor.profile_slug}`,
+      };
     }
 
-    if (!row.is_multi_use && row.claimed_by) {
-      setError('This invite code has already been used.');
-      setLoading(false);
-      return;
+    if (notif_type === 'new_message') {
+      // Fetch message content preview from messages table
+      const { data: message } = await supabase
+        .from('messages')
+        .select('content')
+        .eq('conversation_id', target_id)
+        .eq('sender_id', actor_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const preview = message?.content
+        ? message.content.length > 100
+          ? message.content.slice(0, 100) + '…'
+          : message.content
+        : 'Sent you a message';
+
+      templateVariables = {
+        ...templateVariables,
+        sender_name:      actor.name,
+        message_preview:  preview,
+        conversation_url: `${APP_URL}`,
+      };
     }
 
-    if (row.is_multi_use && row.max_uses != null
-        && row.uses_count >= row.max_uses) {
-      setError('This invite code is no longer available.');
-      setLoading(false);
-      return;
+    if (notif_type === 'group_join_request') {
+      templateVariables = {
+        ...templateVariables,
+        requester_name:        actor.name,
+        requester_title:       actor.title       || '',
+        requester_institution: actor.institution || '',
+        group_name:            meta?.group_name  || 'your group',
+        group_url:             `${APP_URL}`,
+      };
     }
 
-    // Valid — hand off to auth screen with code pre-filled
-    // Store in sessionStorage so AuthScreen can pick it up
-    sessionStorage.setItem('prefill_invite_code', normalized);
-    setLoading(false);
-    onShowAuth();
-  };
-
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={code}
-          onChange={e => { setCode(e.target.value); setError(''); }}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          placeholder="e.g. AHA2026"
-          autoFocus
-          style={{
-            flex: 1, padding: '10px 13px', borderRadius: 8,
-            border: `1.5px solid ${error ? T.ro : T.bdr}`,
-            background: T.s2, fontSize: 14,
-            fontFamily: 'monospace', fontWeight: 700,
-            color: T.text, outline: 'none',
-            textTransform: 'uppercase',
-            letterSpacing: 1,
-          }}
-        />
-        <button
-          onClick={handleSubmit}
-          disabled={loading || !code.trim()}
-          style={{
-            padding: '10px 18px', borderRadius: 8, border: 'none',
-            background: T.v, color: '#fff', fontWeight: 700,
-            fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
-            opacity: (loading || !code.trim()) ? 0.6 : 1,
-          }}
-        >
-          {loading ? '…' : 'Continue'}
-        </button>
-      </div>
-      {error && (
-        <div style={{
-          marginTop: 8, fontSize: 12.5, color: T.ro,
-        }}>
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── WaitlistForm ─────────────────────────────────────────────────────────────
-
-function WaitlistForm({ supabase }) {
-  const [form, setForm] = useState({
-    full_name:       '',
-    email:           '',
-    institution:     '',
-    role_title:      '',
-    referral_source: '',
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted]   = useState(false);
-  const [error, setError]           = useState('');
-
-  // Auto-populate referral_source from URL param ?ref=...
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref');
-    if (ref) setForm(prev => ({ ...prev, referral_source: ref }));
-  }, []);
-
-  const set = (key, val) =>
-    setForm(prev => ({ ...prev, [key]: val }));
-
-  const handleSubmit = async () => {
-    if (!form.full_name.trim() || !form.email.trim()) {
-      setError('Name and email are required.');
-      return;
-    }
-    // Basic email validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      setError('Please enter a valid email address.');
-      return;
+    if (notif_type === 'group_request_approved') {
+      templateVariables = {
+        ...templateVariables,
+        group_name: meta?.group_name || 'the group',
+        group_url:  `${APP_URL}`,
+      };
     }
 
-    setSubmitting(true);
-    setError('');
+    // Send email via Resend
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        from:    FROM_EMAIL,
+        to:      recipientEmail,
+        subject: buildSubject(notif_type, actor.name, meta),
+        template_id: templateSlug,  // Resend template slug
+        variables:   templateVariables,
+      }),
+    });
 
-    const { error: insertErr } = await supabase
-      .from('waitlist')
-      .insert({
-        full_name:       form.full_name.trim(),
-        email:           form.email.trim().toLowerCase(),
-        institution:     form.institution.trim() || null,
-        role_title:      form.role_title.trim()  || null,
-        referral_source: form.referral_source    || null,
-        is_priority:     false,
-      });
-
-    setSubmitting(false);
-
-    if (insertErr) {
-      if (insertErr.code === '23505') {
-        setError('This email is already on the waitlist.');
-      } else {
-        setError('Something went wrong. Please try again.');
-      }
-      return;
+    if (!resendResponse.ok) {
+      const err = await resendResponse.text();
+      console.error('Resend error:', err);
+      return new Response('resend error', { status: 500 });
     }
 
-    setSubmitted(true);
-  };
+    return new Response('ok', { status: 200 });
 
-  if (submitted) {
-    return (
-      <div style={{
-        background: T.gr2, border: `1px solid ${T.gr}`,
-        borderRadius: 12, padding: '28px 24px',
-        textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 36, marginBottom: 10 }}>✓</div>
-        <div style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 20, color: T.text, marginBottom: 8,
-        }}>
-          You're on the list
-        </div>
-        <div style={{ fontSize: 14, color: T.mu, lineHeight: 1.6 }}>
-          We'll be in touch when a spot opens up
-          for your field. Thank you for your interest in Luminary.
-        </div>
-      </div>
-    );
+  } catch (err) {
+    console.error('Edge function error:', err);
+    return new Response('error', { status: 500 });
   }
+});
 
-  return (
-    <div style={{
-      background: T.w, border: `1px solid ${T.bdr}`,
-      borderRadius: 14, padding: '28px 28px',
-      textAlign: 'left',
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <WaitlistField
-            label="Full name *"
-            value={form.full_name}
-            onChange={v => set('full_name', v)}
-            placeholder="Dr. Jane Smith"
-          />
-          <WaitlistField
-            label="Email *"
-            value={form.email}
-            onChange={v => set('email', v)}
-            placeholder="jane@university.edu"
-            type="email"
-          />
-        </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <WaitlistField
-            label="Institution"
-            value={form.institution}
-            onChange={v => set('institution', v)}
-            placeholder="University / Hospital / Company"
-          />
-          <WaitlistField
-            label="Role / Title"
-            value={form.role_title}
-            onChange={v => set('role_title', v)}
-            placeholder="e.g. Clinical Researcher, MSL"
-          />
-        </div>
-
-        {error && (
-          <div style={{
-            padding: '8px 12px', borderRadius: 8,
-            background: T.ro2, color: T.ro, fontSize: 13,
-          }}>
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          style={{
-            padding: '12px 0', borderRadius: 9, border: 'none',
-            background: T.v, color: '#fff',
-            fontWeight: 700, fontSize: 14,
-            cursor: submitting ? 'default' : 'pointer',
-            fontFamily: 'inherit',
-            opacity: submitting ? 0.7 : 1,
-            marginTop: 4,
-          }}
-        >
-          {submitting ? 'Submitting…' : 'Request early access'}
-        </button>
-
-        <div style={{ fontSize: 11.5, color: T.mu, textAlign: 'center' }}>
-          We'll never share your details. No spam.
-        </div>
-      </div>
-    </div>
-  );
+function buildSubject(
+  notifType: string,
+  actorName: string,
+  meta: Record<string, string> | null
+): string {
+  switch (notifType) {
+    case 'new_follower':
+      return `${actorName} is now following you on Luminary ✦`;
+    case 'new_message':
+      return `New message from ${actorName} on Luminary ✦`;
+    case 'group_join_request':
+      return `${actorName} wants to join ${meta?.group_name || 'your group'} on Luminary ✦`;
+    case 'group_request_approved':
+      return `Your request to join ${meta?.group_name || 'the group'} was approved ✦`;
+    default:
+      return 'New notification from Luminary ✦';
+  }
 }
+```
 
-function WaitlistField({ label, value, onChange, placeholder, type = 'text' }) {
-  return (
-    <div style={{ flex: 1 }}>
-      <div style={{
-        fontSize: 11.5, fontWeight: 600, color: T.mu,
-        marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.3,
-      }}>
-        {label}
-      </div>
-      <input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: '100%', padding: '9px 11px', borderRadius: 8,
-          border: `1px solid ${T.bdr}`, background: T.s2,
-          fontSize: 13, color: T.text, fontFamily: 'inherit',
-          outline: 'none', boxSizing: 'border-box',
-        }}
+> **Note on Resend template_id vs template slug:** Resend's API accepts
+> either the UUID or the slug as `template_id`. The slugs (`new-follower`,
+> `new-direct-message`, etc.) are confirmed to work. If Resend returns
+> a template-not-found error, fall back to using the UUID from the
+> dashboard URL instead.
+
+---
+
+## Step 4 — Edge Function: send-welcome-email
+
+Create `supabase/functions/send-welcome-email/index.ts`:
+
+```typescript
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
+const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const FROM_EMAIL     = 'Luminary Team <team@luminary.to>';
+const APP_URL        = 'https://luminary.to';
+
+serve(async (req) => {
+  try {
+    const payload = await req.json();
+    const record  = payload.record;
+    if (!record) return new Response('no record', { status: 200 });
+
+    const { id: userId, name, profile_slug, welcome_email_sent } = record;
+
+    // Skip if welcome email already sent (backfilled users)
+    if (welcome_email_sent === true) {
+      return new Response('already sent', { status: 200 });
+    }
+
+    // Skip if profile is incomplete (name not yet set)
+    // Welcome email fires after onboarding, not at bare auth creation
+    if (!name) return new Response('no name yet', { status: 200 });
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Fetch email from auth.users
+    const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+    const recipientEmail = authUser?.user?.email;
+    if (!recipientEmail) return new Response('no email', { status: 200 });
+
+    // Send welcome email
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        from:        FROM_EMAIL,
+        to:          recipientEmail,
+        subject:     'Welcome to Luminary ✦',
+        template_id: 'welcome',
+        variables: {
+          name:        name || 'there',
+          profile_url: profile_slug
+            ? `${APP_URL}/p/${profile_slug}`
+            : APP_URL,
+          settings_url: APP_URL,
+        },
+      }),
+    });
+
+    if (!resendResponse.ok) {
+      const err = await resendResponse.text();
+      console.error('Resend error:', err);
+      return new Response('resend error', { status: 500 });
+    }
+
+    // Mark welcome email as sent to prevent duplicates
+    await supabase
+      .from('profiles')
+      .update({ welcome_email_sent: true })
+      .eq('id', userId);
+
+    return new Response('ok', { status: 200 });
+
+  } catch (err) {
+    console.error('Edge function error:', err);
+    return new Response('error', { status: 500 });
+  }
+});
+```
+
+> **Important:** The welcome email trigger fires on ANY profiles update
+> (because profile_slug and name are set after signup, not at row
+> creation). The `welcome_email_sent` flag prevents duplicate sends.
+> The check `if (!name)` prevents sending before the user completes
+> onboarding.
+
+---
+
+## Step 5 — Supabase webhook configuration (manual)
+
+Tell the user to configure two database webhooks in the Supabase
+dashboard:
+
+**Webhook 1 — Notification emails:**
+- Supabase Dashboard → Database → Webhooks → Create webhook
+- Name: `email-notification`
+- Table: `notifications`
+- Events: `INSERT`
+- URL: `https://[your-project-ref].supabase.co/functions/v1/send-email-notification`
+- HTTP Headers: `Authorization: Bearer [your-anon-key]`
+
+**Webhook 2 — Welcome email:**
+- Name: `welcome-email`
+- Table: `profiles`
+- Events: `UPDATE` (not INSERT — name and profile_slug are set after initial row creation)
+- Filter: `welcome_email_sent=eq.false` (only fire when not yet sent)
+- URL: `https://[your-project-ref].supabase.co/functions/v1/send-welcome-email`
+- HTTP Headers: `Authorization: Bearer [your-anon-key]`
+
+The project ref is visible in Supabase Dashboard → Settings → API.
+
+---
+
+## Step 6 — Settings screen: email preference toggles
+
+Read the existing Settings or Profile settings screen to understand
+how preferences are currently displayed. Find where `email_notifications`
+master toggle lives.
+
+Add four individual toggles in a new "Email notifications" subsection,
+below the existing master toggle:
+
+```jsx
+{/* Email notifications section */}
+<div style={{ marginBottom: 24 }}>
+  <div style={{
+    fontSize: 13, fontWeight: 700, color: T.text,
+    marginBottom: 4,
+  }}>
+    Email notifications
+  </div>
+  <div style={{
+    fontSize: 12, color: T.mu, marginBottom: 14,
+  }}>
+    Choose which activity sends you an email.
+    All emails are sent from team@luminary.to.
+  </div>
+
+  {/* Master toggle — existing, keep as-is */}
+  <ToggleRow
+    label="Email notifications"
+    sublabel="Master switch — turns all emails on or off"
+    value={profile.email_notifications}
+    onChange={v => updateProfile({ email_notifications: v })}
+  />
+
+  {/* Individual toggles — new, only shown when master is on */}
+  {profile.email_notifications && (
+    <div style={{
+      marginLeft: 16,
+      paddingLeft: 16,
+      borderLeft: `2px solid ${T.bdr}`,
+      marginTop: 12,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+    }}>
+      <ToggleRow
+        label="New follower"
+        sublabel="When someone follows you"
+        value={profile.email_notif_new_follower ?? true}
+        onChange={v => updateProfile({ email_notif_new_follower: v })}
+      />
+      <ToggleRow
+        label="New message"
+        sublabel="When you receive a direct message"
+        value={profile.email_notif_new_message ?? true}
+        onChange={v => updateProfile({ email_notif_new_message: v })}
+      />
+      <ToggleRow
+        label="Group join requests"
+        sublabel="When someone requests to join your group"
+        value={profile.email_notif_group_request ?? true}
+        onChange={v => updateProfile({ email_notif_group_request: v })}
       />
     </div>
-  );
-}
+  )}
+</div>
 ```
 
----
+Match the existing toggle component style exactly — use whatever
+`ToggleRow` or equivalent component already exists in the settings
+screen. If no reusable toggle component exists, extract one from the
+existing toggle markup.
 
-## Step 4 — AuthScreen.jsx — read prefill_invite_code
-
-In `AuthScreen.jsx`, on component mount, check for
-`sessionStorage.getItem('prefill_invite_code')`. If present:
-- Pre-fill the invite code input field with that value
-- Clear it from sessionStorage immediately
-- Switch to the signup tab/mode if AuthScreen has tab state
-
-This makes the handoff from LandingScreen → AuthScreen seamless —
-the user clicks "Continue" on the landing page, the auth screen opens
-with their code already filled in.
-
+The `updateProfile` function should debounce and save to Supabase:
 ```javascript
-useEffect(() => {
-  const prefill = sessionStorage.getItem('prefill_invite_code');
-  if (prefill) {
-    sessionStorage.removeItem('prefill_invite_code');
-    // Set the invite code field value to prefill
-    // Switch to signup mode if applicable
-    // (match whatever state variables AuthScreen uses for these)
-  }
-}, []);
+const updateProfile = async (updates) => {
+  setProfile(prev => ({ ...prev, ...updates }));
+  await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', user.id);
+};
 ```
 
 ---
 
-## Step 5 — ORCID redirect in LandingScreen
+## Step 7 — NotifsScreen: verify display of group types
 
-Read the ORCID OAuth redirect URL construction from `AuthScreen.jsx`.
-Copy the exact same redirect logic into the `handleOrcid` function in
-`LandingScreen.jsx`. Do NOT duplicate constants — if the ORCID client
-ID or redirect URI is stored in `constants.js` or an env var, import
-it from there. The redirect should behave identically whether triggered
-from the landing page or from AuthScreen.
+Read `NotifsScreen.jsx` and verify:
+
+1. `group_join_request` renders correctly — shows actor name +
+   "requested to join [group_name]" + clicking navigates to the group
+2. `group_request_approved` renders correctly — shows actor name +
+   "approved your request to join [group_name]" + clicking navigates
+   to the group
+
+If either type is missing from the `NOTIF_CONFIG` map or renders as
+a generic fallback, add the correct config entry. Match the existing
+pattern exactly.
+
+Also verify that the unread notification count in the bell icon
+includes `group_join_request` and `group_request_approved` types.
+If the count query filters by specific types and excludes these, add
+them to the filter.
 
 ---
 
 ## What NOT to change
 
 - `src/screens/GroupsScreen.jsx` — legacy file, do not touch
-- `AuthScreen.jsx` auth logic — only add the `prefill_invite_code`
-  sessionStorage read (Step 4)
-- ORCID callback handling in `App.jsx` — must continue to work
-- All public routes (`/p/:slug`, `/s/:postId`, `/paper/:doi`, `/c/:slug`)
-- Admin route (`/admin`)
-- Any authenticated app screens
+- `groups.owner_id`, `groups.is_private` (legacy fields)
+- Existing notification insert calls beyond adding missing `meta` fields
+- Existing Resend template content — templates are managed in
+  Resend dashboard, not in code
+- Any existing feed, profile, groups, projects screens
 - Run `npm run build` when done
 
 ---
@@ -1130,124 +548,114 @@ from the landing page or from AuthScreen.
 ## Deployment
 
 ```bash
-# No migration needed — waitlist table already exists.
+# 1. Run migration_email_notifications.sql in Supabase SQL Editor
 
-# Verify waitlist table has correct columns:
-# select column_name from information_schema.columns
-# where table_name = 'waitlist' order by ordinal_position;
-# Expected: id, full_name, email, institution, role_title,
-#           referral_source, is_priority, created_at
+# 2. Deploy Edge Functions:
+supabase functions deploy send-email-notification
+supabase functions deploy send-welcome-email
 
-# Deploy:
-git add . && git commit -m "Landing page: unauthenticated home screen with waitlist, invite code flow, ORCID join" && git push
+# 3. Configure the two database webhooks in Supabase Dashboard
+#    (see Step 5 above)
+
+# 4. Deploy app changes:
+git add . && git commit -m "Phase 7A: Email notifications via Resend — follower, message, group request, welcome" && git push
+
+# 5. Test (see Remind the user section)
 ```
 
 ---
 
 ## Remind the user
 
-**Footer links:** Privacy Policy and Terms of Use currently use `href="#"`
-as placeholders. Search for `TODO: Replace #` in `LandingScreen.jsx`
-to find them. Update when those pages are ready.
+**Testing the notification emails:**
 
-**Waitlist referral tracking:** Share links with `?ref=AHA2026` or
-`?ref=CARDIOLOGY_CONF` to track where signups come from. The
-`referral_source` column captures this automatically.
+Each email type can be tested by triggering the action in the app
+and watching for the email to arrive:
 
-**Prioritising waitlist applicants:** In Supabase → Table Editor →
-waitlist, set `is_priority = true` for applicants you want to invite
-next. Then generate an invite code and email them directly.
+1. **New follower** — log in as User B, follow User A. Check User A's
+   inbox for the follower notification email.
 
-**Contact email in footer:** Currently set to `team@luminary.to`.
-Update if this address changes.
+2. **New message** — send a DM from User B to User A. Check User A's
+   inbox for the message notification email.
+
+3. **Group join request** — as User B, request to join a closed group
+   owned by User A. Check User A's inbox for the join request email.
+
+4. **Group request approved** — as User A (group admin), approve User
+   B's join request. Check User B's inbox for the approval email.
+
+5. **Welcome email** — create a fresh test account, complete
+   onboarding. Check the new account's inbox for the welcome email.
+
+**If emails are not arriving:**
+- Check Supabase Dashboard → Edge Functions → Logs for errors
+- Check Resend Dashboard → Logs to see if API calls are reaching Resend
+- Verify the webhook is configured and firing (Supabase → Webhooks →
+  check "Last triggered" timestamp)
+- Verify `RESEND_API_KEY` is set in Edge Function secrets
+- Check spam folder
+
+**Testing email preferences:**
+1. Go to Settings → Email notifications
+2. Toggle "New follower" off
+3. Follow yourself from another account
+4. Verify no email arrives
+5. Toggle back on, verify email arrives on next follow action
 
 ---
 
 ## Testing checklist
 
-**Routing:**
-- [ ] Unauthenticated visitor at `/` sees LandingScreen (not AuthScreen)
-- [ ] Authenticated user at `/` goes directly to app (LandingScreen not shown)
-- [ ] `/p/:slug` still works for unauthenticated visitors
-- [ ] `/s/:postId` still works for unauthenticated visitors
-- [ ] `/paper/:doi` still works for unauthenticated visitors
-- [ ] `/admin` still gate-checks correctly
-- [ ] ORCID callback still handled correctly after OAuth redirect
+**Migration:**
+- [ ] `profiles.email_notif_new_follower` column exists, defaults true
+- [ ] `profiles.email_notif_new_message` column exists, defaults true
+- [ ] `profiles.email_notif_group_request` column exists, defaults true
+- [ ] `profiles.welcome_email_sent` column exists, defaults false
+- [ ] Existing users with `email_notifications = false` have granular
+      prefs set to false
+- [ ] Existing users have `welcome_email_sent = true` (backfilled)
 
-**Header:**
-- [ ] Luminary wordmark shows in header
-- [ ] "Have an invite code?" button visible
-- [ ] "Join with ORCID" button visible
-- [ ] "Log in" button visible
-- [ ] Header is sticky on scroll
+**Group join request meta (Step 2):**
+- [ ] When a user requests to join a closed group, the notification
+      insert includes `meta.group_id` and `meta.group_name`
+- [ ] When admin approves a request, the notification insert includes
+      `meta.group_id` and `meta.group_name`
 
-**Hero:**
-- [ ] Tagline renders in DM Serif Display
-- [ ] "I have an invite code →" button shows inline form on click
-- [ ] "Request early access" scrolls to waitlist section
-- [ ] "Early access — by invitation" eyebrow badge visible
+**Edge Functions:**
+- [ ] `send-email-notification` deploys without errors
+- [ ] `send-welcome-email` deploys without errors
+- [ ] Both functions appear in Supabase Dashboard → Edge Functions
 
-**Invite code form (inline):**
-- [ ] Form appears below hero CTAs on click
-- [ ] Input auto-focuses
-- [ ] Input converts to uppercase as user types
-- [ ] Enter key submits
-- [ ] Invalid code → shows error message
-- [ ] Already-claimed code → shows error
-- [ ] Expired code → shows error
-- [ ] Locked code → shows error
-- [ ] Valid code → stores in sessionStorage, calls onShowAuth()
-- [ ] AuthScreen opens with invite code pre-filled
-- [ ] sessionStorage entry cleared after read
+**Webhooks:**
+- [ ] `email-notification` webhook configured on `notifications` INSERT
+- [ ] `welcome-email` webhook configured on `profiles` UPDATE
+- [ ] Both webhooks show correct Edge Function URLs
 
-**ORCID:**
-- [ ] "Join with ORCID" in header triggers ORCID OAuth redirect
-- [ ] Redirect URL matches exactly what AuthScreen uses
-- [ ] ORCID callback after auth still works correctly
+**Email delivery:**
+- [ ] New follower → email received with correct follower name
+- [ ] New message → email received with correct sender name and preview
+- [ ] Group join request → email received with requester name,
+      title, institution, and group name
+- [ ] Group request approved → email received with group name
+- [ ] Welcome email → received after completing onboarding
+- [ ] No duplicate welcome emails on subsequent profile updates
+- [ ] Emails arrive from `team@luminary.to`
+- [ ] All emails use correct Resend template styling
 
-**Log in:**
-- [ ] "Log in" in header shows AuthScreen
-- [ ] "Already have an account? Log in" in invite form also shows AuthScreen
+**Email preferences (Settings screen):**
+- [ ] Four toggles visible under Email notifications section
+- [ ] Individual toggles only shown when master toggle is on
+- [ ] Toggling "New follower" off → no email on next follow action
+- [ ] Toggling "New message" off → no email on next DM received
+- [ ] Toggling "Group join requests" off → no email on next request
+- [ ] Preferences persist after page refresh
+- [ ] Master toggle off → no emails regardless of individual settings
 
-**Use cases carousel:**
-- [ ] Carousel renders between feature pillars and "Who it's for" sections
-- [ ] First card shows on load
-- [ ] Progress bar fills over 5 seconds then advances to next card
-- [ ] Auto-advance pauses when mouse hovers over carousel
-- [ ] Auto-advance resumes when mouse leaves
-- [ ] "›" next button advances to next card and resets progress bar
-- [ ] "‹" prev button goes to previous card and resets progress bar
-- [ ] Dot indicators show active card (wider violet dot)
-- [ ] Clicking any dot jumps to that card
-- [ ] Counter shows "X / 12" correctly
-- [ ] All 12 use case cards render with correct icon, tag, headline, scenario
-- [ ] Card transitions feel smooth (no janky resets)
+**NotifsScreen:**
+- [ ] `group_join_request` shows correctly in notification bell
+- [ ] `group_request_approved` shows correctly in notification bell
+- [ ] Both types included in unread count
+- [ ] Clicking group notification navigates to the correct group
 
-**Feature pillars:**
-- [ ] Three cards render with correct icons, titles, descriptions
-- [ ] Cards use T.w background and T.bdr border
-
-**Who it's for:**
-- [ ] Three role cards render (Researchers / Clinicians / Industry)
-- [ ] Icon backgrounds use correct T.v2 / T.gr2 / T.bl2 colours
-
-**Waitlist form:**
-- [ ] Form renders with four fields
-- [ ] Name and email are required — submitting empty shows error
-- [ ] Invalid email format shows error
-- [ ] Valid submission inserts row in `waitlist` table
-- [ ] Success state shows confirmation card
-- [ ] Duplicate email shows "already on waitlist" message
-- [ ] `?ref=AHA2026` URL param pre-populates referral_source silently
-- [ ] Verify in Supabase: waitlist row has correct field values
-
-**Footer:**
-- [ ] Privacy Policy, Terms of Use, Contact links visible
-- [ ] Contact links to `mailto:team@luminary.to`
-- [ ] Copyright year is current
-
-**Visual:**
-- [ ] DM Serif Display used for all headings
-- [ ] All colours use T.* tokens (no hardcoded hex)
-- [ ] Page scrolls smoothly
+**Build:**
 - [ ] `npm run build` succeeds with no new warnings
