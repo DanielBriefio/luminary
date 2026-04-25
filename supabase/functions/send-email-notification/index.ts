@@ -189,7 +189,7 @@ const escape = (s: string) =>
     .replace(/"/g, '&quot;');
 
 function shell(bodyHtml: string, ctaUrl: string, ctaLabel: string): string {
-  const settingsUrl = 'https://luminary.to';
+  const settingsUrl = 'https://luminary.to/?settings=email';
   return `<!doctype html>
 <html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f2f3fb;font-family:'DM Sans',Helvetica,Arial,sans-serif;color:#1b1d36;">

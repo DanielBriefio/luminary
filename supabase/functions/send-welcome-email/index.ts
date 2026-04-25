@@ -78,7 +78,7 @@ const escape = (s: string) =>
 function renderWelcomeHtml(name: string, profileUrl: string): string {
   const safeName    = escape(name);
   const safeProfile = escape(profileUrl);
-  const settingsUrl = APP_URL;
+  const settingsUrl = `${APP_URL}/?settings=email`;
   return `<!doctype html>
 <html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f2f3fb;font-family:'DM Sans',Helvetica,Arial,sans-serif;color:#1b1d36;">
@@ -92,18 +92,21 @@ function renderWelcomeHtml(name: string, profileUrl: string): string {
           Welcome to Luminary, ${safeName}.
         </td></tr>
         <tr><td style="padding:0 28px 20px;font-size:15px;line-height:1.65;color:#1b1d36;">
-          <p style="margin:0 0 12px;">You're now part of a network built for researchers, clinicians, and industry scientists — where research meets practice and evidence becomes conversation.</p>
-          <p style="margin:0 0 12px;"><strong>A few things to try first:</strong></p>
-          <ul style="margin:0 0 12px;padding-left:20px;">
-            <li style="margin-bottom:6px;">Complete your profile — add your work history, publications, and topics you're interested in.</li>
-            <li style="margin-bottom:6px;">Follow a few researchers, papers, or groups in your field.</li>
-            <li style="margin-bottom:6px;">Share a paper or post your first take on something you're reading.</li>
-          </ul>
-        </td></tr>
-        <tr><td style="padding:0 28px 28px;">
-          <a href="${safeProfile}" style="display:inline-block;background:#6c63ff;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px;">
-            Complete your profile →
-          </a>
+          <p style="margin:0 0 12px;">My name is Daniel, and I built Luminary because I was missing a space where scientists can learn, discuss, and connect — without the noise. A platform for people who never stop being curious about science. Because innovation only happens when we share, collaborate, and learn from each other.</p>
+          <p style="margin:0 0 12px;">We are still beginning! — and you're one of our <strong>founding members</strong>, and that means something real. Luminary grows through <strong>invitation only</strong> — so the people you invite shape the community we become. Invite the colleagues you'd genuinely love to discuss science with.</p>
+          <p style="margin:0 0 12px;"><strong>A few things worth exploring first:</strong></p>
+          <p style="margin:0 0 8px;">🤖 <strong>AI profile import</strong> — upload your CV as a PDF and our AI auto-fills your profile including publications. Or import directly from ORCID or LinkedIn.</p>
+          <p style="margin:0 0 8px;">🌐 <strong>Your own scientific profile</strong> — shareable at <code style="background-color:#f2f3fb;color:#6c63ff;">${safeProfile}</code>, fully under your control.</p>
+          <p style="margin:0 0 8px;">📱 <strong>QR business card</strong> — exchange your full profile instantly when you meet colleagues at conferences or events.</p>
+          <p style="margin:0 0 8px;">📌 <strong>QR for posters and presentations</strong> — let your audience connect with you even after you've moved on.</p>
+          <p style="margin:0 0 8px;">📄 <strong>Discuss papers</strong> — share papers from Europe PMC or by DOI, add your annotation, invite colleagues to comment.</p>
+          <p style="margin:0 0 8px;">👥 <strong>Create your own Group</strong> — running a research group, a department, or a journal club? Create your private space on Luminary, invite your colleagues, and use it to discuss science, prepare for conferences, or coordinate your next paper review.</p>
+          <p style="margin:0 0 12px;">… and much more to explore.</p>
+          <p style="margin:0 0 12px;">Your first step: <strong>complete your profile</strong> and share your first paper. See you inside.</p>
+          <p style="margin:0 0 12px;">By the way — why did you join Luminary? Reply to this email, I will always answer!</p>
+          <p style="margin:0 0 4px;">Warm regards,</p>
+          <p style="margin:0 0 4px;"><strong>Daniel</strong></p>
+          <p style="margin:0;">Science enthusiast and Creator of Luminary</p>
         </td></tr>
         <tr><td style="padding:18px 28px 24px;border-top:1px solid #e3e5f5;font-size:12px;color:#7a7fa8;line-height:1.6;">
           You're receiving this email because you signed up to Luminary.

@@ -363,6 +363,18 @@ export default function App() {
     }
   }, [session]);
 
+  // Handle ?settings=… deep link (opens the Account Settings panel)
+  useEffect(() => {
+    if (!session) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('settings')) {
+      setShowSettings(true);
+      params.delete('settings');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+  }, [session]);
+
   // Handle luminary:// deep links dispatched by FeedTipCard board CTAs
   useEffect(() => {
     const handler = (e) => {
