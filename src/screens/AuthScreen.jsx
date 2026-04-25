@@ -114,7 +114,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     try {
       const { data: codeRow, error: codeError } = await supabase
         .from('invite_codes')
-        .select('id, code, is_multi_use, max_uses, uses_count, expires_at, locked_at, claimed_by')
+        .select('id, code, is_multi_use, max_uses, uses_count, expires_at, locked_at, claimed_by, created_by')
         .eq('code', inviteCode.trim().toUpperCase())
         .single();
 
@@ -320,6 +320,18 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
       capture('signed_up', { method: 'email' });
       capture('invite_code_used', { code_type: codeRow?.is_multi_use ? 'event' : 'personal' });
+
+      // Notify the inviter that someone redeemed their code
+      if (codeRow?.created_by && codeRow.created_by !== userId) {
+        await supabase.from('notifications').insert({
+          user_id:    codeRow.created_by,
+          actor_id:   userId,
+          notif_type: 'invite_redeemed',
+          meta:       { code: codeRow.code },
+          read:       false,
+        });
+      }
+
       if (authData.session) {
         onAuth();
       } else {

@@ -18,6 +18,8 @@ const EMAIL_TYPES = new Set([
   'new_message',
   'group_join_request',
   'group_request_approved',
+  'new_comment',
+  'invite_redeemed',
 ]);
 
 const PREF_COLUMN: Record<string, string> = {
@@ -25,6 +27,8 @@ const PREF_COLUMN: Record<string, string> = {
   new_message:            'email_notif_new_message',
   group_join_request:     'email_notif_group_request',
   group_request_approved: 'email_notif_group_request',
+  new_comment:            'email_notif_new_comment',
+  invite_redeemed:        'email_notif_invite_redeemed',
 };
 
 serve(async (req) => {
@@ -48,7 +52,9 @@ serve(async (req) => {
         email_notifications,
         email_notif_new_follower,
         email_notif_new_message,
-        email_notif_group_request
+        email_notif_group_request,
+        email_notif_new_comment,
+        email_notif_invite_redeemed
       `)
       .eq('id', user_id)
       .single();
@@ -133,6 +139,37 @@ serve(async (req) => {
       };
     }
 
+    if (notif_type === 'new_comment') {
+      // target_id is the post id; pull a short excerpt for the email body
+      const { data: post } = await supabase
+        .from('posts')
+        .select('id, content, paper_title')
+        .eq('id', target_id)
+        .single();
+
+      const raw = post?.paper_title ?? (post?.content || '').replace(/<[^>]+>/g, '');
+      const excerpt = raw
+        ? (raw.length > 120 ? raw.slice(0, 120).trim() + '…' : raw.trim())
+        : 'your post';
+
+      templateVariables = {
+        ...templateVariables,
+        commenter_name: actor.name || 'A reader',
+        post_excerpt:   excerpt,
+        post_url:       `${APP_URL}/s/${target_id}`,
+      };
+    }
+
+    if (notif_type === 'invite_redeemed') {
+      templateVariables = {
+        ...templateVariables,
+        inviter_name:        actor.name        || 'A new colleague',
+        inviter_title:       actor.title       || '',
+        inviter_institution: actor.institution || '',
+        invite_code:         meta?.code        || '',
+      };
+    }
+
     const html = renderHtml(notif_type, templateVariables);
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
@@ -176,6 +213,10 @@ function buildSubject(
       return `${actorName} wants to join ${meta?.group_name || 'your group'} on Luminary ✦`;
     case 'group_request_approved':
       return `Your request to join ${meta?.group_name || 'the group'} was approved ✦`;
+    case 'new_comment':
+      return `${actorName} commented on your post on Luminary ✦`;
+    case 'invite_redeemed':
+      return `${actorName} just joined Luminary using your invite ✦`;
     default:
       return 'New notification from Luminary ✦';
   }
@@ -260,6 +301,30 @@ function renderHtml(notifType: string, v: Record<string, string>): string {
        <p style="margin:0;">Welcome to the group — head over to introduce yourself and catch up on recent posts.</p>`,
       v.group_url,
       'Open group →',
+    );
+  }
+
+  if (notifType === 'new_comment') {
+    return shell(
+      `<p style="margin:0 0 12px;">Hi ${name},</p>
+       <p style="margin:0 0 12px;"><strong>${escape(v.commenter_name)}</strong> commented on your post:</p>
+       <p style="margin:0 0 12px;padding:12px 14px;background:#f7f8fe;border-left:3px solid #6c63ff;border-radius:0 8px 8px 0;color:#1b1d36;">
+         ${escape(v.post_excerpt)}
+       </p>
+       <p style="margin:0;">Open the post to read the comment and reply.</p>`,
+      v.post_url,
+      'View comment →',
+    );
+  }
+
+  if (notifType === 'invite_redeemed') {
+    const sub = [v.inviter_title, v.inviter_institution].filter(Boolean).join(' · ');
+    return shell(
+      `<p style="margin:0 0 12px;">Hi ${name},</p>
+       <p style="margin:0 0 12px;">Good news — <strong>${escape(v.inviter_name)}</strong>${sub ? ` (${escape(sub)})` : ''} just joined Luminary using your invite${v.invite_code ? ` <code style="background:#f2f3fb;color:#6c63ff;padding:0 4px;border-radius:4px;">${escape(v.invite_code)}</code>` : ''}.</p>
+       <p style="margin:0;">Drop them a follow or a message — early connections shape the community.</p>`,
+      'https://luminary.to',
+      'Open Luminary →',
     );
   }
 

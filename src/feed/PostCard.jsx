@@ -15,6 +15,28 @@ import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
 
+// Inserts a new_comment notification for the post owner, deduped so a flurry
+// of comments while the previous one is still unread doesn't pile up.
+async function notifyPostOwnerOfComment(post, commenterId) {
+  if (!post?.user_id || post.user_id === commenterId) return;
+  const { data: existing } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('user_id',    post.user_id)
+    .eq('notif_type', 'new_comment')
+    .eq('target_id',  post.id)
+    .eq('read',       false)
+    .maybeSingle();
+  if (existing) return;
+  await supabase.from('notifications').insert({
+    user_id:    post.user_id,
+    actor_id:   commenterId,
+    notif_type: 'new_comment',
+    target_id:  post.id,
+    read:       false,
+  });
+}
+
 function GranularTags({ tags, onTagClick }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? tags : tags.slice(0, 3);
@@ -253,6 +275,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       setCommCount(n => n + 1);
       setCommText('');
       capture('comment_posted');
+      await notifyPostOwnerOfComment(post, currentUserId);
     }
     setCommSaving(false);
   };
@@ -299,6 +322,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       .single();
     if (data) setTopComment(data);
     setPromptIndex(i => i + 1);
+    await notifyPostOwnerOfComment(post, currentUserId);
   };
 
   const isRelevantToUser = () => {

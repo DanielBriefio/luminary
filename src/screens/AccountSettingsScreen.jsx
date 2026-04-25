@@ -9,9 +9,11 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
   const [saving,         setSaving]         = useState(false);
   const [saved,          setSaved]          = useState(false);
   const [notifications,  setNotifications]  = useState(profile?.email_notifications ?? true);
-  const [emailFollower,  setEmailFollower]  = useState(profile?.email_notif_new_follower   ?? true);
-  const [emailMessage,   setEmailMessage]   = useState(profile?.email_notif_new_message    ?? true);
-  const [emailGroupReq,  setEmailGroupReq]  = useState(profile?.email_notif_group_request  ?? true);
+  const [emailFollower,  setEmailFollower]  = useState(profile?.email_notif_new_follower      ?? true);
+  const [emailMessage,   setEmailMessage]   = useState(profile?.email_notif_new_message       ?? true);
+  const [emailGroupReq,  setEmailGroupReq]  = useState(profile?.email_notif_group_request     ?? true);
+  const [emailComment,   setEmailComment]   = useState(profile?.email_notif_new_comment       ?? true);
+  const [emailInvite,    setEmailInvite]    = useState(profile?.email_notif_invite_redeemed   ?? true);
   const [marketing,      setMarketing]      = useState(profile?.email_marketing ?? false);
   const [analytics,      setAnalytics]      = useState(!!profile?.analytics_consent_at);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
@@ -39,11 +41,13 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
   const savePreferences = async () => {
     setSaving(true);
     const updates = {
-      email_notifications:        notifications,
-      email_notif_new_follower:   emailFollower,
-      email_notif_new_message:    emailMessage,
-      email_notif_group_request:  emailGroupReq,
-      email_marketing:            marketing,
+      email_notifications:           notifications,
+      email_notif_new_follower:      emailFollower,
+      email_notif_new_message:       emailMessage,
+      email_notif_group_request:     emailGroupReq,
+      email_notif_new_comment:       emailComment,
+      email_notif_invite_redeemed:   emailInvite,
+      email_marketing:               marketing,
       marketing_consent_at: marketing
         ? (profile?.marketing_consent_at || new Date().toISOString())
         : null,
@@ -319,6 +323,16 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
                 value={emailGroupReq} onChange={setEmailGroupReq}
                 label="Group join requests"
                 sublabel="When someone requests to join a group you admin, or your request is approved"
+              />
+              <Toggle
+                value={emailComment} onChange={setEmailComment}
+                label="Comments on your posts"
+                sublabel="When someone comments on a post you've published"
+              />
+              <Toggle
+                value={emailInvite} onChange={setEmailInvite}
+                label="Invite redeemed"
+                sublabel="When someone joins Luminary using one of your invite codes"
               />
             </div>
           )}
