@@ -140,23 +140,27 @@ serve(async (req) => {
     }
 
     if (notif_type === 'new_comment') {
-      // target_id is the post id; pull a short excerpt for the email body
-      const { data: post } = await supabase
-        .from('posts')
-        .select('id, content, paper_title')
-        .eq('id', target_id)
+      // target_id is the post id; the email preview should show the
+      // actual comment text the actor just wrote, not the post body.
+      const { data: comment } = await supabase
+        .from('comments')
+        .select('content')
+        .eq('post_id', target_id)
+        .eq('user_id', actor_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .single();
 
-      const raw = post?.paper_title ?? (post?.content || '').replace(/<[^>]+>/g, '');
-      const excerpt = raw
-        ? (raw.length > 120 ? raw.slice(0, 120).trim() + '…' : raw.trim())
-        : 'your post';
+      const raw = (comment?.content || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      const preview = raw
+        ? (raw.length > 240 ? raw.slice(0, 240).trim() + '…' : raw)
+        : 'Left a comment on your post';
 
       templateVariables = {
         ...templateVariables,
-        commenter_name: actor.name || 'A reader',
-        post_excerpt:   excerpt,
-        post_url:       `${APP_URL}/s/${target_id}`,
+        commenter_name:  actor.name || 'A reader',
+        comment_preview: preview,
+        post_url:        `${APP_URL}/s/${target_id}`,
       };
     }
 
@@ -308,10 +312,10 @@ function renderHtml(notifType: string, v: Record<string, string>): string {
     return shell(
       `<p style="margin:0 0 12px;">Hi ${name},</p>
        <p style="margin:0 0 12px;"><strong>${escape(v.commenter_name)}</strong> commented on your post:</p>
-       <p style="margin:0 0 12px;padding:12px 14px;background:#f7f8fe;border-left:3px solid #6c63ff;border-radius:0 8px 8px 0;color:#1b1d36;">
-         ${escape(v.post_excerpt)}
+       <p style="margin:0 0 12px;padding:12px 14px;background:#f7f8fe;border-left:3px solid #6c63ff;border-radius:0 8px 8px 0;color:#1b1d36;font-style:italic;">
+         ${escape(v.comment_preview)}
        </p>
-       <p style="margin:0;">Open the post to read the comment and reply.</p>`,
+       <p style="margin:0;">Open the post to read the full thread and reply.</p>`,
       v.post_url,
       'View comment →',
     );
