@@ -54,8 +54,9 @@ src/
                 RichTextEditor, ConflictResolverModal, ReportModal, ExpandableBio, Linkify,
                 LinkPreview, ShareModal, BottomNav, TopicInterestsPicker,
                 ProfileCompletionMeter, FeedTipCard, Footer
-  screens/    — AuthScreen, OnboardingScreen, NewPostScreen, ExploreScreen, NotifsScreen,
-                NetworkScreen, MessagesScreen, AccountSettingsScreen, SettingsScreen, ResetPasswordScreen
+  screens/    — LandingScreen, LegalPage, AuthScreen, OnboardingScreen, NewPostScreen,
+                ExploreScreen, NotifsScreen, NetworkScreen, MessagesScreen,
+                AccountSettingsScreen, SettingsScreen, ResetPasswordScreen
   feed/       — FeedScreen, PostCard
   profile/    — ProfileScreen, PublicationsTab, UserProfileScreen, PublicProfilePage,
                 ShareProfilePanel, PubRow, SectionGroup, BusinessCardView, CardPage,
@@ -104,6 +105,8 @@ src/
 - `posts.target_user_id` (uuid, FK profiles) — targeted posts are filtered client-side: only shown to the specific user; milestone posts also use this
 - `admin_config` — key/value store for admin-controlled settings; keys: `luminary_board`, `paper_of_week`, `milestone_post_template`; read via `get_admin_config(p_key)`, written via `set_admin_config(p_key, p_value)`; RLS + RPC both allow all authenticated users to read `luminary_board`, `paper_of_week`, `milestone_post_template`; admins can read/write all keys
 - `posts.is_featured`, `posts.featured_until`, `posts.featured_at` — columns exist in DB but are unused; featured post feature was removed from the frontend
+- `profiles.email_notif_new_follower`, `email_notif_new_message`, `email_notif_group_request`, `email_notif_new_comment`, `email_notif_invite_redeemed` — granular email-pref booleans (default true), each gating one Resend email type. Master switch is `profiles.email_notifications`; an OFF master skips all transactional email regardless of granular state.
+- `profiles.welcome_email_sent` — bool, default false. The `send-welcome-email` Edge Function flips this to true after first send so subsequent profile UPDATEs don't re-send. Existing users were backfilled to true in `migration_email_notifications.sql`.
 
 ## RPCs
 
@@ -132,10 +135,14 @@ All are SECURITY DEFINER. Admin-only RPCs require `is_admin = true` on the calle
 
 ## Edge Functions
 
-Both use the anon JWT from `EDGE_HEADERS` in constants.js.
+App-callable functions use the anon JWT from `EDGE_HEADERS` in constants.js. Webhook-fired functions verify any valid Supabase JWT (legacy `anon` key) supplied in the webhook's Authorization header — the new `sb_publishable_*` key format is not a JWT and gets rejected with `INVALID_JWT_FORMAT`.
 
 - **`extract-publications`** (`EDGE_FN`): `mode:'full_cv'` or `mode:'publications'`; input `{ base64, mediaType }` for PDF or `{ text }` for plain text; returns `{ result: { profile, work_history, education, honors, languages, skills, publications } }`
 - **`auto-tag`**: input `{ content, paperTitle, paperJournal, paperAbstract }`; returns `{ tags: string[] }`; enabled by `AUTO_TAG_ENABLED` in constants.js; always best-effort (never blocks publish)
+- **`orcid-callback`**: ORCID OAuth redirect target; bridges `auth.users` ↔ `orcid_pending` row, then redirects back with `?orcid_token=…` for AuthScreen to complete signup
+- **`validate-invite`**: server-side invite-code check (legacy; AuthScreen now does this client-side)
+- **`send-email-notification`**: webhook-triggered on `notifications` INSERT. Dispatches Resend transactional email for `new_follower`, `new_message`, `group_join_request`, `group_request_approved`, `new_comment`, `invite_redeemed`. Inline HTML bodies built per type — Resend's `template_id` is **not** for transactional sends, only for Broadcasts. Gated on master + granular email prefs.
+- **`send-welcome-email`**: webhook-triggered on `profiles` UPDATE. Sends a one-shot welcome email when `name` is set and `welcome_email_sent = false`, then flips the flag.
 
 ## Conventions
 
@@ -154,7 +161,13 @@ Both use the anon JWT from `EDGE_HEADERS` in constants.js.
 - **Group RLS** uses SECURITY DEFINER helpers (`get_my_group_ids()`, `get_my_admin_group_ids()`, etc.) to avoid infinite recursion
 - **Fuzzy dedup** for profile imports: `deduplicateSectionFuzzy` + `scoreWorkMatch`/`scoreEduMatch` in utils.js
 - **projectTemplates.js**: `FAST_TEMPLATES` (fast-4 picker), `GALLERY_TEMPLATES` (gallery-only); `galleryOnly: true` excluded from fast-4 picker; `applyTemplate(template, name, projectId, userId)` → `{ folders, posts }`
-- **Public routes** (no auth, no sidebar): `/p/:slug` → PublicProfilePage, `/s/:postId` → PublicPostPage, `/paper/:doi` → PaperDetailPage, `/g/:slug` → PublicGroupProfileScreen, `/c/:slug` → CardPage
+- **Public routes** (no auth, no sidebar): `/p/:slug` → PublicProfilePage, `/s/:postId` → PublicPostPage, `/paper/:doi` → PaperDetailPage, `/g/:slug` → PublicGroupProfileScreen, `/c/:slug` → CardPage, `/privacy` `/terms` `/cookies` → LegalPage (renders markdown from `public/legal/*.md`)
+- **Unauthenticated root `/`**: shows `LandingScreen` instead of `AuthScreen` until the user clicks a sign-in CTA. App.jsx tracks this via `showAuthScreen` state. Exceptions where AuthScreen renders directly even without a session: `/admin`, ORCID callback (`?orcid_token=…`), ORCID error redirect.
+- **Settings deep link**: `?settings=…` on any URL opens the Account Settings panel after auth. Used by transactional emails (e.g. "Manage preferences" link). App.jsx clears the param via `history.replaceState` after opening.
+- **sessionStorage.prefill_invite_code** — set by LandingScreen's invite form on a successful client-side validation; AuthScreen reads it on mount, clears it, and pre-fills the invite-code field while switching to the signup → invite path.
+- **Notification denormalisation** — group/paper context (e.g. `group_id`, `group_name`, `paper_title`) is written into `notifications.meta` JSONB at insert time. NotifsScreen reads meta directly without re-joining; emails read meta in the Edge Function. Renaming a group later does not retroactively update existing notifications.
+- **Notification dedup** — DM send (`MessagesScreen.sendMessage`) and comment publish (`PostCard.submitComment` / `submitQuickReply`) only insert a notification if no unread notification of the same type already exists for the same `target_id`. This prevents bell-spam and per-message email floods on active threads.
+- **Notification insert sites** (frontend, no DB triggers): follow → FollowBtn; DM → MessagesScreen; comment → PostCard; group join request → GroupScreen.JoinRequestPanel; approve/leave/alumni/public-join → GroupMembers + GroupScreen.PublicJoinPanel; invite redeemed → AuthScreen.handleInviteSignup
 - **Analytics**: PostHog consent-gated via `analytics_consent_at` on profiles. `capture(event, properties)` from `src/lib/analytics.js` — import and call after successful Supabase operations. Never call before the await or in an error branch.
 - **Gamification**: XP/level badge in sidebar is decorative — not wired to real activity yet
 - **Responsive**: no media queries; `useWindowSize` hook returns `{ isMobile }` (< 768px)

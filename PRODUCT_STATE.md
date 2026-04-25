@@ -1,7 +1,14 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-24 (rev 11)_
+_Last updated: 2026-04-25 (rev 12)_
 
 ## What exists and works
+
+### Landing page (unauthenticated `/`)
+- Replaces direct-to-AuthScreen for unauth visitors at root
+- Sticky header (Have-an-invite-code / Join with ORCID / Log in), hero with tagline + dual CTAs, inline invite-code form with client-side validation, 3 feature pillars, 12-card auto-advancing use-case carousel (pauses on hover), 3 "Who Luminary is for" cards (Researchers / Clinicians / Industry), waitlist form (with `?ref=` URL-param capture for source attribution), legal footer
+- Validated invite code is handed off to AuthScreen via `sessionStorage.prefill_invite_code` so the user lands directly on the signup form with their code pre-filled
+- Mobile responsive (single-column grids, full-width CTAs, compact header) below 768px via `useWindowSize`
+- ORCID OAuth handler matches AuthScreen exactly (same client ID, redirect URI, `state=signup`)
 
 ### Core auth & onboarding
 - Email/password sign-up and login (Supabase Auth)
@@ -42,8 +49,20 @@ _Last updated: 2026-04-24 (rev 11)_
 - **PublicGroupProfileScreen** (`/g/:slug`): public group page with stats, recent posts, publications (no auth)
 
 ### Notifications
-- Types: `new_post`, `new_comment`, `paper_comment`, `new_follower`, `group_post`
-- `group_post` → click navigates to group; unread badge; mark-all-read on open
+- Types: `new_post`, `new_comment`, `paper_comment`, `new_follower`, `group_post`, `group_announcement`, `group_member_added`, `group_join_request`, `group_request_approved`, `group_alumni_granted`, `group_member_joined`, `group_member_left`, `invite_redeemed`
+- Bell-icon click navigates: post-types → `/s/:postId`; group-types → group; otherwise → actor profile
+- Unread badge polled every 30s in App.jsx; mark-all-read on NotifsScreen open
+- Group/paper context denormalised into `notifications.meta` (`group_id`, `group_name`, `paper_title`) at insert time
+- DM and new_comment notifications are deduped per-target: a flurry of comments on one post (or messages in one thread) produces one notification + one email until the recipient marks it read
+
+### Email notifications (Resend)
+- Two Edge Functions: `send-email-notification` (notifications-table INSERT webhook) and `send-welcome-email` (profiles-table UPDATE webhook)
+- Wired types: `new_follower`, `new_message`, `group_join_request`, `group_request_approved`, `new_comment`, `invite_redeemed`, plus the one-shot welcome on profile UPDATE with `name` set
+- Inline branded HTML bodies (DM Sans + DM Serif Display, violet accent, "Manage preferences" link with `?settings=email` deep-link to AccountSettings)
+- Per-recipient gate: master `email_notifications` toggle plus five granular toggles (`email_notif_new_follower`, `_new_message`, `_group_request`, `_new_comment`, `_invite_redeemed`); UI lives under Account Settings → Email preferences as nested toggles, only shown when master is on
+- `welcome_email_sent` flag prevents duplicate welcomes; existing pre-system users were backfilled to true
+- All HTML sanitised via `escape()` helper to avoid injection from user-controlled fields (names, group names, post excerpts)
+- Webhook header authentication uses the legacy `anon` JWT — new `sb_publishable_*` keys are not JWTs and get rejected with `INVALID_JWT_FORMAT`
 
 ### Direct Messages
 - Conversation list (280px) with unread badge; real-time thread via Supabase channel subscription
@@ -62,7 +81,7 @@ _Last updated: 2026-04-24 (rev 11)_
 - Publications tab: CRUD, EPMC name search, ORCID import, AI import, .ris/.bib import, export (BibTeX / RIS / PDF)
 - Share panel: slug editor, per-section visibility toggles, SVG badge, QR code
 - Login email displayed as read-only in the business card edit section (above work email) and in Account Settings; labelled "Login email — not editable here"
-- Profile completion meter (`ProfileCompletionMeter`): milestone checklist with 5 stages (Newcomer → Luminary); confetti on stage unlock; CTA actions link to relevant edit flows
+- Profile completion meter (`ProfileCompletionMeter`): 12 milestones across 5 stages (Identified → Visible) at thresholds 3 / 5 / 7 / 9 / 12; confetti on stage unlock; CTA actions link to relevant edit flows. Simplified in 2026-04: ORCID-required, first-publication, and 5-publications milestones removed; "Follow 3 researchers" relaxed to 1.
 
 ### User Profile (other users)
 - Tabs: About / Publications / Posts; Follow, Message buttons
@@ -176,10 +195,12 @@ _Last updated: 2026-04-24 (rev 11)_
 
 ## Known gaps / not yet built
 
-- **Mobile layout**: No responsive design. Desktop-only (200px sidebar + multi-column grids break on phones). `useWindowSize` hook exists but not wired to layout yet.
+- **Mobile layout (in-app)**: Landing page is responsive, but the authenticated app is still desktop-only — 200px sidebar + multi-column grids break on phones. `useWindowSize` is wired into `App.jsx`, `BottomNav`, and `LandingScreen` but most authenticated screens haven't been adapted.
 - **XP / leveling system**: Sidebar badge is decorative. ProfileCompletionMeter stages are real but don't write to the `xp`/`level` columns.
-- **Push notifications / email digests**: No push; no email. `email_notifications` preference stored but not actioned.
+- **Push notifications / email digests**: Transactional emails ship (Resend, six event types + welcome). No push, no weekly digest.
 - **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state.
+- **Public-group-join email**: Joining a public group inserts a `group_member_joined` notification for admins, but that type isn't in the email function's `EMAIL_TYPES` set yet.
+- **Account deletion retention**: `delete_own_account` RPC hard-deletes immediately; no 30-day soft-delete grace period or admin recovery yet, despite Privacy Policy / Terms language implying retention.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.
 
@@ -188,6 +209,11 @@ _Last updated: 2026-04-24 (rev 11)_
 ## Pending migrations (not yet run in production)
 
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
+
+## Recently shipped migrations
+
+- **`migration_email_notifications.sql`** (Phase 7A): adds `email_notif_new_follower`, `email_notif_new_message`, `email_notif_group_request`, `welcome_email_sent` to profiles; backfills existing users.
+- **`migration_email_notifications_v2.sql`** (Phase 7B): adds `email_notif_new_comment`, `email_notif_invite_redeemed`; respects master toggle for backfill.
 - **`migration_admin_interventions.sql`**: Creates `admin_config` table + RLS; seeds `luminary_board`, `paper_of_week`, `milestone_post_template` rows; adds `get_admin_config`, `set_admin_config`, `send_admin_post` RPCs; adds `is_admin_post` + `target_user_id` columns to `posts`; DROP+CREATE `posts_with_meta` view to include new columns.
 
 ---
