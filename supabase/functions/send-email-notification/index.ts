@@ -18,6 +18,7 @@ const EMAIL_TYPES = new Set([
   'new_message',
   'group_join_request',
   'group_request_approved',
+  'group_member_joined',
   'new_comment',
   'invite_redeemed',
 ]);
@@ -27,6 +28,7 @@ const PREF_COLUMN: Record<string, string> = {
   new_message:            'email_notif_new_message',
   group_join_request:     'email_notif_group_request',
   group_request_approved: 'email_notif_group_request',
+  group_member_joined:    'email_notif_group_request',
   new_comment:            'email_notif_new_comment',
   invite_redeemed:        'email_notif_invite_redeemed',
 };
@@ -139,6 +141,17 @@ serve(async (req) => {
       };
     }
 
+    if (notif_type === 'group_member_joined') {
+      templateVariables = {
+        ...templateVariables,
+        member_name:        actor.name        || 'A new member',
+        member_title:       actor.title       || '',
+        member_institution: actor.institution || '',
+        group_name:         meta?.group_name  || 'your group',
+        group_url:          APP_URL,
+      };
+    }
+
     if (notif_type === 'new_comment') {
       // target_id is the post id; the email preview should show the
       // actual comment text the actor just wrote, not the post body.
@@ -217,6 +230,8 @@ function buildSubject(
       return `${actorName} wants to join ${meta?.group_name || 'your group'} on Luminary ✦`;
     case 'group_request_approved':
       return `Your request to join ${meta?.group_name || 'the group'} was approved ✦`;
+    case 'group_member_joined':
+      return `${actorName} joined ${meta?.group_name || 'your group'} on Luminary ✦`;
     case 'new_comment':
       return `${actorName} commented on your post on Luminary ✦`;
     case 'invite_redeemed':
@@ -305,6 +320,17 @@ function renderHtml(notifType: string, v: Record<string, string>): string {
        <p style="margin:0;">Welcome to the group — head over to introduce yourself and catch up on recent posts.</p>`,
       v.group_url,
       'Open group →',
+    );
+  }
+
+  if (notifType === 'group_member_joined') {
+    const sub = [v.member_title, v.member_institution].filter(Boolean).join(' · ');
+    return shell(
+      `<p style="margin:0 0 12px;">Hi ${name},</p>
+       <p style="margin:0 0 12px;"><strong>${escape(v.member_name)}</strong>${sub ? ` (${escape(sub)})` : ''} just joined <strong>${escape(v.group_name)}</strong>.</p>
+       <p style="margin:0;">Say hello and welcome them to the group.</p>`,
+      v.group_url,
+      `View ${escape(v.group_name)} →`,
     );
   }
 

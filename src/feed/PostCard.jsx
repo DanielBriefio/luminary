@@ -680,7 +680,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
         )}
 
         {/* Quick reply box — collapsed trigger */}
-        {!showReplyBox && currentUserId && (
+        {!showReplyBox && !showComments && currentUserId && (
           <button
             onClick={() => setShowReplyBox(true)}
             style={{
@@ -708,7 +708,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
         )}
 
         {/* Quick reply box — expanded */}
-        {showReplyBox && (
+        {showReplyBox && !showComments && (
           <div style={{marginTop: 8, display: 'flex', gap: 8, alignItems: 'flex-start'}}>
             <Av size={28} color={currentProfile?.avatar_color}
               name={currentProfile?.name} url={currentProfile?.avatar_url || ''}/>

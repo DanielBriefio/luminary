@@ -1,535 +1,678 @@
-# Task: Email Notification System via Resend (Phase 7A)
+# Task: Admin Enhancements + Email Fix + Doc Split (Phase 7B)
 
 ## Context
 
 Read CLAUDE.md and PRODUCT_STATE.md first.
 
-This task builds the transactional email notification system using
-Resend. Email templates are pre-built in the Resend dashboard and
-referenced by slug. A Supabase Edge Function listens to database
-webhooks and sends emails when relevant events occur.
+This task bundles several related improvements:
 
-Email notifications covered:
-- **Welcome** — sent once at signup (triggered by profiles insert)
-- **New follower** — when someone follows you
-- **New message** — when you receive a DM
-- **Group join request** — when someone requests to join your group
-- **Group request approved** — when your join request is approved
+1. **Admin Inbox → left nav** — currently reachable only via direct
+   state; add to AdminShell NAV_ITEMS
+2. **group_member_joined email** — add to Edge Function inline HTML
+3. **Edge Function sync** — reconcile repo vs deployed dashboard version
+4. **User table enhancements** — invite_codes_remaining column, sortable
+   columns, direct message button per row, top-up codes in UserDetailPanel
+5. **Content Posts tab fixes** — remove invalid post type filters,
+   add sortable columns, show deep-dive indicator
+6. **get_admin_user_list() RPC** — add invite_codes_remaining field
+7. **CLAUDE.md split** → CLAUDE.md (conventions) + SCHEMA.md (database)
+8. **CLAUDE.md post-type correction** — text and paper only; remove
+   references to link, tip, upload as active post types
 
-Scope:
-
-1. SQL migration — email preference columns + welcome_sent flag
-2. Verify group join request meta is correctly populated
-3. Edge Function `send-email-notification` — handles all notification types
-4. Edge Function `send-welcome-email` — triggered by profile creation
-5. Supabase webhook configuration (manual step for user)
-6. Settings screen — four individual email preference toggles
-7. NotifsScreen — verify group_join_request and group_request_approved display
-
-> ⚠️ The Edge Functions use the Resend API key stored in Supabase
-> Edge Function secrets as `RESEND_API_KEY`. Never hardcode this key.
-> The Resend template slugs are: `welcome`, `new-follower`,
-> `new-direct-message`, `group-join-request`.
+> ⚠️ Step 3 (Edge Function sync) must happen BEFORE any Edge Function
+> edits. The repo file and Supabase dashboard may have diverged. Do not
+> overwrite dashboard changes with stale repo content.
 
 ---
 
-## Prerequisites — manual steps (done by user before Claude Code runs)
+## Step 1 — Admin Inbox → left nav
 
-- [x] Resend account created and domain verified
-- [x] Four email templates created in Resend dashboard with slugs:
-      `welcome`, `new-follower`, `new-direct-message`, `group-join-request`
-- [x] `RESEND_API_KEY` added to Supabase Edge Function secrets
-- [ ] Two database webhooks configured in Supabase (see Step 5)
+In `src/admin/AdminShell.jsx`, add Inbox to `NAV_ITEMS`:
+
+```javascript
+const NAV_ITEMS = [
+  { id: 'overview',      label: 'Overview',      icon: '📊' },
+  { id: 'users',         label: 'Users',         icon: '👥' },
+  { id: 'invites',       label: 'Invites',       icon: '🎟️' },
+  { id: 'templates',     label: 'Templates',     icon: '📋' },
+  { id: 'content',       label: 'Content',       icon: '🗂️' },
+  { id: 'interventions', label: 'Interventions', icon: '⚡' },
+  { id: 'inbox',         label: 'Inbox',         icon: '💬' },
+  { id: 'analytics',     label: 'Analytics',     icon: '📈' },
+];
+```
+
+Find the existing `InboxSection` import (it exists but is not in the
+nav). Wire it in the content area conditional alongside the other
+sections. Do not change InboxSection itself.
+
+Add an unread indicator to the Inbox nav item if any bot conversations
+have unread messages — check if InboxSection already computes this;
+if so, surface it as a small red dot on the nav item. If not, skip
+the indicator for now.
 
 ---
 
-## Step 1 — SQL migration
+## Step 2 — Edge Function sync (do this first, before any edits)
 
-Create `migration_email_notifications.sql`:
+Before touching `supabase/functions/send-email-notification/index.ts`,
+run this in the terminal to see the currently deployed function:
+
+```bash
+supabase functions download send-email-notification
+```
+
+If that command is unavailable, ask the user to copy the current
+content from the Supabase Dashboard → Edge Functions →
+`send-email-notification` → Edit and paste it here before proceeding.
+
+The goal: ensure the local file matches what is actually deployed.
+If there are differences between the local repo file and the dashboard
+version, use the dashboard version as the source of truth (it reflects
+edits made after the last deploy).
+
+---
+
+## Step 3 — Add group_member_joined email to Edge Function
+
+Once the file is synced (Step 2), edit
+`supabase/functions/send-email-notification/index.ts`:
+
+### Add to EMAIL_TYPES set
+
+Find the `EMAIL_TYPES` constant (a Set or Record of handled notification
+types). Add `'group_member_joined'` alongside the existing types.
+
+### Add to PREF_COLUMN map
+
+`group_member_joined` should use `email_notif_group_request` as its
+preference gate — group admins who want group request emails also want
+to know when someone joins publicly.
+
+```typescript
+'group_member_joined': 'email_notif_group_request',
+```
+
+### Add templateVariables case
+
+In the `templateVariables` building section, add a case for
+`group_member_joined`. The notification meta contains `group_id` and
+`group_name` (same as `group_join_request`). The actor is the user
+who joined.
+
+```typescript
+if (notif_type === 'group_member_joined') {
+  templateVariables = {
+    ...templateVariables,
+    member_name:  actor.name,
+    group_name:   meta?.group_name || 'your group',
+    group_url:    APP_URL,
+  };
+}
+```
+
+### Add to renderHtml()
+
+Inside the `renderHtml()` function, add a case for
+`group_member_joined` following the exact same HTML pattern as the
+other notification types. Use the `shell()` wrapper for consistent
+branding:
+
+```typescript
+case 'group_member_joined': {
+  const body = `
+    <p style="margin:0 0 16px;font-size:16px;color:#1A1B2E;">
+      Hi ${name},
+    </p>
+    <p style="margin:0 0 16px;font-size:15px;color:#1A1B2E;line-height:1.6;">
+      <strong>${escape(v.member_name)}</strong> has joined your group
+      <strong>${escape(v.group_name)}</strong> on Luminary.
+    </p>
+    <p style="margin:0;font-size:13px;color:#8B8FA8;">
+      Say hello and welcome them to the group.
+    </p>
+  `;
+  return shell(body, v.group_url, `View ${escape(v.group_name)} →`);
+}
+```
+
+### Add to buildSubject()
+
+```typescript
+case 'group_member_joined':
+  return `${escape(v.member_name)} joined ${escape(v.group_name)} ✦`;
+```
+
+### Deploy
+
+After edits:
+```bash
+supabase functions deploy send-email-notification
+```
+
+---
+
+## Step 4 — SQL migration
+
+Create `migration_admin_enhancements.sql`:
 
 ```sql
--- Granular email notification preferences (replaces single boolean)
-alter table profiles
-  add column if not exists email_notif_new_follower   boolean default true,
-  add column if not exists email_notif_new_message    boolean default true,
-  add column if not exists email_notif_group_request  boolean default true,
-  add column if not exists welcome_email_sent         boolean default false;
+-- Update get_admin_user_list() to include invite_codes_remaining
+-- (replaces existing function — CREATE OR REPLACE is safe)
+create or replace function get_admin_user_list()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not (select is_admin from profiles where id = auth.uid()) then
+    raise exception 'not authorized';
+  end if;
 
--- Backfill: existing users who had email_notifications = true
--- keep all granular preferences as true (already the default)
--- existing users who had email_notifications = false get all set to false
-update profiles
-set
-  email_notif_new_follower  = coalesce(email_notifications, true),
-  email_notif_new_message   = coalesce(email_notifications, true),
-  email_notif_group_request = coalesce(email_notifications, true)
-where email_notifications = false;
+  return (
+    select coalesce(jsonb_agg(row_to_json(t) order by t.created_at desc), '[]'::jsonb)
+    from (
+      select
+        p.id,
+        p.name,
+        p.title,
+        p.institution,
+        p.work_mode,
+        p.avatar_color,
+        p.avatar_url,
+        p.profile_slug,
+        p.onboarding_completed,
+        p.admin_notes,
+        p.created_at,
 
--- Mark existing users as already having received welcome email
--- (they signed up before this system existed)
-update profiles
-set welcome_email_sent = true
-where created_at < now() - interval '1 hour';
+        -- Last active
+        greatest(
+          (select max(created_at) from posts    where user_id = p.id),
+          (select max(created_at) from comments where user_id = p.id),
+          (select max(created_at) from likes    where user_id = p.id)
+        ) as last_active,
+
+        -- Counts
+        (select count(*) from posts        where user_id = p.id)::int as posts_count,
+        (select count(*) from group_members where user_id = p.id)::int as groups_count,
+
+        -- Active unclaimed personal invite codes remaining
+        (
+          select count(*)::int
+          from invite_codes ic
+          where ic.created_by = p.id
+            and ic.is_multi_use = false
+            and ic.claimed_by is null
+            and ic.locked_at is null
+            and (ic.expires_at is null or ic.expires_at > now())
+        ) as invite_codes_remaining,
+
+        -- Invite code used at signup
+        coalesce(
+          (select ic.code from invite_codes ic
+           where ic.claimed_by = p.id limit 1),
+          (select ic.code from invite_code_uses icu
+           join invite_codes ic on ic.id = icu.code_id
+           where icu.user_id = p.id limit 1)
+        ) as invite_code_used,
+
+        -- Activation stage
+        case
+          when exists(select 1 from posts where user_id = p.id)
+            and p.profile_slug is not null
+            then 'visible'
+          when exists(select 1 from posts where user_id = p.id)
+            then 'active'
+          when exists(select 1 from follows where follower_id = p.id)
+            or exists(select 1 from group_members where user_id = p.id)
+            then 'connected'
+          when coalesce(p.onboarding_completed, false) = true
+            or exists(select 1 from publications where user_id = p.id)
+            then 'credible'
+          else 'identified'
+        end as activation_stage,
+
+        -- Ghost segment
+        case
+          when (
+            (select count(*) from posts         where user_id = p.id) +
+            (select count(*) from comments      where user_id = p.id) +
+            (select count(*) from likes         where user_id = p.id) +
+            (select count(*) from follows       where follower_id = p.id) +
+            (select count(*) from group_members where user_id = p.id)
+          ) = 0 then 'stuck'
+          when (
+            (select count(*) from posts         where user_id = p.id) +
+            (select count(*) from comments      where user_id = p.id) +
+            (select count(*) from likes         where user_id = p.id) +
+            (select count(*) from follows       where follower_id = p.id) +
+            (select count(*) from group_members where user_id = p.id)
+          ) <= 2
+          and greatest(
+            (select max(created_at) from posts    where user_id = p.id),
+            (select max(created_at) from comments where user_id = p.id),
+            (select max(created_at) from likes    where user_id = p.id)
+          ) < now() - interval '5 days'
+          then 'almost'
+          else null
+        end as ghost_segment
+
+      from profiles p
+      where p.id != (
+        select id from profiles where name = 'Luminary Team' limit 1
+      )
+    ) t
+  );
+end;
+$$;
 ```
 
 Tell the user to run this in Supabase SQL Editor.
 
 ---
 
-## Step 2 — Verify group join request notification meta
+## Step 5 — UsersSection.jsx enhancements
 
-Read the code that handles group join requests — likely in
-`GroupMembers.jsx` or `GroupScreen.jsx`. Find where a join request
-notification is inserted into the `notifications` table.
+Read `src/admin/UsersSection.jsx` carefully before modifying.
 
-Verify the insert includes `meta` with `group_id` and `group_name`:
+### 5a — Add invite_codes_remaining column to table
 
-```javascript
-await supabase.from('notifications').insert({
-  user_id:     groupOwnerId,        // admin who receives the notification
-  actor_id:    requestingUserId,    // person requesting to join
-  notif_type:  'group_join_request',
-  target_type: 'group',
-  target_id:   groupId,
-  meta: {
-    group_id:   groupId,
-    group_name: groupName,          // ← must be present for email
-  },
-  read: false,
-});
+Add a new column to the user table grid between "Groups" and "Stage":
+
+```
+☐  Avatar+Name | Work Mode | Joined | Last Active |
+Posts | Groups | Codes | Stage | Ghost | Actions
 ```
 
-If `meta` is missing `group_id` or `group_name`, add them. Do not
-change any other logic — surgical addition only.
+Update `gridTemplateColumns` to accommodate the new column.
 
-Also verify `group_request_approved` notification (inserted when admin
-approves a join request) has the same meta structure. Fix if missing.
-
----
-
-## Step 3 — Edge Function: send-email-notification
-
-Create `supabase/functions/send-email-notification/index.ts`:
-
-```typescript
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
-const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const FROM_EMAIL     = 'Luminary Team <team@luminary.to>';
-const APP_URL        = 'https://luminary.to';
-
-// Notification types that trigger emails and their template slugs
-const EMAIL_TYPES: Record<string, string> = {
-  new_follower:          'new-follower',
-  new_message:           'new-direct-message',
-  group_join_request:    'group-join-request',
-  group_request_approved: 'group-join-request', // reuse template, different copy
-};
-
-serve(async (req) => {
-  try {
-    const payload = await req.json();
-
-    // Supabase webhook sends { type, table, record, old_record }
-    const record = payload.record;
-    if (!record) return new Response('no record', { status: 200 });
-
-    const { notif_type, user_id, actor_id, target_id, meta } = record;
-
-    // Only handle email-relevant notification types
-    const templateSlug = EMAIL_TYPES[notif_type];
-    if (!templateSlug) return new Response('not an email type', { status: 200 });
-
-    // Create service-role Supabase client for DB lookups
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Fetch recipient profile
-    const { data: recipient } = await supabase
-      .from('profiles')
-      .select(`
-        id, name, email:id, profile_slug,
-        email_notif_new_follower,
-        email_notif_new_message,
-        email_notif_group_request
-      `)
-      .eq('id', user_id)
-      .single();
-
-    if (!recipient) return new Response('recipient not found', { status: 200 });
-
-    // Fetch recipient email from auth.users
-    const { data: authUser } = await supabase.auth.admin.getUserById(user_id);
-    const recipientEmail = authUser?.user?.email;
-    if (!recipientEmail) return new Response('no email', { status: 200 });
-
-    // Check master email_notifications preference
-    const { data: prefCheck } = await supabase
-      .from('profiles')
-      .select('email_notifications')
-      .eq('id', user_id)
-      .single();
-
-    if (prefCheck?.email_notifications === false) {
-      return new Response('email notifications disabled', { status: 200 });
-    }
-
-    // Check granular preference per notification type
-    const prefMap: Record<string, boolean> = {
-      new_follower:          recipient.email_notif_new_follower,
-      new_message:           recipient.email_notif_new_message,
-      group_join_request:    recipient.email_notif_group_request,
-      group_request_approved: recipient.email_notif_group_request,
-    };
-
-    if (prefMap[notif_type] === false) {
-      return new Response('notification type disabled', { status: 200 });
-    }
-
-    // Fetch actor profile (the person who did the action)
-    const { data: actor } = await supabase
-      .from('profiles')
-      .select('id, name, profile_slug, title, institution')
-      .eq('id', actor_id)
-      .single();
-
-    if (!actor) return new Response('actor not found', { status: 200 });
-
-    // Build template variables per notification type
-    let templateVariables: Record<string, string> = {
-      name:         recipient.name || 'there',
-      settings_url: `${APP_URL}`,
-    };
-
-    if (notif_type === 'new_follower') {
-      templateVariables = {
-        ...templateVariables,
-        follower_name:        actor.name,
-        follower_profile_url: `${APP_URL}/p/${actor.profile_slug}`,
-      };
-    }
-
-    if (notif_type === 'new_message') {
-      // Fetch message content preview from messages table
-      const { data: message } = await supabase
-        .from('messages')
-        .select('content')
-        .eq('conversation_id', target_id)
-        .eq('sender_id', actor_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      const preview = message?.content
-        ? message.content.length > 100
-          ? message.content.slice(0, 100) + '…'
-          : message.content
-        : 'Sent you a message';
-
-      templateVariables = {
-        ...templateVariables,
-        sender_name:      actor.name,
-        message_preview:  preview,
-        conversation_url: `${APP_URL}`,
-      };
-    }
-
-    if (notif_type === 'group_join_request') {
-      templateVariables = {
-        ...templateVariables,
-        requester_name:        actor.name,
-        requester_title:       actor.title       || '',
-        requester_institution: actor.institution || '',
-        group_name:            meta?.group_name  || 'your group',
-        group_url:             `${APP_URL}`,
-      };
-    }
-
-    if (notif_type === 'group_request_approved') {
-      templateVariables = {
-        ...templateVariables,
-        group_name: meta?.group_name || 'the group',
-        group_url:  `${APP_URL}`,
-      };
-    }
-
-    // Send email via Resend
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        from:    FROM_EMAIL,
-        to:      recipientEmail,
-        subject: buildSubject(notif_type, actor.name, meta),
-        template_id: templateSlug,  // Resend template slug
-        variables:   templateVariables,
-      }),
-    });
-
-    if (!resendResponse.ok) {
-      const err = await resendResponse.text();
-      console.error('Resend error:', err);
-      return new Response('resend error', { status: 500 });
-    }
-
-    return new Response('ok', { status: 200 });
-
-  } catch (err) {
-    console.error('Edge function error:', err);
-    return new Response('error', { status: 500 });
-  }
-});
-
-function buildSubject(
-  notifType: string,
-  actorName: string,
-  meta: Record<string, string> | null
-): string {
-  switch (notifType) {
-    case 'new_follower':
-      return `${actorName} is now following you on Luminary ✦`;
-    case 'new_message':
-      return `New message from ${actorName} on Luminary ✦`;
-    case 'group_join_request':
-      return `${actorName} wants to join ${meta?.group_name || 'your group'} on Luminary ✦`;
-    case 'group_request_approved':
-      return `Your request to join ${meta?.group_name || 'the group'} was approved ✦`;
-    default:
-      return 'New notification from Luminary ✦';
-  }
-}
-```
-
-> **Note on Resend template_id vs template slug:** Resend's API accepts
-> either the UUID or the slug as `template_id`. The slugs (`new-follower`,
-> `new-direct-message`, etc.) are confirmed to work. If Resend returns
-> a template-not-found error, fall back to using the UUID from the
-> dashboard URL instead.
-
----
-
-## Step 4 — Edge Function: send-welcome-email
-
-Create `supabase/functions/send-welcome-email/index.ts`:
-
-```typescript
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
-const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const FROM_EMAIL     = 'Luminary Team <team@luminary.to>';
-const APP_URL        = 'https://luminary.to';
-
-serve(async (req) => {
-  try {
-    const payload = await req.json();
-    const record  = payload.record;
-    if (!record) return new Response('no record', { status: 200 });
-
-    const { id: userId, name, profile_slug, welcome_email_sent } = record;
-
-    // Skip if welcome email already sent (backfilled users)
-    if (welcome_email_sent === true) {
-      return new Response('already sent', { status: 200 });
-    }
-
-    // Skip if profile is incomplete (name not yet set)
-    // Welcome email fires after onboarding, not at bare auth creation
-    if (!name) return new Response('no name yet', { status: 200 });
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Fetch email from auth.users
-    const { data: authUser } = await supabase.auth.admin.getUserById(userId);
-    const recipientEmail = authUser?.user?.email;
-    if (!recipientEmail) return new Response('no email', { status: 200 });
-
-    // Send welcome email
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        from:        FROM_EMAIL,
-        to:          recipientEmail,
-        subject:     'Welcome to Luminary ✦',
-        template_id: 'welcome',
-        variables: {
-          name:        name || 'there',
-          profile_url: profile_slug
-            ? `${APP_URL}/p/${profile_slug}`
-            : APP_URL,
-          settings_url: APP_URL,
-        },
-      }),
-    });
-
-    if (!resendResponse.ok) {
-      const err = await resendResponse.text();
-      console.error('Resend error:', err);
-      return new Response('resend error', { status: 500 });
-    }
-
-    // Mark welcome email as sent to prevent duplicates
-    await supabase
-      .from('profiles')
-      .update({ welcome_email_sent: true })
-      .eq('id', userId);
-
-    return new Response('ok', { status: 200 });
-
-  } catch (err) {
-    console.error('Edge function error:', err);
-    return new Response('error', { status: 500 });
-  }
-});
-```
-
-> **Important:** The welcome email trigger fires on ANY profiles update
-> (because profile_slug and name are set after signup, not at row
-> creation). The `welcome_email_sent` flag prevents duplicate sends.
-> The check `if (!name)` prevents sending before the user completes
-> onboarding.
-
----
-
-## Step 5 — Supabase webhook configuration (manual)
-
-Tell the user to configure two database webhooks in the Supabase
-dashboard:
-
-**Webhook 1 — Notification emails:**
-- Supabase Dashboard → Database → Webhooks → Create webhook
-- Name: `email-notification`
-- Table: `notifications`
-- Events: `INSERT`
-- URL: `https://[your-project-ref].supabase.co/functions/v1/send-email-notification`
-- HTTP Headers: `Authorization: Bearer [your-anon-key]`
-
-**Webhook 2 — Welcome email:**
-- Name: `welcome-email`
-- Table: `profiles`
-- Events: `UPDATE` (not INSERT — name and profile_slug are set after initial row creation)
-- Filter: `welcome_email_sent=eq.false` (only fire when not yet sent)
-- URL: `https://[your-project-ref].supabase.co/functions/v1/send-welcome-email`
-- HTTP Headers: `Authorization: Bearer [your-anon-key]`
-
-The project ref is visible in Supabase Dashboard → Settings → API.
-
----
-
-## Step 6 — Settings screen: email preference toggles
-
-Read the existing Settings or Profile settings screen to understand
-how preferences are currently displayed. Find where `email_notifications`
-master toggle lives.
-
-Add four individual toggles in a new "Email notifications" subsection,
-below the existing master toggle:
+In `UserRow`, render `invite_codes_remaining` with colour coding:
+- ≥3 remaining: `T.gr` (green — healthy)
+- 1–2 remaining: `T.am` (amber — low)
+- 0 remaining: `T.ro` (red — exhausted)
 
 ```jsx
-{/* Email notifications section */}
-<div style={{ marginBottom: 24 }}>
-  <div style={{
-    fontSize: 13, fontWeight: 700, color: T.text,
-    marginBottom: 4,
-  }}>
-    Email notifications
-  </div>
-  <div style={{
-    fontSize: 12, color: T.mu, marginBottom: 14,
-  }}>
-    Choose which activity sends you an email.
-    All emails are sent from team@luminary.to.
-  </div>
-
-  {/* Master toggle — existing, keep as-is */}
-  <ToggleRow
-    label="Email notifications"
-    sublabel="Master switch — turns all emails on or off"
-    value={profile.email_notifications}
-    onChange={v => updateProfile({ email_notifications: v })}
-  />
-
-  {/* Individual toggles — new, only shown when master is on */}
-  {profile.email_notifications && (
-    <div style={{
-      marginLeft: 16,
-      paddingLeft: 16,
-      borderLeft: `2px solid ${T.bdr}`,
-      marginTop: 12,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 10,
-    }}>
-      <ToggleRow
-        label="New follower"
-        sublabel="When someone follows you"
-        value={profile.email_notif_new_follower ?? true}
-        onChange={v => updateProfile({ email_notif_new_follower: v })}
-      />
-      <ToggleRow
-        label="New message"
-        sublabel="When you receive a direct message"
-        value={profile.email_notif_new_message ?? true}
-        onChange={v => updateProfile({ email_notif_new_message: v })}
-      />
-      <ToggleRow
-        label="Group join requests"
-        sublabel="When someone requests to join your group"
-        value={profile.email_notif_group_request ?? true}
-        onChange={v => updateProfile({ email_notif_group_request: v })}
-      />
-    </div>
-  )}
+<div style={{
+  fontSize: 13,
+  color: user.invite_codes_remaining >= 3 ? T.gr
+       : user.invite_codes_remaining >= 1 ? T.am
+       : T.ro,
+  fontWeight: 600,
+  textAlign: 'center',
+}}>
+  {user.invite_codes_remaining ?? 0}
 </div>
 ```
 
-Match the existing toggle component style exactly — use whatever
-`ToggleRow` or equivalent component already exists in the settings
-screen. If no reusable toggle component exists, extract one from the
-existing toggle markup.
+### 5b — Sortable columns
 
-The `updateProfile` function should debounce and save to Supabase:
+Add sort state to UsersSection:
+
 ```javascript
-const updateProfile = async (updates) => {
-  setProfile(prev => ({ ...prev, ...updates }));
-  await supabase
-    .from('profiles')
-    .update(updates)
-    .eq('id', user.id);
+const [sortBy, setSortBy]     = useState('created_at');
+const [sortDir, setSortDir]   = useState('desc');
+
+const toggleSort = (col) => {
+  if (sortBy === col) {
+    setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+  } else {
+    setSortBy(col);
+    setSortDir('desc');
+  }
 };
 ```
 
+Apply sort client-side after filtering:
+
+```javascript
+const sorted = [...filtered].sort((a, b) => {
+  const aVal = a[sortBy] ?? 0;
+  const bVal = b[sortBy] ?? 0;
+  if (typeof aVal === 'string') {
+    return sortDir === 'asc'
+      ? aVal.localeCompare(bVal)
+      : bVal.localeCompare(aVal);
+  }
+  return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+});
+```
+
+Sortable columns: `posts_count`, `groups_count`,
+`invite_codes_remaining`, `created_at`, `last_active`.
+
+Update column headers to show sort indicator (▲ / ▼) when active:
+
+```jsx
+<SortableHeader
+  label="Posts"
+  col="posts_count"
+  sortBy={sortBy}
+  sortDir={sortDir}
+  onSort={toggleSort}
+/>
+```
+
+```jsx
+function SortableHeader({ label, col, sortBy, sortDir, onSort }) {
+  const active = sortBy === col;
+  return (
+    <div
+      onClick={() => onSort(col)}
+      style={{
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 3,
+        userSelect: 'none',
+        color: active ? T.v : T.mu,
+        fontWeight: active ? 700 : 600,
+      }}
+    >
+      {label}
+      <span style={{ fontSize: 9, opacity: active ? 1 : 0.3 }}>
+        {active && sortDir === 'asc' ? '▲' : '▼'}
+      </span>
+    </div>
+  );
+}
+```
+
+### 5c — Direct message button per row
+
+In `UserRow`, replace or augment the existing "View" button with two
+actions:
+
+```jsx
+<div style={{ display: 'flex', gap: 5 }}>
+  <button onClick={onOpen} style={rowBtnStyle}>
+    View
+  </button>
+  <button
+    onClick={(e) => { e.stopPropagation(); onDirectMessage(); }}
+    style={{ ...rowBtnStyle, color: T.v, borderColor: T.v }}
+    title="Send nudge"
+  >
+    ✉
+  </button>
+</div>
+```
+
+`onDirectMessage` selects just this user and opens `BulkNudgeModal`
+directly — same as clicking "Send nudge" in the UserDetailPanel.
+Add the handler in UsersSection:
+
+```javascript
+const handleDirectMessage = (userId) => {
+  setSelected(new Set([userId]));
+  setShowNudge(true);
+};
+```
+
+Pass `onDirectMessage={() => handleDirectMessage(user.id)}` to each
+`UserRow`.
+
 ---
 
-## Step 7 — NotifsScreen: verify display of group types
+## Step 6 — UserDetailPanel: top-up invite codes
 
-Read `NotifsScreen.jsx` and verify:
+Read `src/admin/UserDetailPanel.jsx` carefully before modifying.
 
-1. `group_join_request` renders correctly — shows actor name +
-   "requested to join [group_name]" + clicking navigates to the group
-2. `group_request_approved` renders correctly — shows actor name +
-   "approved your request to join [group_name]" + clicking navigates
-   to the group
+In the stats grid, show `invite_codes_remaining` as one of the stat
+cards with the same colour coding as Step 5a.
 
-If either type is missing from the `NOTIF_CONFIG` map or renders as
-a generic fallback, add the correct config entry. Match the existing
-pattern exactly.
+Below the stats grid, add a "Top up invite codes" section — only
+visible when `invite_codes_remaining < 5`:
 
-Also verify that the unread notification count in the bell icon
-includes `group_join_request` and `group_request_approved` types.
-If the count query filters by specific types and excludes these, add
-them to the filter.
+```jsx
+{user.invite_codes_remaining < 5 && (
+  <div style={{
+    marginBottom: 20,
+    padding: '12px 14px',
+    background: T.s2,
+    borderRadius: 10,
+    border: `1px solid ${T.bdr}`,
+  }}>
+    <div style={{
+      fontSize: 12, fontWeight: 700, color: T.mu,
+      textTransform: 'uppercase', letterSpacing: 0.4,
+      marginBottom: 8,
+    }}>
+      Invite codes
+    </div>
+    <div style={{
+      fontSize: 13, color: T.mu, marginBottom: 10,
+    }}>
+      {user.invite_codes_remaining} of 5 codes remaining
+    </div>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <select
+        value={topUpCount}
+        onChange={e => setTopUpCount(Number(e.target.value))}
+        style={{
+          padding: '6px 10px', borderRadius: 7,
+          border: `1px solid ${T.bdr}`, background: T.w,
+          fontSize: 13, color: T.text, fontFamily: 'inherit',
+          outline: 'none',
+        }}
+      >
+        {Array.from(
+          { length: 5 - user.invite_codes_remaining },
+          (_, i) => i + 1
+        ).map(n => (
+          <option key={n} value={n}>+{n} code{n > 1 ? 's' : ''}</option>
+        ))}
+      </select>
+      <button
+        onClick={handleTopUp}
+        disabled={toppingUp}
+        style={{
+          padding: '6px 14px', borderRadius: 7, border: 'none',
+          background: T.v, color: '#fff', fontSize: 13,
+          fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+          opacity: toppingUp ? 0.7 : 1,
+        }}
+      >
+        {toppingUp ? 'Generating…' : 'Generate'}
+      </button>
+    </div>
+  </div>
+)}
+```
+
+Add state and handler:
+
+```javascript
+const [topUpCount, setTopUpCount] = useState(1);
+const [toppingUp, setToppingUp]  = useState(false);
+
+const handleTopUp = async () => {
+  setToppingUp(true);
+  const rows = Array.from({ length: topUpCount }, () => ({
+    code:        generateRandomCode(), // same pattern as CreateCodeModal
+    created_by:  user.id,
+    is_multi_use: false,
+    max_uses:    1,
+    uses_count:  0,
+    label:       'Admin top-up',
+  }));
+  await supabase.from('invite_codes').insert(rows);
+  setToppingUp(false);
+  // Notify parent to refresh user data
+  onNotesUpdated(user.admin_notes); // triggers a re-fetch or pass onRefresh prop
+};
+```
+
+Import the `generateRandomCode()` helper from wherever `CreateCodeModal`
+defines it (likely a shared utility or inline function). If it's inline
+in `CreateCodeModal`, extract it to `src/lib/utils.js` so both
+components can import it.
+
+The dropdown shows only as many options as codes needed to reach 5.
+If user has 4 remaining, only "+1" is available. If user has 0, options
+are "+1" through "+5".
+
+---
+
+## Step 7 — ContentSection Posts tab fixes
+
+Read `src/admin/ContentSection.jsx` carefully before modifying.
+
+### 7a — Remove invalid post type filters
+
+Find the `POST_TYPES` array. Replace:
+```javascript
+const POST_TYPES = ['text', 'paper', 'link', 'upload', 'tip'];
+```
+With:
+```javascript
+const POST_TYPES = ['text', 'paper'];
+```
+
+Update the filter select options to match.
+
+### 7b — Add sortable columns to Posts tab
+
+Add sort state to `PostsTab`:
+
+```javascript
+const [sortCol, setSortCol]   = useState('created_at');
+const [sortDir, setSortDir]   = useState('desc');
+```
+
+Update `get_admin_posts` RPC call to pass sort parameters, OR sort
+client-side on the current page (simpler — the RPC already paginates).
+Since we have 50 posts per page, client-side sort is fine:
+
+```javascript
+const sortedPosts = [...posts].sort((a, b) => {
+  const aVal = a[sortCol] ?? 0;
+  const bVal = b[sortCol] ?? 0;
+  if (sortCol === 'created_at') {
+    return sortDir === 'desc'
+      ? new Date(bVal) - new Date(aVal)
+      : new Date(aVal) - new Date(bVal);
+  }
+  return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+});
+```
+
+Sortable columns: `created_at`, `comment_count`, `like_count`,
+`participant_count` (distinct commenters).
+
+**Note:** `comment_count` and `like_count` likely come from
+`posts_with_meta` view. Verify these fields exist in the view — if not,
+the `get_admin_posts` RPC needs to be updated to include them. Check
+the view definition before proceeding.
+
+Update the Posts tab column headers:
+
+```
+Post | Type | Date▼ | Comments | Likes | Featured | Hidden | Actions
+```
+
+Replace the plain column headers with `SortableHeader` components
+(same pattern as Step 5b — extract to a shared component or duplicate
+the pattern).
+
+### 7c — Deep dive indicator
+
+In `PostRow`, detect deep-dive posts. A deep-dive is likely indicated
+by `post_type === 'deep_dive'` or a specific flag — read the posts
+table schema to confirm. Add a badge alongside the type column:
+
+```jsx
+{post.post_type === 'deep_dive' && (
+  <span style={{
+    fontSize: 10, fontWeight: 700, padding: '1px 6px',
+    borderRadius: 20, background: T.v2, color: T.v,
+    marginLeft: 4,
+  }}>
+    Deep dive
+  </span>
+)}
+```
+
+If the `get_admin_posts` RPC doesn't return a field that identifies
+deep-dive posts, check whether it's stored in `post_type` or as a
+separate boolean column, and add it to the RPC SELECT if needed.
+
+### 7d — Add participant_count to get_admin_posts RPC
+
+Update the `get_admin_posts` RPC to include participant count (distinct
+commenters per post):
+
+```sql
+-- Add to the SELECT in get_admin_posts:
+(
+  select count(distinct user_id)::int
+  from comments
+  where post_id = p.id
+) as participant_count,
+(
+  select count(*)::int from likes where post_id = p.id
+) as like_count
+```
+
+If `comment_count` and `like_count` already come from `posts_with_meta`,
+verify they're passed through the RPC. Add only what's missing.
+
+Run the updated `get_admin_posts` as a CREATE OR REPLACE in Supabase
+SQL Editor. Tell the user to run it.
+
+---
+
+## Step 8 — CLAUDE.md split into CLAUDE.md + SCHEMA.md
+
+### 8a — Create SCHEMA.md
+
+Extract from CLAUDE.md all content related to:
+- Database Schema (all tables with columns)
+- Views (`posts_with_meta`, `groups_with_stats`, etc.)
+- RPC functions (all `get_*`, `set_*`, `send_*` functions)
+- RLS policies
+- Edge Functions description
+
+Place extracted content in a new file `SCHEMA.md` at the repo root
+with a header:
+
+```markdown
+# Luminary — Database Schema Reference
+_Extracted from CLAUDE.md — last updated: [today's date]_
+
+> This file covers the live database schema. For coding conventions,
+> architecture, and file structure see CLAUDE.md.
+```
+
+### 8b — Update CLAUDE.md
+
+After extraction:
+- Remove the extracted schema sections from CLAUDE.md
+- Add a reference line where the schema sections were:
+  ```
+  ## Database Schema
+  See SCHEMA.md for full schema reference.
+  ```
+- Add to the "Read first" instruction at the top of CLAUDE.md:
+  ```
+  For tasks touching the database, also read SCHEMA.md.
+  ```
+
+### 8c — Post-type correction in CLAUDE.md
+
+Find any reference to `link`, `tip`, or `upload` as active post types
+in NewPostScreen or the posts table `post_type` enum. Update to reflect
+that **active post types are `text` and `paper` only**. Legacy rows
+with other types may exist in the DB but the UI no longer creates them.
+
+Add a convention note:
+```
+**Post types:** Active post types are `text` and `paper` only.
+Legacy rows with `post_type` values of `link`, `upload`, `tip`,
+`milestone`, `admin_nudge`, or `deep_dive` may exist in the DB
+but are not created by the current UI. Do not add filters or UI
+for these types unless explicitly asked.
+```
 
 ---
 
@@ -537,10 +680,10 @@ them to the filter.
 
 - `src/screens/GroupsScreen.jsx` — legacy file, do not touch
 - `groups.owner_id`, `groups.is_private` (legacy fields)
-- Existing notification insert calls beyond adding missing `meta` fields
-- Existing Resend template content — templates are managed in
-  Resend dashboard, not in code
-- Any existing feed, profile, groups, projects screens
+- `projects.user_id` — legacy, coexists with `created_by`
+- InboxSection component itself — only wire it to the nav
+- Existing email types and HTML templates in Edge Function —
+  only add the new `group_member_joined` case
 - Run `npm run build` when done
 
 ---
@@ -548,114 +691,96 @@ them to the filter.
 ## Deployment
 
 ```bash
-# 1. Run migration_email_notifications.sql in Supabase SQL Editor
+# 1. Run migration_admin_enhancements.sql in Supabase SQL Editor
+#    (updates get_admin_user_list RPC + get_admin_posts RPC if changed)
 
-# 2. Deploy Edge Functions:
+# 2. Sync and deploy Edge Function:
 supabase functions deploy send-email-notification
-supabase functions deploy send-welcome-email
 
-# 3. Configure the two database webhooks in Supabase Dashboard
-#    (see Step 5 above)
-
-# 4. Deploy app changes:
-git add . && git commit -m "Phase 7A: Email notifications via Resend — follower, message, group request, welcome" && git push
-
-# 5. Test (see Remind the user section)
+# 3. Deploy app changes:
+git add . && git commit -m "Phase 7B: Admin inbox nav, group_member_joined email, user table sort + codes, content tab fixes, CLAUDE.md split" && git push
 ```
 
 ---
 
 ## Remind the user
 
-**Testing the notification emails:**
+**Testing group_member_joined email:**
+1. As User B, join a public group owned by User A
+2. Check User A's inbox — should receive "User B joined [group]" email
+3. Check User A's notification bell — should show the notification
 
-Each email type can be tested by triggering the action in the app
-and watching for the email to arrive:
+**Testing invite code top-up:**
+1. Admin panel → Users → click "View" on a user with < 5 codes
+2. UserDetailPanel should show invite codes count and top-up section
+3. Select "+2 codes", click Generate
+4. Verify 2 new invite_codes rows appear in Supabase with
+   `created_by = that user's ID`
+5. Codes count in the panel should update
 
-1. **New follower** — log in as User B, follow User A. Check User A's
-   inbox for the follower notification email.
+**Testing sortable user table:**
+Click each sortable column header twice — first click sorts desc,
+second click sorts asc. Verify the sort indicator arrow flips.
 
-2. **New message** — send a DM from User B to User A. Check User A's
-   inbox for the message notification email.
-
-3. **Group join request** — as User B, request to join a closed group
-   owned by User A. Check User A's inbox for the join request email.
-
-4. **Group request approved** — as User A (group admin), approve User
-   B's join request. Check User B's inbox for the approval email.
-
-5. **Welcome email** — create a fresh test account, complete
-   onboarding. Check the new account's inbox for the welcome email.
-
-**If emails are not arriving:**
-- Check Supabase Dashboard → Edge Functions → Logs for errors
-- Check Resend Dashboard → Logs to see if API calls are reaching Resend
-- Verify the webhook is configured and firing (Supabase → Webhooks →
-  check "Last triggered" timestamp)
-- Verify `RESEND_API_KEY` is set in Edge Function secrets
-- Check spam folder
-
-**Testing email preferences:**
-1. Go to Settings → Email notifications
-2. Toggle "New follower" off
-3. Follow yourself from another account
-4. Verify no email arrives
-5. Toggle back on, verify email arrives on next follow action
+**Testing content tab:**
+- Post type filter should show only "text" and "paper" options
+- Clicking Comments / Likes column headers should sort posts
+- Deep dive posts (if any exist) should show the "Deep dive" badge
 
 ---
 
 ## Testing checklist
 
-**Migration:**
-- [ ] `profiles.email_notif_new_follower` column exists, defaults true
-- [ ] `profiles.email_notif_new_message` column exists, defaults true
-- [ ] `profiles.email_notif_group_request` column exists, defaults true
-- [ ] `profiles.welcome_email_sent` column exists, defaults false
-- [ ] Existing users with `email_notifications = false` have granular
-      prefs set to false
-- [ ] Existing users have `welcome_email_sent = true` (backfilled)
+**Admin Inbox nav:**
+- [ ] Inbox appears in AdminShell left nav between Interventions and Analytics
+- [ ] Clicking Inbox renders InboxSection correctly
+- [ ] All other nav items still work
 
-**Group join request meta (Step 2):**
-- [ ] When a user requests to join a closed group, the notification
-      insert includes `meta.group_id` and `meta.group_name`
-- [ ] When admin approves a request, the notification insert includes
-      `meta.group_id` and `meta.group_name`
+**group_member_joined email:**
+- [ ] Edge Function synced with dashboard version before edits
+- [ ] `group_member_joined` in EMAIL_TYPES and PREF_COLUMN map
+- [ ] Joining a public group triggers email to all group admins
+- [ ] Email subject: "[member] joined [group] ✦"
+- [ ] Email body shows member name and group name correctly
+- [ ] HTML-escaped to prevent injection
+- [ ] Function deploys without errors
 
-**Edge Functions:**
-- [ ] `send-email-notification` deploys without errors
-- [ ] `send-welcome-email` deploys without errors
-- [ ] Both functions appear in Supabase Dashboard → Edge Functions
+**User table:**
+- [ ] `invite_codes_remaining` column visible in table
+- [ ] Colour coding: green ≥3, amber 1–2, red 0
+- [ ] Clicking Posts column header sorts by posts_count
+- [ ] Clicking Groups column header sorts by groups_count
+- [ ] Clicking Codes column header sorts by invite_codes_remaining
+- [ ] Clicking Joined column header sorts by created_at
+- [ ] Clicking Last Active column header sorts by last_active
+- [ ] Second click on active column reverses sort direction
+- [ ] Sort arrow indicator shows correctly
+- [ ] ✉ button per row opens BulkNudgeModal with just that user
+- [ ] Existing bulk select and nudge flow unchanged
 
-**Webhooks:**
-- [ ] `email-notification` webhook configured on `notifications` INSERT
-- [ ] `welcome-email` webhook configured on `profiles` UPDATE
-- [ ] Both webhooks show correct Edge Function URLs
+**UserDetailPanel top-up:**
+- [ ] Stats grid shows invite_codes_remaining with colour coding
+- [ ] Top-up section visible only when codes < 5
+- [ ] Dropdown shows correct number of options (5 - remaining)
+- [ ] Generate button creates correct number of invite_codes rows
+- [ ] New codes have `created_by = user.id`, `is_multi_use = false`
+- [ ] New codes have `label = 'Admin top-up'`
 
-**Email delivery:**
-- [ ] New follower → email received with correct follower name
-- [ ] New message → email received with correct sender name and preview
-- [ ] Group join request → email received with requester name,
-      title, institution, and group name
-- [ ] Group request approved → email received with group name
-- [ ] Welcome email → received after completing onboarding
-- [ ] No duplicate welcome emails on subsequent profile updates
-- [ ] Emails arrive from `team@luminary.to`
-- [ ] All emails use correct Resend template styling
+**Content Posts tab:**
+- [ ] Post type filter shows only "text" and "paper"
+- [ ] No "link", "tip", "upload" options in filter
+- [ ] Comments column sortable (desc = most commented first)
+- [ ] Likes column sortable
+- [ ] Date column sortable (default desc = newest first)
+- [ ] Deep dive posts show "Deep dive" badge
+- [ ] Participant count visible per post
 
-**Email preferences (Settings screen):**
-- [ ] Four toggles visible under Email notifications section
-- [ ] Individual toggles only shown when master toggle is on
-- [ ] Toggling "New follower" off → no email on next follow action
-- [ ] Toggling "New message" off → no email on next DM received
-- [ ] Toggling "Group join requests" off → no email on next request
-- [ ] Preferences persist after page refresh
-- [ ] Master toggle off → no emails regardless of individual settings
-
-**NotifsScreen:**
-- [ ] `group_join_request` shows correctly in notification bell
-- [ ] `group_request_approved` shows correctly in notification bell
-- [ ] Both types included in unread count
-- [ ] Clicking group notification navigates to the correct group
+**CLAUDE.md split:**
+- [ ] `SCHEMA.md` created at repo root with database schema content
+- [ ] `CLAUDE.md` no longer contains full table/column listings
+- [ ] `CLAUDE.md` contains reference to SCHEMA.md
+- [ ] `CLAUDE.md` post-type convention note added
+- [ ] Both files committed to repo
 
 **Build:**
 - [ ] `npm run build` succeeds with no new warnings

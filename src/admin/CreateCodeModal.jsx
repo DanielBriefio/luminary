@@ -1,19 +1,13 @@
 import React, { useState } from 'react';
 import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
+import { randomInviteSuffix as randomSuffix } from '../lib/utils';
 
 const MODES = [
   { id: 'personal', label: '👤 Personal',  desc: 'One code, one person' },
   { id: 'batch',    label: '📦 Batch',     desc: 'Multiple codes, same label' },
   { id: 'event',    label: '🎤 Event',     desc: 'Memorable code, many people' },
 ];
-
-const randomSuffix = (len = 8) => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: len }, () =>
-    chars[Math.floor(Math.random() * chars.length)]
-  ).join('');
-};
 
 export default function CreateCodeModal({ supabase, onClose, onCreated }) {
   const [mode, setMode]           = useState('personal');

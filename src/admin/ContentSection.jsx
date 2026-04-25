@@ -18,7 +18,9 @@ const HEALTH_STYLES = {
   dead:   { bg: T.ro2, color: T.ro,  label: '🔴 Dead'   },
 };
 
-const POST_TYPES = ['text', 'paper', 'link', 'upload', 'tip'];
+const POST_TYPES = ['text', 'paper'];
+
+const POSTS_GRID = '1fr 70px 90px 80px 70px 80px 90px 130px';
 
 export default function ContentSection({ supabase }) {
   const [tab, setTab] = useState('posts');
@@ -77,6 +79,17 @@ function PostsTab({ supabase }) {
   const [typeFilter, setTypeFilter]         = useState('');
   const [hiddenFilter, setHiddenFilter]     = useState('');
   const [acting, setActing]                 = useState(null);
+  const [sortBy, setSortBy]                 = useState('created_at');
+  const [sortDir, setSortDir]               = useState('desc');
+
+  const toggleSort = (col) => {
+    if (sortBy === col) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(col);
+      setSortDir('desc');
+    }
+  };
 
   const PAGE_SIZE = 50;
 
@@ -117,6 +130,20 @@ function PostsTab({ supabase }) {
   };
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const sortedPosts = [...posts].sort((a, b) => {
+    const aVal = a[sortBy];
+    const bVal = b[sortBy];
+    if (aVal == null && bVal == null) return 0;
+    if (aVal == null) return 1;
+    if (bVal == null) return -1;
+    if (sortBy === 'created_at') {
+      const aT = new Date(aVal).getTime();
+      const bT = new Date(bVal).getTime();
+      return sortDir === 'asc' ? aT - bT : bT - aT;
+    }
+    return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+  });
 
   return (
     <div>
@@ -163,25 +190,28 @@ function PostsTab({ supabase }) {
             {/* Header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 80px 90px 70px 120px 160px',
+              gridTemplateColumns: POSTS_GRID,
               padding: '10px 16px',
               borderBottom: `1px solid ${T.bdr}`,
               fontSize: 11, fontWeight: 600, color: T.mu,
               textTransform: 'uppercase', letterSpacing: 0.4,
+              alignItems: 'center',
             }}>
               <div>Post</div>
               <div>Type</div>
-              <div>Date</div>
-              <div>Reports</div>
+              <SortableHeader label="Date"     col="created_at"        sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+              <SortableHeader label="Comments" col="comment_count"     sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+              <SortableHeader label="Likes"    col="like_count"        sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+              <SortableHeader label="People"   col="participant_count" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
               <div>Status</div>
               <div>Actions</div>
             </div>
 
-            {posts.map((post, i) => (
+            {sortedPosts.map((post, i) => (
               <PostRow
                 key={post.id}
                 post={post}
-                isLast={i === posts.length - 1}
+                isLast={i === sortedPosts.length - 1}
                 acting={acting === post.id}
                 onToggleHidden={() => toggleHidden(post)}
                 onDelete={() => deletePost(post.id)}
@@ -233,13 +263,13 @@ function PostRow({ post, isLast, acting, onToggleHidden, onDelete }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '1fr 80px 90px 70px 120px 160px',
+      gridTemplateColumns: POSTS_GRID,
       padding: '12px 16px',
       borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`,
       alignItems: 'center',
       background: hasReports ? 'rgba(245,158,11,.07)' : 'transparent',
     }}>
-      {/* Post preview + stats */}
+      {/* Post preview */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, minWidth: 0 }}>
         <Av
           size={28}
@@ -255,33 +285,49 @@ function PostRow({ post, isLast, acting, onToggleHidden, onDelete }) {
              post.content?.replace(/<[^>]+>/g, '').slice(0, 80) ||
              '(no content)'}
           </div>
-          {/* Engagement stats */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 11, color: T.mu }}>
-            <span>👍 {post.like_count || 0}</span>
-            <span>💬 {post.comment_count || 0}</span>
-            <span style={{
-              fontWeight: participants >= 3 ? 700 : 400,
-              color: participants >= 3 ? T.gr : participants === 2 ? T.am : T.mu,
-            }}>
-              👥 {participants} participant{participants !== 1 ? 's' : ''}
-            </span>
-          </div>
+          {hasReports && (
+            <div style={{ marginTop: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.am, background: T.w, padding: '2px 7px', borderRadius: 20, border: `1px solid ${T.am}` }}>
+                🚩 {post.report_count}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Type */}
-      <div style={{ fontSize: 12, color: T.mu }}>{post.post_type}</div>
+      {/* Type + deep-dive badge */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 12, color: T.mu }}>{post.post_type}</span>
+        {post.is_deep_dive && (
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '1px 6px',
+            borderRadius: 20, background: T.v2, color: T.v,
+          }}>
+            🔬 Deep dive
+          </span>
+        )}
+      </div>
 
       {/* Date */}
       <div style={{ fontSize: 12, color: T.mu }}>{timeAgo(post.created_at)}</div>
 
-      {/* Reports */}
-      <div>
-        {post.report_count > 0 && (
-          <span style={{ fontSize: 11, fontWeight: 700, color: T.am, background: T.w, padding: '2px 7px', borderRadius: 20, border: `1px solid ${T.am}` }}>
-            🚩 {post.report_count}
-          </span>
-        )}
+      {/* Comments */}
+      <div style={{ fontSize: 13, color: T.text, textAlign: 'center' }}>
+        {post.comment_count || 0}
+      </div>
+
+      {/* Likes */}
+      <div style={{ fontSize: 13, color: T.text, textAlign: 'center' }}>
+        {post.like_count || 0}
+      </div>
+
+      {/* People (distinct commenters) */}
+      <div style={{
+        fontSize: 13, textAlign: 'center',
+        fontWeight: participants >= 3 ? 700 : 400,
+        color: participants >= 3 ? T.gr : participants === 2 ? T.am : T.mu,
+      }}>
+        {participants}
       </div>
 
       {/* Status: health + hidden indicator */}
@@ -296,22 +342,38 @@ function PostRow({ post, isLast, acting, onToggleHidden, onDelete }) {
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-        {/* Hide / Unhide */}
         <button onClick={onToggleHidden} disabled={acting} style={actionBtn(T.mu, acting)}>
           {post.is_hidden ? 'Unhide' : 'Hide'}
         </button>
-
-        {/* View */}
         <a href={`/s/${post.id}`} target="_blank" rel="noopener noreferrer"
           style={{ ...actionBtn(T.bl, false), textDecoration: 'none', display: 'inline-block' }}>
           View →
         </a>
-
-        {/* Delete */}
         <button onClick={onDelete} disabled={acting} style={actionBtn(T.ro, acting)}>
           Delete
         </button>
       </div>
+    </div>
+  );
+}
+
+function SortableHeader({ label, col, sortBy, sortDir, onSort }) {
+  const active = sortBy === col;
+  return (
+    <div
+      onClick={() => onSort(col)}
+      style={{
+        cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 3,
+        userSelect: 'none',
+        color: active ? T.v : T.mu,
+        fontWeight: active ? 700 : 600,
+      }}
+    >
+      {label}
+      <span style={{ fontSize: 9, opacity: active ? 1 : 0.3 }}>
+        {active && sortDir === 'asc' ? '▲' : '▼'}
+      </span>
     </div>
   );
 }

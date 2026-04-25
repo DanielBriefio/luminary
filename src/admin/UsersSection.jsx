@@ -40,6 +40,17 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
   const [selected, setSelected]       = useState(new Set());
   const [detailUser, setDetailUser]   = useState(null);
   const [showNudge, setShowNudge]     = useState(false);
+  const [sortBy, setSortBy]           = useState('created_at');
+  const [sortDir, setSortDir]         = useState('desc');
+
+  const toggleSort = (col) => {
+    if (sortBy === col) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(col);
+      setSortDir('desc');
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,15 +76,35 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
     return true;
   });
 
-  const allSelected  = filtered.length > 0 && filtered.every(u => selected.has(u.id));
+  const sorted = [...filtered].sort((a, b) => {
+    const aVal = a[sortBy];
+    const bVal = b[sortBy];
+    // Nulls sort last regardless of direction
+    if (aVal == null && bVal == null) return 0;
+    if (aVal == null) return 1;
+    if (bVal == null) return -1;
+    if (sortBy === 'created_at' || sortBy === 'last_active') {
+      const aT = new Date(aVal).getTime();
+      const bT = new Date(bVal).getTime();
+      return sortDir === 'asc' ? aT - bT : bT - aT;
+    }
+    return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+  });
+
+  const allSelected  = sorted.length > 0 && sorted.every(u => selected.has(u.id));
   const someSelected = selected.size > 0;
 
   const toggleAll = () => {
     if (allSelected) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filtered.map(u => u.id)));
+      setSelected(new Set(sorted.map(u => u.id)));
     }
+  };
+
+  const handleDirectMessage = (userId) => {
+    setSelected(new Set([userId]));
+    setShowNudge(true);
   };
 
   const toggleOne = (id) => {
@@ -167,7 +198,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
           {/* Column headers */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '32px 1fr 110px 90px 90px 50px 50px 100px 80px 80px',
+            gridTemplateColumns: GRID_COLS,
             padding: '10px 14px',
             borderBottom: `1px solid ${T.bdr}`,
             fontSize: 11, fontWeight: 600, color: T.mu,
@@ -182,16 +213,17 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
             />
             <div>User</div>
             <div>Work mode</div>
-            <div>Joined</div>
-            <div>Last active</div>
-            <div>Posts</div>
-            <div>Groups</div>
+            <SortableHeader label="Joined"      col="created_at"             sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+            <SortableHeader label="Last active" col="last_active"            sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+            <SortableHeader label="Posts"       col="posts_count"            sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+            <SortableHeader label="Groups"      col="groups_count"           sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+            <SortableHeader label="Codes"       col="invite_codes_remaining" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <div>Stage</div>
             <div>Ghost</div>
             <div></div>
           </div>
 
-          {filtered.length === 0 ? (
+          {sorted.length === 0 ? (
             <div style={{
               textAlign: 'center', padding: '40px 20px',
               color: T.mu, fontSize: 14,
@@ -199,14 +231,15 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
               No users match your filters.
             </div>
           ) : (
-            filtered.map((u, i) => (
+            sorted.map((u, i) => (
               <UserRow
                 key={u.id}
                 user={u}
-                isLast={i === filtered.length - 1}
+                isLast={i === sorted.length - 1}
                 selected={selected.has(u.id)}
                 onToggle={() => toggleOne(u.id)}
                 onOpen={() => setDetailUser(u)}
+                onDirectMessage={() => handleDirectMessage(u.id)}
               />
             ))
           )}
@@ -267,6 +300,11 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
               u.id === detailUser.id ? { ...u, admin_notes: notes } : u
             ));
           }}
+          onUserUpdated={(patch) => {
+            setUsers(prev => prev.map(u =>
+              u.id === detailUser.id ? { ...u, ...patch } : u
+            ));
+          }}
         />
       )}
 
@@ -286,14 +324,16 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
   );
 }
 
-function UserRow({ user, isLast, selected, onToggle, onOpen }) {
+function UserRow({ user, isLast, selected, onToggle, onOpen, onDirectMessage }) {
   const stage = STAGE_STYLES[user.activation_stage] || STAGE_STYLES.identified;
   const ghost = user.ghost_segment ? GHOST_STYLES[user.ghost_segment] : null;
+  const codes = user.invite_codes_remaining ?? 0;
+  const codesColor = codes >= 3 ? T.gr : codes >= 1 ? T.am : T.ro;
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '32px 1fr 110px 90px 90px 50px 50px 100px 80px 80px',
+      gridTemplateColumns: GRID_COLS,
       padding: '11px 14px',
       borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`,
       alignItems: 'center',
@@ -346,6 +386,12 @@ function UserRow({ user, isLast, selected, onToggle, onOpen }) {
         {user.groups_count ?? 0}
       </div>
 
+      <div style={{
+        fontSize: 13, fontWeight: 600, color: codesColor, textAlign: 'center',
+      }}>
+        {codes}
+      </div>
+
       <div>
         <span style={{
           fontSize: 11, fontWeight: 700, padding: '2px 8px',
@@ -366,7 +412,7 @@ function UserRow({ user, isLast, selected, onToggle, onOpen }) {
         )}
       </div>
 
-      <div>
+      <div style={{ display: 'flex', gap: 5 }}>
         <button
           onClick={onOpen}
           style={{
@@ -378,7 +424,42 @@ function UserRow({ user, isLast, selected, onToggle, onOpen }) {
         >
           View
         </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDirectMessage(); }}
+          title="Send nudge"
+          style={{
+            padding: '5px 9px', borderRadius: 7,
+            border: `1px solid ${T.v}`, background: T.w,
+            color: T.v, fontSize: 13, cursor: 'pointer',
+            fontFamily: 'inherit', lineHeight: 1,
+          }}
+        >
+          ✉
+        </button>
       </div>
+    </div>
+  );
+}
+
+const GRID_COLS = '32px 1fr 110px 90px 90px 50px 50px 60px 100px 80px 100px';
+
+function SortableHeader({ label, col, sortBy, sortDir, onSort }) {
+  const active = sortBy === col;
+  return (
+    <div
+      onClick={() => onSort(col)}
+      style={{
+        cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 3,
+        userSelect: 'none',
+        color: active ? T.v : T.mu,
+        fontWeight: active ? 700 : 600,
+      }}
+    >
+      {label}
+      <span style={{ fontSize: 9, opacity: active ? 1 : 0.3 }}>
+        {active && sortDir === 'asc' ? '▲' : '▼'}
+      </span>
     </div>
   );
 }

@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { id: 'templates',     label: 'Templates',     icon: '📋' },
   { id: 'content',       label: 'Content',       icon: '🗂️' },
   { id: 'interventions', label: 'Interventions', icon: '⚡' },
+  { id: 'inbox',         label: 'Inbox',         icon: '💬' },
   { id: 'analytics',     label: 'Analytics',     icon: '📈' },
 ];
 

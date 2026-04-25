@@ -1,5 +1,13 @@
 const MONTH_ABBREVS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// Random invite code suffix — Crockford-ish base32 (no I/O/0/1) for legibility.
+export function randomInviteSuffix(len = 8) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: len }, () =>
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join('');
+}
+
 export function buildCitationFromEpmc(r) {
   if (!r) return '';
   const ji     = r.journalInfo || {};
