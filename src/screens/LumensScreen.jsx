@@ -84,7 +84,11 @@ export default function LumensScreen({ supabase, user, profile, onBack }) {
   periodEnd.setFullYear(periodEnd.getFullYear() + 1);
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 32px 60px' }}>
+    <div style={{
+      flex: 1, overflowY: 'auto', overflowX: 'hidden',
+      width: '100%', height: '100%',
+    }}>
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 32px 60px' }}>
 
       {/* Tier hero card */}
       <div style={{
@@ -311,6 +315,7 @@ export default function LumensScreen({ supabase, user, profile, onBack }) {
             })}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

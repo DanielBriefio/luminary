@@ -3,7 +3,7 @@ export const AUTO_TAG_ENABLED = true;
 // Gamification: set to true ONLY after migration_gamification.sql has been run.
 // Until then, calls to the award_lumens RPC will hit a missing function and
 // silently break the surrounding flow (publish, comment, onboarding).
-export const LUMENS_ENABLED = false;
+export const LUMENS_ENABLED = true;
 
 // Luminary Team bot account — used for admin nudge DMs
 export const LUMINARY_TEAM_USER_ID = 'af56ef6f-635a-438b-8c8a-41cc84751bca';
@@ -36,7 +36,7 @@ export const TIER_CONFIG = {
     color:       T.v,
     bg:          T.v2,
     ringColor:   null,
-    description: "You're igniting the conversation. Every post, comment, and connection you make sparks new thinking on Luminary. Keep contributing — you're shaping what this community becomes.",
+    description: "You're a Catalyst — igniting the conversation. Every post, comment, and connection you make sparks new thinking on Luminary. Keep contributing — you're shaping what this community becomes.",
   },
   pioneer: {
     name:        'Pioneer',
@@ -45,7 +45,7 @@ export const TIER_CONFIG = {
     color:       T.v,
     bg:          T.v2,
     ringColor:   null,
-    description: "You're going where others haven't yet. Your contributions are establishing your voice in the community, and others are starting to take notice. You're charting the path forward.",
+    description: "You're a Pioneer — going where others haven't yet. Your contributions are establishing your voice in the community, and others are starting to take notice. You're charting the path forward.",
   },
   beacon: {
     name:        'Beacon',
@@ -54,7 +54,7 @@ export const TIER_CONFIG = {
     color:       T.v,
     bg:          T.v2,
     ringColor:   null,
-    description: "You're a reference point others navigate by. Your insights guide discussions, your library curates evidence others rely on, and your voice carries weight. The community is stronger because of you.",
+    description: "You're a Beacon — a reference point others navigate by. Your insights guide discussions, your library curates evidence others rely on, and your voice carries weight. The community is stronger because of you.",
   },
   luminary: {
     name:        'Luminary',
@@ -63,7 +63,7 @@ export const TIER_CONFIG = {
     color:       '#C9A961',
     bg:          '#C9A96115',
     ringColor:   '#C9A961',
-    description: "You embody what this platform stands for. Your influence reaches across the community, and your contributions inspire the next generation of scientists. Welcome to the highest tier — and to The Luminarians, where peers at your level gather.",
+    description: "You're a Luminary — embodying what this platform stands for. Your influence reaches across the community, and your contributions inspire the next generation of scientists. Welcome to the highest tier — and to The Luminarians, where peers at your level gather.",
   },
 };
 
