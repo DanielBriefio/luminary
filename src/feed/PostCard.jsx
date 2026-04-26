@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T, TIER1_LIST, getTier2, DISCUSSION_PROMPTS, ZERO_COMMENT_PROMPTS, getDiscussionPrompts } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, DISCUSSION_PROMPTS, ZERO_COMMENT_PROMPTS, getDiscussionPrompts, LUMENS_ENABLED } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import { useWindowSize } from '../lib/useWindowSize';
 import Av from '../components/Av';
@@ -18,32 +18,38 @@ import ReportModal from '../components/ReportModal';
 // Awards Lumens for a comment: 2 to the commenter (creation), and 5 to the
 // post owner the first time each commenter comments on this post (engagement).
 // Self-comments earn no engagement Lumens. Best-effort — failures swallowed.
+// Gated on LUMENS_ENABLED so a missing RPC can never break the comment flow.
 async function awardLumensForComment(post, commenterId) {
-  supabase.rpc('award_lumens', {
-    p_user_id:  commenterId,
-    p_amount:   2,
-    p_reason:   'comment_posted',
-    p_category: 'creation',
-    p_meta:     { post_id: post.id },
-  }).catch(() => {});
+  if (!LUMENS_ENABLED) return;
+  try {
+    supabase.rpc('award_lumens', {
+      p_user_id:  commenterId,
+      p_amount:   2,
+      p_reason:   'comment_posted',
+      p_category: 'creation',
+      p_meta:     { post_id: post.id },
+    }).catch(() => {});
 
-  if (post?.user_id && post.user_id !== commenterId) {
-    const { count } = await supabase
-      .from('comments')
-      .select('*', { count: 'exact', head: true })
-      .eq('post_id',  post.id)
-      .eq('user_id',  commenterId);
-    // After the insert, count === 1 means this is the commenter's first
-    // comment on this post → first-time engagement, award the post owner.
-    if (count === 1) {
-      supabase.rpc('award_lumens', {
-        p_user_id:  post.user_id,
-        p_amount:   5,
-        p_reason:   'comment_received',
-        p_category: 'engagement',
-        p_meta:     { post_id: post.id, actor_id: commenterId },
-      }).catch(() => {});
+    if (post?.user_id && post.user_id !== commenterId) {
+      const { count } = await supabase
+        .from('comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id',  post.id)
+        .eq('user_id',  commenterId);
+      // After the insert, count === 1 means this is the commenter's first
+      // comment on this post → first-time engagement, award the post owner.
+      if (count === 1) {
+        supabase.rpc('award_lumens', {
+          p_user_id:  post.user_id,
+          p_amount:   5,
+          p_reason:   'comment_received',
+          p_category: 'engagement',
+          p_meta:     { post_id: post.id, actor_id: commenterId },
+        }).catch(() => {});
+      }
     }
+  } catch {
+    // Swallow any sync/async failure so the comment flow always completes.
   }
 }
 

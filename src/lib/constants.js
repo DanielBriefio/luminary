@@ -1,5 +1,10 @@
 export const AUTO_TAG_ENABLED = true;
 
+// Gamification: set to true ONLY after migration_gamification.sql has been run.
+// Until then, calls to the award_lumens RPC will hit a missing function and
+// silently break the surrounding flow (publish, comment, onboarding).
+export const LUMENS_ENABLED = false;
+
 // Luminary Team bot account — used for admin nudge DMs
 export const LUMINARY_TEAM_USER_ID = 'af56ef6f-635a-438b-8c8a-41cc84751bca';
 

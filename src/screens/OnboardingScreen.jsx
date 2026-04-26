@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T, TIER1_LIST, getTier2, WORK_MODES } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, WORK_MODES, LUMENS_ENABLED } from '../lib/constants';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
@@ -129,13 +129,17 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
     await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
     setProfile(p => ({ ...p, onboarding_completed: true }));
     capture('onboarding_completed');
-    supabase.rpc('award_lumens', {
-      p_user_id:  user.id,
-      p_amount:   25,
-      p_reason:   'onboarding_completed',
-      p_category: 'creation',
-      p_meta:     {},
-    }).catch(() => {});
+    if (LUMENS_ENABLED) {
+      try {
+        supabase.rpc('award_lumens', {
+          p_user_id:  user.id,
+          p_amount:   25,
+          p_reason:   'onboarding_completed',
+          p_category: 'creation',
+          p_meta:     {},
+        }).catch(() => {});
+      } catch {}
+    }
     onComplete();
   };
 

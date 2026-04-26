@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T, AUTO_TAG_ENABLED, EDGE_HEADERS, COMPOSER_PROMPTS } from '../lib/constants';
+import { T, AUTO_TAG_ENABLED, EDGE_HEADERS, COMPOSER_PROMPTS, LUMENS_ENABLED } from '../lib/constants';
 
 const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
 import { getFileCategory } from '../lib/fileUtils';
@@ -383,6 +383,18 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
     }).select('id').single();
     setLoading(false);
     if(error) { setError(error.message); return; }
+
+    if (LUMENS_ENABLED && newPost?.id) {
+      try {
+        supabase.rpc('award_lumens', {
+          p_user_id:  user.id,
+          p_amount:   5,
+          p_reason:   'post_created',
+          p_category: 'creation',
+          p_meta:     { post_id: newPost.id, post_type: resolvedPostType },
+        }).catch(() => {});
+      } catch {}
+    }
 
     if (AUTO_TAG_ENABLED && newPost?.id) {
       smartAutoTag({
