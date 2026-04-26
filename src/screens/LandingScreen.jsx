@@ -18,7 +18,7 @@ const FEATURES = [
   {
     icon: '🔬',
     title: 'Connect & Collaborate',
-    desc: 'Build a verified scientific profile. Find researchers, clinicians, and medical affairs professionals in your field. Groups bring the right people together.',
+    desc: 'Build a verified scientific profile. Find researchers, clinicians, and industry scientists in your field. Groups bring the right people together.',
   },
   {
     icon: '📚',
@@ -239,7 +239,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
           background: T.v2, padding: '4px 14px', borderRadius: 20,
           marginBottom: isMobile ? 18 : 24,
         }}>
-          Early access — by invitation
+          Early access — by invitation only
         </div>
 
         <h1 style={{
@@ -483,8 +483,9 @@ export default function LandingScreen({ supabase, onShowAuth }) {
           fontSize: isMobile ? 14 : 15, color: T.mu, lineHeight: 1.65,
           margin: isMobile ? '0 0 24px' : '0 0 36px',
         }}>
-          Luminary is growing by invitation. Leave your details and
-          we'll reach out when a spot opens up for your field.
+          Luminary is growing by invitation only, so the people you invite
+          shape the community we become. Leave your details and we'll reach
+          out when a spot opens up for your field.
         </p>
 
         <WaitlistForm supabase={supabase} isMobile={isMobile} />
@@ -934,6 +935,16 @@ function WaitlistForm({ supabase, isMobile }) {
             type="email"
           />
         </div>
+
+        <div style={{
+          padding: '12px 14px',
+          background: T.v2, borderRadius: 10,
+          borderLeft: `3px solid ${T.v}`,
+          fontSize: 13, fontWeight: 600, color: T.v,
+        }}>
+          Tell us a little bit about you to get priority access.
+        </div>
+
         <div style={{
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
