@@ -1,6 +1,6 @@
 # Luminary — Privacy Policy
 
-_Last updated: April 24, 2026_
+_Last updated: April 26, 2026_
 _Effective date: April 24, 2026_
 
 ---
@@ -138,6 +138,7 @@ following legal bases:
 | Enabling platform features | All usage data | Contract performance |
 | Sending transactional notifications | Email address, notification preferences | Contract performance |
 | Sending product updates and news | Email address, marketing preference | Consent |
+| Showing sponsored or promoted content inside the Platform | Pseudonymous targeting attributes (e.g. discipline, work mode) | Legitimate interest, or Consent for sponsored emails |
 | Anonymised usage analytics | Pseudonymous event data | Consent |
 | Security and fraud prevention | IP address, login data | Legitimate interest |
 | Improving the Platform | Anonymised usage patterns | Legitimate interest |
@@ -155,7 +156,9 @@ to do so.
 ### 4.1 We do not sell your data
 
 We do not sell, rent, or trade your personal data to third parties for
-marketing or commercial purposes. Full stop.
+marketing or commercial purposes. Full stop. This includes your email
+address, contact details, profile data, and any list of users — these
+never leave Luminary.
 
 ### 4.2 Service providers (data processors)
 
@@ -204,7 +207,37 @@ your pseudonymous account UUID — not your name, email address, or
 institution. We do not enable session recording. You can opt out of
 analytics at any time via your account settings.
 
-### 4.4 Public data
+### 4.4 Sponsored and promoted content
+
+Luminary may show sponsored or promoted content inside the Platform —
+for example a sponsored post or paper in the feed, a sponsored Paper of
+the Week, a sponsored item in a group's library, or an occasional
+sponsored email sent by us. Where this happens, we will mark the
+content clearly so you can recognise it as sponsored.
+
+How we keep this compatible with our promise not to share your data:
+
+- **Sponsors do not receive your data.** Sponsors do not receive your
+  email address, name, contact details, profile, or any list of users.
+  They receive only aggregate reach and engagement statistics
+  (e.g. "the sponsored post was seen by 4,200 cardiologists").
+- **We are always the sender.** Any sponsored email is sent by us from
+  a `@luminary.to` address. Sponsors do not gain the ability to email
+  you directly.
+- **Targeting, if any, is server-side and pseudonymous.** If a sponsor
+  asks to reach a particular audience (e.g. researchers in oncology),
+  the matching is performed by us using pseudonymous profile attributes
+  such as your discipline or work mode. The sponsor never sees who is
+  in the audience.
+- **You can opt out.** Sponsored emails are gated by the "Product
+  updates & news" preference in Account Settings. Disabling it stops
+  sponsored emails from being sent to you. In-app sponsored content
+  may still be shown, but is always labelled.
+
+We never share your email address or contact details with sponsors,
+even where you have engaged with their content.
+
+### 4.5 Public data
 
 Content you mark as publicly visible — including your public profile,
 public posts, and your business card page — is accessible to anyone on
@@ -212,14 +245,14 @@ the internet, including search engines. By making content public, you
 consent to this. You can change the visibility of your content at any
 time through your account settings.
 
-### 4.5 Other users
+### 4.6 Other users
 
 Other registered users of the Platform can see content you post based
 on your visibility settings. Direct messages are visible only to you
 and the recipient(s). Closed group content is visible only to group
 members.
 
-### 4.6 Legal disclosure
+### 4.7 Legal disclosure
 
 We may disclose your personal data if required to do so by law, court
 order, or government authority, or if we reasonably believe that
@@ -232,7 +265,7 @@ disclosure is necessary to:
 
 We will notify you of such disclosure where legally permitted to do so.
 
-### 4.7 Business transfers
+### 4.8 Business transfers
 
 If Luminary is involved in a merger, acquisition, or sale of all or
 part of its assets, your personal data may be transferred as part of
@@ -395,9 +428,12 @@ If you have given consent, PostHog stores a pseudonymous identifier in
 localStorage to associate events with your session. This is not used
 for advertising or shared with third parties.
 
-### 10.3 No advertising cookies
+### 10.3 No advertising cookies or third-party tracking
 We do not use advertising cookies, tracking pixels, or retargeting
-technologies. We do not share data with advertising networks.
+technologies. We do not share data with advertising networks. Where
+the Platform shows sponsored content (see Section 4.4), it is selected
+on our own servers using pseudonymous attributes — no third-party
+advertising tracker is involved.
 
 ### 10.4 Managing storage
 You can clear localStorage at any time through your browser settings.
