@@ -138,6 +138,11 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
           p_category: 'creation',
           p_meta:     {},
         }).catch(() => {});
+        setProfile(p => p ? {
+          ...p,
+          lumens_current_period: (p.lumens_current_period || 0) + 25,
+          lumens_lifetime:       (p.lumens_lifetime       || 0) + 25,
+        } : p);
       } catch {}
     }
     onComplete();

@@ -90,9 +90,11 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   const applyModeFilter = useCallback((posts, filter, userWorkMode) => {
     if (filter === 'all') return posts;
     if (filter === 'myfield') {
+      // Sort field-matching posts above non-matching, but keep date order
+      // within each group. Admin posts integrate chronologically — they're
+      // not pinned to top here, so a fresh user post pushes the Luminary
+      // Team announcement down.
       return [...posts].sort((a, b) => {
-        if (a.is_admin_post && !b.is_admin_post) return -1;
-        if (!a.is_admin_post && b.is_admin_post) return 1;
         const aMatch = a.author_work_mode === userWorkMode || userWorkMode === 'clinician_scientist';
         const bMatch = b.author_work_mode === userWorkMode || userWorkMode === 'clinician_scientist';
         if (aMatch && !bMatch) return -1;

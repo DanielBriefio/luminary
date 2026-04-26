@@ -156,6 +156,24 @@ export default function App() {
     supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>setProfile(data));
   },[session]);
 
+  // Live-sync the profile row so updates from server-side (e.g. award_lumens
+  // updating lumens_current_period) reflect in the sidebar widget without a
+  // page reload. Silently inert if realtime isn't enabled for `profiles`.
+  useEffect(()=>{
+    if(!session?.user) return;
+    const userId = session.user.id;
+    const channel = supabase
+      .channel(`profile-self-${userId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'profiles',
+        filter: `id=eq.${userId}`,
+      }, payload => {
+        if (payload?.new) setProfile(p => p ? { ...p, ...payload.new } : payload.new);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  },[session?.user?.id]);
+
   useEffect(()=>{
     if (!session?.user || !profile) return;
     if (profile.analytics_consent_at) {
@@ -479,7 +497,7 @@ export default function App() {
     projects: <ProjectsScreen user={user}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
-    post:         <NewPostScreen user={user} profile={profile} onPostCreated={()=>setScreen('feed')}/>,
+    post:         <NewPostScreen user={user} profile={profile} setProfile={setProfile} onPostCreated={()=>setScreen('feed')}/>,
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     lumens:       <LumensScreen supabase={supabase} user={user} profile={profile} onBack={()=>setScreen('feed')}/>,

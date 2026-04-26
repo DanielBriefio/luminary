@@ -98,7 +98,7 @@ function EpResultCard({ title, authors, citation, journal, year, cited, oa, onSe
   );
 }
 
-export default function NewPostScreen({ user, profile, onPostCreated }) {
+export default function NewPostScreen({ user, profile, setProfile, onPostCreated }) {
   const { isMobile } = useWindowSize();
   const [postType,setPostType]           = useState('text');
   const [content,setContent]             = useState('');
@@ -393,6 +393,13 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
           p_category: 'creation',
           p_meta:     { post_id: newPost.id, post_type: resolvedPostType },
         }).catch(() => {});
+        // Optimistic local update so the sidebar widget reflects the +5 right
+        // away without waiting for a profile re-fetch.
+        setProfile?.(p => p ? {
+          ...p,
+          lumens_current_period: (p.lumens_current_period || 0) + 5,
+          lumens_lifetime:       (p.lumens_lifetime       || 0) + 5,
+        } : p);
       } catch {}
     }
 
