@@ -15,6 +15,38 @@ import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
 
+// Awards Lumens for a comment: 2 to the commenter (creation), and 5 to the
+// post owner the first time each commenter comments on this post (engagement).
+// Self-comments earn no engagement Lumens. Best-effort — failures swallowed.
+async function awardLumensForComment(post, commenterId) {
+  supabase.rpc('award_lumens', {
+    p_user_id:  commenterId,
+    p_amount:   2,
+    p_reason:   'comment_posted',
+    p_category: 'creation',
+    p_meta:     { post_id: post.id },
+  }).catch(() => {});
+
+  if (post?.user_id && post.user_id !== commenterId) {
+    const { count } = await supabase
+      .from('comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('post_id',  post.id)
+      .eq('user_id',  commenterId);
+    // After the insert, count === 1 means this is the commenter's first
+    // comment on this post → first-time engagement, award the post owner.
+    if (count === 1) {
+      supabase.rpc('award_lumens', {
+        p_user_id:  post.user_id,
+        p_amount:   5,
+        p_reason:   'comment_received',
+        p_category: 'engagement',
+        p_meta:     { post_id: post.id, actor_id: commenterId },
+      }).catch(() => {});
+    }
+  }
+}
+
 // Inserts a new_comment notification for the post owner, deduped so a flurry
 // of comments while the previous one is still unread doesn't pile up.
 async function notifyPostOwnerOfComment(post, commenterId) {
@@ -275,6 +307,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       setCommCount(n => n + 1);
       setCommText('');
       capture('comment_posted');
+      await awardLumensForComment(post, currentUserId);
       await notifyPostOwnerOfComment(post, currentUserId);
     }
     setCommSaving(false);
@@ -322,6 +355,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       .single();
     if (data) setTopComment(data);
     setPromptIndex(i => i + 1);
+    await awardLumensForComment(post, currentUserId);
     await notifyPostOwnerOfComment(post, currentUserId);
   };
 

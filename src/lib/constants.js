@@ -20,6 +20,78 @@ export const T = {
   te:"#0ea5e9",te2:"#f0f9ff",
 };
 
+// ── Gamification: Lumens & tiers ──────────────────────────────────────────────
+// Catalyst → Pioneer → Beacon → Luminary. Only Luminary gets the gold treatment;
+// the others use platform violet to keep the brand consistent.
+export const TIER_CONFIG = {
+  catalyst: {
+    name:        'Catalyst',
+    min:         0,
+    max:         499,
+    color:       T.v,
+    bg:          T.v2,
+    ringColor:   null,
+    description: "You're igniting the conversation. Every post, comment, and connection you make sparks new thinking on Luminary. Keep contributing — you're shaping what this community becomes.",
+  },
+  pioneer: {
+    name:        'Pioneer',
+    min:         500,
+    max:         1999,
+    color:       T.v,
+    bg:          T.v2,
+    ringColor:   null,
+    description: "You're going where others haven't yet. Your contributions are establishing your voice in the community, and others are starting to take notice. You're charting the path forward.",
+  },
+  beacon: {
+    name:        'Beacon',
+    min:         2000,
+    max:         4999,
+    color:       T.v,
+    bg:          T.v2,
+    ringColor:   null,
+    description: "You're a reference point others navigate by. Your insights guide discussions, your library curates evidence others rely on, and your voice carries weight. The community is stronger because of you.",
+  },
+  luminary: {
+    name:        'Luminary',
+    min:         5000,
+    max:         null,
+    color:       '#C9A961',
+    bg:          '#C9A96115',
+    ringColor:   '#C9A961',
+    description: "You embody what this platform stands for. Your influence reaches across the community, and your contributions inspire the next generation of scientists. Welcome to the highest tier — and to The Luminarians, where peers at your level gather.",
+  },
+};
+
+export const TIER_ORDER = ['catalyst', 'pioneer', 'beacon', 'luminary'];
+
+export function getTierFromLumens(lumens) {
+  const n = Number(lumens) || 0;
+  if (n >= 5000) return 'luminary';
+  if (n >= 2000) return 'beacon';
+  if (n >= 500)  return 'pioneer';
+  return 'catalyst';
+}
+
+export function getNextTier(currentTier) {
+  const idx = TIER_ORDER.indexOf(currentTier);
+  if (idx < 0 || idx === TIER_ORDER.length - 1) return null;
+  return TIER_ORDER[idx + 1];
+}
+
+export function getProgressToNextTier(lumens, currentTier) {
+  const next = getNextTier(currentTier);
+  if (!next) return { progress: 100, needed: 0, nextTier: null };
+  const cur = TIER_CONFIG[currentTier];
+  const nxt = TIER_CONFIG[next];
+  const range  = nxt.min - cur.min;
+  const earned = (Number(lumens) || 0) - cur.min;
+  return {
+    progress: Math.max(0, Math.min(100, Math.round((earned / range) * 100))),
+    needed:   Math.max(0, nxt.min - (Number(lumens) || 0)),
+    nextTier: next,
+  };
+}
+
 export const PUB_TYPES = [
   {id:'journal',    label:'Journal Article', icon:'📄'},
   {id:'conference', label:'Conference Paper', icon:'🎤'},

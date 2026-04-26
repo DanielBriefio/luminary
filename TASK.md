@@ -1,677 +1,1252 @@
-# Task: Admin Enhancements + Email Fix + Doc Split (Phase 7B)
+# Task: Gamification System (Phase 8)
 
 ## Context
 
-Read CLAUDE.md and PRODUCT_STATE.md first.
+Read CLAUDE.md, PRODUCT_STATE.md, SCHEMA.md, and TASK.md.
 
-This task bundles several related improvements:
+This task introduces the Luminary gamification system: a Lumens points
+system, four-tier progression (Catalyst → Pioneer → Beacon → Luminary),
+visual differentiation per tier, a transparency page, and Founding
+Member designation.
 
-1. **Admin Inbox → left nav** — currently reachable only via direct
-   state; add to AdminShell NAV_ITEMS
-2. **group_member_joined email** — add to Edge Function inline HTML
-3. **Edge Function sync** — reconcile repo vs deployed dashboard version
-4. **User table enhancements** — invite_codes_remaining column, sortable
-   columns, direct message button per row, top-up codes in UserDetailPanel
-5. **Content Posts tab fixes** — remove invalid post type filters,
-   add sortable columns, show deep-dive indicator
-6. **get_admin_user_list() RPC** — add invite_codes_remaining field
-7. **CLAUDE.md split** → CLAUDE.md (conventions) + SCHEMA.md (database)
-8. **CLAUDE.md post-type correction** — text and paper only; remove
-   references to link, tip, upload as active post types
+**Design principles:**
+- Subtle, not gamified-feeling — this is a scientific platform
+- Quality over volume — recognition rewards weighted higher than creation
+- Annual reset like airline miles — keeps tier earned, not given
+- Transparent — users can see exactly how Lumens are earned
+- Visual differentiation through tier-coloured avatar borders everywhere
 
-> ⚠️ Step 3 (Edge Function sync) must happen BEFORE any Edge Function
-> edits. The repo file and Supabase dashboard may have diverged. Do not
-> overwrite dashboard changes with stale repo content.
+Scope:
 
----
+1. SQL migration — `lumen_transactions` table, profile columns,
+   Founding Member config, tier computation function
+2. Lumens earning — wired into existing actions (posts, comments, etc.)
+3. `useTier` hook + `TierBadge` + `Av` (avatar) component updates
+4. Profile page — tier badge, Lumens count, progress to next tier
+5. Lumens transparency page — earning history, rules, tier description
+6. Admin config for Founding Member cutoff date
+7. Sidebar XP badge → wire to real Lumens data (currently decorative)
+8. PostHog events for Lumens earning
 
-## Step 1 — Admin Inbox → left nav
-
-In `src/admin/AdminShell.jsx`, add Inbox to `NAV_ITEMS`:
-
-```javascript
-const NAV_ITEMS = [
-  { id: 'overview',      label: 'Overview',      icon: '📊' },
-  { id: 'users',         label: 'Users',         icon: '👥' },
-  { id: 'invites',       label: 'Invites',       icon: '🎟️' },
-  { id: 'templates',     label: 'Templates',     icon: '📋' },
-  { id: 'content',       label: 'Content',       icon: '🗂️' },
-  { id: 'interventions', label: 'Interventions', icon: '⚡' },
-  { id: 'inbox',         label: 'Inbox',         icon: '💬' },
-  { id: 'analytics',     label: 'Analytics',     icon: '📈' },
-];
-```
-
-Find the existing `InboxSection` import (it exists but is not in the
-nav). Wire it in the content area conditional alongside the other
-sections. Do not change InboxSection itself.
-
-Add an unread indicator to the Inbox nav item if any bot conversations
-have unread messages — check if InboxSection already computes this;
-if so, surface it as a small red dot on the nav item. If not, skip
-the indicator for now.
+> ⚠️ The `Av` (avatar) component is used everywhere on the platform.
+> Read it carefully before modifying. The tier border addition must
+> not break existing usage — make `tierBorderColor` an optional prop
+> that defaults to no border.
 
 ---
 
-## Step 2 — Edge Function sync (do this first, before any edits)
+## Step 1 — SQL migration
 
-Before touching `supabase/functions/send-email-notification/index.ts`,
-run this in the terminal to see the currently deployed function:
-
-```bash
-supabase functions download send-email-notification
-```
-
-If that command is unavailable, ask the user to copy the current
-content from the Supabase Dashboard → Edge Functions →
-`send-email-notification` → Edit and paste it here before proceeding.
-
-The goal: ensure the local file matches what is actually deployed.
-If there are differences between the local repo file and the dashboard
-version, use the dashboard version as the source of truth (it reflects
-edits made after the last deploy).
-
----
-
-## Step 3 — Add group_member_joined email to Edge Function
-
-Once the file is synced (Step 2), edit
-`supabase/functions/send-email-notification/index.ts`:
-
-### Add to EMAIL_TYPES set
-
-Find the `EMAIL_TYPES` constant (a Set or Record of handled notification
-types). Add `'group_member_joined'` alongside the existing types.
-
-### Add to PREF_COLUMN map
-
-`group_member_joined` should use `email_notif_group_request` as its
-preference gate — group admins who want group request emails also want
-to know when someone joins publicly.
-
-```typescript
-'group_member_joined': 'email_notif_group_request',
-```
-
-### Add templateVariables case
-
-In the `templateVariables` building section, add a case for
-`group_member_joined`. The notification meta contains `group_id` and
-`group_name` (same as `group_join_request`). The actor is the user
-who joined.
-
-```typescript
-if (notif_type === 'group_member_joined') {
-  templateVariables = {
-    ...templateVariables,
-    member_name:  actor.name,
-    group_name:   meta?.group_name || 'your group',
-    group_url:    APP_URL,
-  };
-}
-```
-
-### Add to renderHtml()
-
-Inside the `renderHtml()` function, add a case for
-`group_member_joined` following the exact same HTML pattern as the
-other notification types. Use the `shell()` wrapper for consistent
-branding:
-
-```typescript
-case 'group_member_joined': {
-  const body = `
-    <p style="margin:0 0 16px;font-size:16px;color:#1A1B2E;">
-      Hi ${name},
-    </p>
-    <p style="margin:0 0 16px;font-size:15px;color:#1A1B2E;line-height:1.6;">
-      <strong>${escape(v.member_name)}</strong> has joined your group
-      <strong>${escape(v.group_name)}</strong> on Luminary.
-    </p>
-    <p style="margin:0;font-size:13px;color:#8B8FA8;">
-      Say hello and welcome them to the group.
-    </p>
-  `;
-  return shell(body, v.group_url, `View ${escape(v.group_name)} →`);
-}
-```
-
-### Add to buildSubject()
-
-```typescript
-case 'group_member_joined':
-  return `${escape(v.member_name)} joined ${escape(v.group_name)} ✦`;
-```
-
-### Deploy
-
-After edits:
-```bash
-supabase functions deploy send-email-notification
-```
-
----
-
-## Step 4 — SQL migration
-
-Create `migration_admin_enhancements.sql`:
+Create `migration_gamification.sql`:
 
 ```sql
--- Update get_admin_user_list() to include invite_codes_remaining
--- (replaces existing function — CREATE OR REPLACE is safe)
-create or replace function get_admin_user_list()
+-- ─── Lumens columns on profiles ──────────────────────────────────────────────
+
+alter table profiles
+  add column if not exists lumens_current_period   integer default 0,
+  add column if not exists lumens_lifetime         integer default 0,
+  add column if not exists current_period_started  timestamptz default now(),
+  add column if not exists previous_period_lumens  integer default 0,
+  add column if not exists is_founding_member      boolean default false;
+
+-- The xp and level columns already exist on profiles but are unused.
+-- Leave them in place but do NOT use them — Lumens is the new system.
+
+-- ─── Lumen transactions table (audit trail) ──────────────────────────────────
+
+create table if not exists lumen_transactions (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid references profiles(id) on delete cascade not null,
+  amount       integer not null,
+  reason       text not null,
+  -- Examples: 'post_created', 'comment_received', 'post_reposted',
+  -- 'invited_user_active', 'post_featured', 'discussion_threshold'
+  category     text not null check (category in ('creation', 'engagement', 'recognition')),
+  meta         jsonb default '{}',
+  -- Optional context: { post_id, actor_id, etc. }
+  created_at   timestamptz default now()
+);
+
+alter table lumen_transactions enable row level security;
+
+-- Users can read their own transactions
+create policy "lt_select_own" on lumen_transactions for select
+  using (auth.uid() = user_id);
+
+-- Admins can read all
+create policy "lt_select_admin" on lumen_transactions for select
+  using ((select is_admin from profiles where id = auth.uid()));
+
+-- Only the system (via SECURITY DEFINER functions) can insert.
+-- No direct INSERT policy — only via award_lumens() RPC.
+
+create index if not exists idx_lt_user_created
+  on lumen_transactions(user_id, created_at desc);
+
+create index if not exists idx_lt_reason
+  on lumen_transactions(reason);
+
+-- ─── Founding Member config ──────────────────────────────────────────────────
+
+-- Stored in admin_config under key 'founding_member_cutoff'
+-- Format: { "cutoff_date": "2026-08-01T00:00:00Z" }
+insert into admin_config (key, value) values (
+  'founding_member_cutoff',
+  jsonb_build_object('cutoff_date', (now() + interval '90 days')::text)
+) on conflict (key) do nothing;
+
+-- ─── award_lumens RPC (the only way to insert transactions) ──────────────────
+
+create or replace function award_lumens(
+  p_user_id uuid,
+  p_amount  integer,
+  p_reason  text,
+  p_category text,
+  p_meta    jsonb default '{}'
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Skip if user is the Luminary Team bot (no Lumens for the bot)
+  if p_user_id = (select id from profiles where name = 'Luminary Team' limit 1) then
+    return;
+  end if;
+
+  -- Insert transaction
+  insert into lumen_transactions (user_id, amount, reason, category, meta)
+  values (p_user_id, p_amount, p_reason, p_category, p_meta);
+
+  -- Update profile totals
+  update profiles
+  set
+    lumens_current_period = lumens_current_period + p_amount,
+    lumens_lifetime       = lumens_lifetime + p_amount
+  where id = p_user_id;
+end;
+$$;
+
+grant execute on function award_lumens(uuid, integer, text, text, jsonb) to authenticated;
+
+-- ─── compute_tier helper function ────────────────────────────────────────────
+
+create or replace function compute_tier(p_lumens integer)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when p_lumens >= 5000 then 'luminary'
+    when p_lumens >= 2000 then 'beacon'
+    when p_lumens >= 500  then 'pioneer'
+    else 'catalyst'
+  end;
+$$;
+
+-- ─── get_lumen_history RPC (transparency page) ───────────────────────────────
+
+create or replace function get_lumen_history(p_limit integer default 30)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 begin
-  if not (select is_admin from profiles where id = auth.uid()) then
-    raise exception 'not authorized';
+  if auth.uid() is null then
+    raise exception 'not authenticated';
   end if;
 
-  return (
-    select coalesce(jsonb_agg(row_to_json(t) order by t.created_at desc), '[]'::jsonb)
-    from (
-      select
-        p.id,
-        p.name,
-        p.title,
-        p.institution,
-        p.work_mode,
-        p.avatar_color,
-        p.avatar_url,
-        p.profile_slug,
-        p.onboarding_completed,
-        p.admin_notes,
-        p.created_at,
-
-        -- Last active
-        greatest(
-          (select max(created_at) from posts    where user_id = p.id),
-          (select max(created_at) from comments where user_id = p.id),
-          (select max(created_at) from likes    where user_id = p.id)
-        ) as last_active,
-
-        -- Counts
-        (select count(*) from posts        where user_id = p.id)::int as posts_count,
-        (select count(*) from group_members where user_id = p.id)::int as groups_count,
-
-        -- Active unclaimed personal invite codes remaining
-        (
-          select count(*)::int
-          from invite_codes ic
-          where ic.created_by = p.id
-            and ic.is_multi_use = false
-            and ic.claimed_by is null
-            and ic.locked_at is null
-            and (ic.expires_at is null or ic.expires_at > now())
-        ) as invite_codes_remaining,
-
-        -- Invite code used at signup
-        coalesce(
-          (select ic.code from invite_codes ic
-           where ic.claimed_by = p.id limit 1),
-          (select ic.code from invite_code_uses icu
-           join invite_codes ic on ic.id = icu.code_id
-           where icu.user_id = p.id limit 1)
-        ) as invite_code_used,
-
-        -- Activation stage
-        case
-          when exists(select 1 from posts where user_id = p.id)
-            and p.profile_slug is not null
-            then 'visible'
-          when exists(select 1 from posts where user_id = p.id)
-            then 'active'
-          when exists(select 1 from follows where follower_id = p.id)
-            or exists(select 1 from group_members where user_id = p.id)
-            then 'connected'
-          when coalesce(p.onboarding_completed, false) = true
-            or exists(select 1 from publications where user_id = p.id)
-            then 'credible'
-          else 'identified'
-        end as activation_stage,
-
-        -- Ghost segment
-        case
-          when (
-            (select count(*) from posts         where user_id = p.id) +
-            (select count(*) from comments      where user_id = p.id) +
-            (select count(*) from likes         where user_id = p.id) +
-            (select count(*) from follows       where follower_id = p.id) +
-            (select count(*) from group_members where user_id = p.id)
-          ) = 0 then 'stuck'
-          when (
-            (select count(*) from posts         where user_id = p.id) +
-            (select count(*) from comments      where user_id = p.id) +
-            (select count(*) from likes         where user_id = p.id) +
-            (select count(*) from follows       where follower_id = p.id) +
-            (select count(*) from group_members where user_id = p.id)
-          ) <= 2
-          and greatest(
-            (select max(created_at) from posts    where user_id = p.id),
-            (select max(created_at) from comments where user_id = p.id),
-            (select max(created_at) from likes    where user_id = p.id)
-          ) < now() - interval '5 days'
-          then 'almost'
-          else null
-        end as ghost_segment
-
-      from profiles p
-      where p.id != (
-        select id from profiles where name = 'Luminary Team' limit 1
-      )
-    ) t
+  return jsonb_build_object(
+    'current_period_lumens', (
+      select lumens_current_period from profiles where id = auth.uid()
+    ),
+    'lifetime_lumens', (
+      select lumens_lifetime from profiles where id = auth.uid()
+    ),
+    'current_period_started', (
+      select current_period_started from profiles where id = auth.uid()
+    ),
+    'previous_period_lumens', (
+      select previous_period_lumens from profiles where id = auth.uid()
+    ),
+    'tier', (
+      select compute_tier(lumens_current_period) from profiles where id = auth.uid()
+    ),
+    'is_founding_member', (
+      select is_founding_member from profiles where id = auth.uid()
+    ),
+    'transactions', coalesce(
+      (
+        select jsonb_agg(jsonb_build_object(
+          'id', id,
+          'amount', amount,
+          'reason', reason,
+          'category', category,
+          'meta', meta,
+          'created_at', created_at
+        ) order by created_at desc)
+        from (
+          select * from lumen_transactions
+          where user_id = auth.uid()
+          order by created_at desc
+          limit p_limit
+        ) t
+      ),
+      '[]'::jsonb
+    )
   );
 end;
 $$;
+
+grant execute on function get_lumen_history(integer) to authenticated;
+
+-- ─── apply_founding_member_status trigger ────────────────────────────────────
+
+-- When a new profile is created (onboarding completed), check if it's
+-- before the Founding Member cutoff date and mark accordingly.
+create or replace function apply_founding_member_status()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cutoff timestamptz;
+begin
+  -- Only check on the transition to onboarding_completed = true
+  if new.onboarding_completed = true and
+     (old.onboarding_completed is null or old.onboarding_completed = false) then
+
+    select (value->>'cutoff_date')::timestamptz
+    into v_cutoff
+    from admin_config
+    where key = 'founding_member_cutoff';
+
+    if v_cutoff is not null and now() <= v_cutoff then
+      new.is_founding_member := true;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_apply_founding_member on profiles;
+create trigger trg_apply_founding_member
+  before update on profiles
+  for each row
+  execute function apply_founding_member_status();
+
+-- ─── Backfill: any existing users who completed onboarding ───────────────────
+-- (after database reset this should be 0, but the migration is idempotent)
+
+update profiles
+set is_founding_member = true
+where onboarding_completed = true
+  and created_at <= (
+    select (value->>'cutoff_date')::timestamptz
+    from admin_config
+    where key = 'founding_member_cutoff'
+  );
 ```
 
 Tell the user to run this in Supabase SQL Editor.
 
 ---
 
-## Step 5 — UsersSection.jsx enhancements
+## Step 2 — Lumens earning rules
 
-Read `src/admin/UsersSection.jsx` carefully before modifying.
+Add `award_lumens()` calls at the success point of each action listed
+below. Match the existing pattern used by `capture()` (PostHog) calls
+— add right after the successful Supabase insert/update, before any
+state updates.
 
-### 5a — Add invite_codes_remaining column to table
+### Earning rules
 
-Add a new column to the user table grid between "Groups" and "Stage":
+**Creation (low value):**
+| Action | Amount | Reason | File |
+|---|---|---|---|
+| Post created | 5 | `post_created` | `NewPostScreen.jsx` |
+| Comment posted | 2 | `comment_posted` | `PostCard.jsx` |
+| Library item added | 1 | `library_item_added` | `LibraryScreen.jsx` |
+| Group created | 25 | `group_created` | `CreateGroupModal.jsx` |
+| Project created | 10 | `project_created` | `CreateProjectModal.jsx` |
+| Onboarding completed | 25 | `onboarding_completed` | `OnboardingScreen.jsx` |
 
+**Engagement (mid value):**
+| Action | Amount | Reason | Recipient | File |
+|---|---|---|---|---|
+| Your post receives a comment (per commenter, deduped) | 5 | `comment_received` | post owner | `PostCard.jsx` |
+| Your library item saved by another user | 5 | `library_saved` | original adder | `LibraryScreen.jsx` |
+
+**Recognition (high value):**
+| Action | Amount | Reason | Recipient | File |
+|---|---|---|---|---|
+| Your post is reposted | 10 | `post_reposted` | post owner | `PostCard.jsx` |
+| User you invited becomes active (creates first post) | 100 | `invited_user_active` | inviter | `NewPostScreen.jsx` |
+| Your post featured by admin | 100 | `post_featured` | post owner | `ContentSection.jsx` (PostsTab) |
+| Your community template approved | 50 | `template_approved` | submitter | `TemplatesSection.jsx` |
+| Your post starts a discussion (3+ distinct commenters) | 50 | `discussion_threshold` | post owner | `PostCard.jsx` |
+
+### Implementation pattern
+
+For self-rewarding actions (creation):
+```javascript
+// After successful post insert:
+const { data: newPost, error } = await supabase
+  .from('posts')
+  .insert({ ... })
+  .select()
+  .single();
+
+if (!error && newPost) {
+  await supabase.rpc('award_lumens', {
+    p_user_id:  user.id,
+    p_amount:   5,
+    p_reason:   'post_created',
+    p_category: 'creation',
+    p_meta:     { post_id: newPost.id, post_type: postType }
+  });
+  capture('post_created', { post_type: postType });
+}
 ```
-☐  Avatar+Name | Work Mode | Joined | Last Active |
-Posts | Groups | Codes | Stage | Ghost | Actions
+
+For others-rewarding actions (engagement, recognition):
+```javascript
+// After successful comment insert:
+const { data: newComment, error } = await supabase
+  .from('comments')
+  .insert({ ... })
+  .select()
+  .single();
+
+if (!error && newComment) {
+  // Award commenter for creation
+  await supabase.rpc('award_lumens', {
+    p_user_id:  user.id,
+    p_amount:   2,
+    p_reason:   'comment_posted',
+    p_category: 'creation',
+    p_meta:     { post_id: post.id }
+  });
+
+  // Award post owner for engagement (if not self-comment)
+  if (post.user_id !== user.id) {
+    // Check if this user has already commented on this post (dedupe)
+    const { count } = await supabase
+      .from('comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('post_id', post.id)
+      .eq('user_id', user.id);
+
+    // count includes the just-inserted comment, so > 1 means duplicate
+    if (count === 1) {
+      await supabase.rpc('award_lumens', {
+        p_user_id:  post.user_id,
+        p_amount:   5,
+        p_reason:   'comment_received',
+        p_category: 'engagement',
+        p_meta:     { post_id: post.id, actor_id: user.id }
+      });
+    }
+
+    // Check discussion threshold (3+ distinct commenters)
+    const { data: distinctCommenters } = await supabase
+      .from('comments')
+      .select('user_id')
+      .eq('post_id', post.id);
+    const uniqueCount = new Set(distinctCommenters?.map(c => c.user_id) || []).size;
+
+    if (uniqueCount === 3) {
+      // Just hit the threshold — award one-time bonus
+      // Check if already awarded for this post
+      const { data: existing } = await supabase
+        .from('lumen_transactions')
+        .select('id')
+        .eq('user_id', post.user_id)
+        .eq('reason', 'discussion_threshold')
+        .filter('meta->>post_id', 'eq', post.id)
+        .limit(1);
+
+      if (!existing?.length) {
+        await supabase.rpc('award_lumens', {
+          p_user_id:  post.user_id,
+          p_amount:   50,
+          p_reason:   'discussion_threshold',
+          p_category: 'recognition',
+          p_meta:     { post_id: post.id }
+        });
+      }
+    }
+  }
+}
 ```
 
-Update `gridTemplateColumns` to accommodate the new column.
-
-In `UserRow`, render `invite_codes_remaining` with colour coding:
-- ≥3 remaining: `T.gr` (green — healthy)
-- 1–2 remaining: `T.am` (amber — low)
-- 0 remaining: `T.ro` (red — exhausted)
-
-```jsx
-<div style={{
-  fontSize: 13,
-  color: user.invite_codes_remaining >= 3 ? T.gr
-       : user.invite_codes_remaining >= 1 ? T.am
-       : T.ro,
-  fontWeight: 600,
-  textAlign: 'center',
-}}>
-  {user.invite_codes_remaining ?? 0}
-</div>
-```
-
-### 5b — Sortable columns
-
-Add sort state to UsersSection:
+For "invited user active" (high-value, deferred trigger):
+This fires when an invited user creates their FIRST post. Add to
+`NewPostScreen.jsx` after successful post insert:
 
 ```javascript
-const [sortBy, setSortBy]     = useState('created_at');
-const [sortDir, setSortDir]   = useState('desc');
+// Check if this is the user's first post
+const { count: postCount } = await supabase
+  .from('posts')
+  .select('*', { count: 'exact', head: true })
+  .eq('user_id', user.id);
 
-const toggleSort = (col) => {
-  if (sortBy === col) {
-    setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-  } else {
-    setSortBy(col);
-    setSortDir('desc');
+if (postCount === 1) {
+  // First post — find the inviter and award them
+  const { data: inviteCode } = await supabase
+    .from('invite_codes')
+    .select('created_by')
+    .eq('claimed_by', user.id)
+    .single();
+
+  if (inviteCode?.created_by && inviteCode.created_by !== user.id) {
+    await supabase.rpc('award_lumens', {
+      p_user_id:  inviteCode.created_by,
+      p_amount:   100,
+      p_reason:   'invited_user_active',
+      p_category: 'recognition',
+      p_meta:     { invited_user_id: user.id }
+    });
   }
+}
+```
+
+---
+
+## Step 3 — TIER_CONFIG constant + useTier hook
+
+Add to `src/lib/constants.js`:
+
+```javascript
+export const TIER_CONFIG = {
+  catalyst: {
+    name:        'Catalyst',
+    min:         0,
+    max:         499,
+    color:       T.v,         // platform violet — consistent with Luminary brand
+    bg:          T.v2,
+    ringColor:   null,        // no avatar ring at this tier
+    description: 'You\'re igniting the conversation. Every post, comment, and connection you make sparks new thinking on Luminary. Keep contributing — you\'re shaping what this community becomes.',
+  },
+  pioneer: {
+    name:        'Pioneer',
+    min:         500,
+    max:         1999,
+    color:       T.v,
+    bg:          T.v2,
+    ringColor:   null,        // no avatar ring at this tier
+    description: 'You\'re going where others haven\'t yet. Your contributions are establishing your voice in the community, and others are starting to take notice. You\'re charting the path forward.',
+  },
+  beacon: {
+    name:        'Beacon',
+    min:         2000,
+    max:         4999,
+    color:       T.v,
+    bg:          T.v2,
+    ringColor:   null,        // no avatar ring at this tier
+    description: 'You\'re a reference point others navigate by. Your insights guide discussions, your library curates evidence others rely on, and your voice carries weight. The community is stronger because of you.',
+  },
+  luminary: {
+    name:        'Luminary',
+    min:         5000,
+    max:         null,
+    color:       '#C9A961',   // muted gold — reserved, premium, not garish
+    bg:          '#C9A96115',
+    ringColor:   '#C9A961',   // gold ring — Luminary tier only
+    description: 'You embody what this platform stands for. Your influence reaches across the community, and your contributions inspire the next generation of scientists. Welcome to the highest tier — and to The Luminarians, where peers at your level gather.',
+  },
 };
+
+export const TIER_ORDER = ['catalyst', 'pioneer', 'beacon', 'luminary'];
+
+export function getTierFromLumens(lumens) {
+  if (lumens >= 5000) return 'luminary';
+  if (lumens >= 2000) return 'beacon';
+  if (lumens >= 500)  return 'pioneer';
+  return 'catalyst';
+}
+
+export function getNextTier(currentTier) {
+  const idx = TIER_ORDER.indexOf(currentTier);
+  if (idx < 0 || idx === TIER_ORDER.length - 1) return null;
+  return TIER_ORDER[idx + 1];
+}
+
+export function getProgressToNextTier(lumens, currentTier) {
+  const next = getNextTier(currentTier);
+  if (!next) return { progress: 100, needed: 0 }; // already top tier
+  const nextMin = TIER_CONFIG[next].min;
+  const currentMin = TIER_CONFIG[currentTier].min;
+  const range = nextMin - currentMin;
+  const earned = lumens - currentMin;
+  return {
+    progress: Math.min(100, Math.round((earned / range) * 100)),
+    needed:   nextMin - lumens,
+    nextTier: next,
+  };
+}
 ```
 
-Apply sort client-side after filtering:
+---
 
-```javascript
-const sorted = [...filtered].sort((a, b) => {
-  const aVal = a[sortBy] ?? 0;
-  const bVal = b[sortBy] ?? 0;
-  if (typeof aVal === 'string') {
-    return sortDir === 'asc'
-      ? aVal.localeCompare(bVal)
-      : bVal.localeCompare(aVal);
+## Step 4 — Update Av (avatar) component to support Luminary gold ring
+
+Read `src/components/Av.jsx` carefully before modifying.
+
+Add an optional `tier` prop. When `tier === 'luminary'`, render a
+subtle gold ring around the avatar. All other tiers render identically
+to the current default — no ring, no change.
+
+```jsx
+import { TIER_CONFIG } from '../lib/constants';
+
+export default function Av({
+  size = 36,
+  name = '',
+  color,
+  url = '',
+  tier = null,  // only 'luminary' produces a visual change
+  // ... existing props
+}) {
+  const isLuminary = tier === 'luminary';
+  const ringColor  = '#C9A961'; // muted gold
+  const ringWidth  = 2;
+
+  // If Luminary tier, wrap in a thin gold ring
+  if (isLuminary) {
+    return (
+      <div style={{
+        width:        size + ringWidth * 2,
+        height:       size + ringWidth * 2,
+        borderRadius: '50%',
+        padding:      ringWidth,
+        background:   ringColor,
+        flexShrink:   0,
+      }}>
+        {/* Existing avatar rendered at original size */}
+        <AvInner size={size} name={name} color={color} url={url} />
+      </div>
+    );
   }
-  return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
-});
+
+  // All other tiers — render exactly as before, no changes
+  return <AvInner size={size} name={name} color={color} url={url} />;
+}
 ```
 
-Sortable columns: `posts_count`, `groups_count`,
-`invite_codes_remaining`, `created_at`, `last_active`.
+Extract the existing avatar rendering logic into a local `AvInner`
+component (same file) that accepts the same props as before. This
+keeps the Luminary ring wrapper clean and ensures zero visual change
+for non-Luminary users.
 
-Update column headers to show sort indicator (▲ / ▼) when active:
+The `tier` prop is optional — all existing callers that don't pass
+`tier` render identically to before. This is a purely additive change.
 
-```jsx
-<SortableHeader
-  label="Posts"
-  col="posts_count"
-  sortBy={sortBy}
-  sortDir={sortDir}
-  onSort={toggleSort}
-/>
+### Pass tier to Av — only where it matters
+
+Unlike the original plan, we do NOT need to update every Av call
+across the app. Only update avatar calls where:
+
+1. **The profile page header** — always has access to profile data
+2. **PostCard.jsx** — `posts_with_meta` will include `author_tier`
+3. **NotifsScreen.jsx** — actor profiles are already batch-fetched
+
+For all other locations (comments, group members, library, etc.),
+omit the `tier` prop for now. The gold ring will appear in the most
+visible places (feed, profile) without requiring changes to every
+component.
+
+### Add author_tier to posts_with_meta view
+
+```sql
+-- Add to the SELECT in posts_with_meta (read existing definition first):
+case
+  when pa.lumens_current_period >= 5000 then 'luminary'
+  else null  -- only Luminary tier triggers a visual change
+end as author_tier
 ```
 
+Returning null for non-Luminary tiers means the Av component receives
+no tier prop and renders normally — clean and efficient.
+
+Apply the same to `group_posts_with_meta`.
+
+---
+
+## Step 5 — Profile page tier badge
+
+In `ProfileScreen.jsx`, find the profile header area. Add a tier badge.
+For Catalyst, Pioneer, and Beacon tiers use the platform's standard
+violet (`T.v` / `T.v2`). Only Luminary gets the gold treatment:
+
 ```jsx
-function SortableHeader({ label, col, sortBy, sortDir, onSort }) {
-  const active = sortBy === col;
-  return (
-    <div
-      onClick={() => onSort(col)}
-      style={{
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 3,
-        userSelect: 'none',
-        color: active ? T.v : T.mu,
-        fontWeight: active ? 700 : 600,
-      }}
-    >
-      {label}
-      <span style={{ fontSize: 9, opacity: active ? 1 : 0.3 }}>
-        {active && sortDir === 'asc' ? '▲' : '▼'}
+import { TIER_CONFIG, getTierFromLumens } from '../lib/constants';
+
+const tier = getTierFromLumens(profile.lumens_current_period || 0);
+const tierConfig = TIER_CONFIG[tier];
+
+// Tier badge — violet for all, gold accent for Luminary only
+<div style={{
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 12px',
+  borderRadius: 20,
+  background: tierConfig.bg,
+  color: tierConfig.color,
+  fontSize: 12,
+  fontWeight: 700,
+  letterSpacing: 0.4,
+  textTransform: 'uppercase',
+  marginLeft: 8,
+}}>
+  ✦ {tierConfig.name}
+</div>
+
+{profile.is_founding_member && (
+  <div style={{
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '4px 12px',
+    borderRadius: 20,
+    background: '#1A1B2E10',
+    color: '#1A1B2E',
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginLeft: 6,
+  }}>
+    ★ Founding Member
+  </div>
+)}
+```
+
+The avatar in the profile header should also receive the `tier` prop.
+
+For the **own** profile only (when `profile.id === user.id`), show
+the Lumens count + progress to next tier below the badge:
+
+```jsx
+{profile.id === user.id && (
+  <div style={{ marginTop: 12 }}>
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      fontSize: 13,
+      color: T.mu,
+    }}>
+      <span style={{ fontWeight: 700, color: T.text }}>
+        {(profile.lumens_current_period || 0).toLocaleString()} Lumens
       </span>
+      <span>this period</span>
+      <button
+        onClick={() => onNavigate('lumens')}
+        style={{
+          marginLeft: 'auto',
+          padding: '4px 10px',
+          borderRadius: 6,
+          border: `1px solid ${T.bdr}`,
+          background: T.w,
+          fontSize: 12,
+          color: T.v,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        View history →
+      </button>
+    </div>
+
+    {/* Progress bar to next tier */}
+    {tier !== 'luminary' && (
+      <div style={{ marginTop: 8 }}>
+        <div style={{
+          fontSize: 11,
+          color: T.mu,
+          marginBottom: 4,
+        }}>
+          {progress.needed} Lumens to {TIER_CONFIG[progress.nextTier].name}
+        </div>
+        <div style={{
+          height: 4,
+          background: T.bdr,
+          borderRadius: 2,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%',
+            width: `${progress.progress}%`,
+            background: tierConfig.color,
+            transition: 'width 0.3s ease',
+          }} />
+        </div>
+      </div>
+    )}
+  </div>
+)}
+```
+
+---
+
+## Step 6 — Lumens transparency page
+
+Create `src/screens/LumensScreen.jsx`:
+
+```jsx
+import React, { useState, useEffect } from 'react';
+import { T, TIER_CONFIG, TIER_ORDER, getTierFromLumens, getNextTier } from '../lib/constants';
+import Spinner from '../components/Spinner';
+
+const REASON_LABELS = {
+  post_created:           { label: 'You created a post',                icon: '✏️' },
+  comment_posted:         { label: 'You commented on a post',           icon: '💬' },
+  library_item_added:     { label: 'You added to your library',         icon: '📚' },
+  group_created:          { label: 'You created a group',               icon: '👥' },
+  project_created:        { label: 'You created a project',             icon: '🗂️' },
+  onboarding_completed:   { label: 'You completed onboarding',          icon: '✓'  },
+  comment_received:       { label: 'Your post received a comment',      icon: '💬' },
+  library_saved:          { label: 'Your library item was saved',       icon: '🔖' },
+  post_reposted:          { label: 'Your post was reposted',            icon: '↻'  },
+  invited_user_active:    { label: 'A user you invited became active',  icon: '🎟️' },
+  post_featured:          { label: 'Your post was featured',            icon: '✦'  },
+  template_approved:      { label: 'Your template was approved',        icon: '📋' },
+  discussion_threshold:   { label: 'Your post sparked a discussion',    icon: '🔥' },
+};
+
+const RULES = [
+  {
+    category: 'Creation',
+    description: 'Lumens for adding content to the platform',
+    items: [
+      { label: 'Create a post',         amount: 5  },
+      { label: 'Comment on a post',     amount: 2  },
+      { label: 'Add to your library',   amount: 1  },
+      { label: 'Create a group',        amount: 25 },
+      { label: 'Create a project',      amount: 10 },
+      { label: 'Complete onboarding',   amount: 25, oneTime: true },
+    ],
+  },
+  {
+    category: 'Engagement',
+    description: 'Lumens earned when others engage with your contributions',
+    items: [
+      { label: 'A user comments on your post (first time per user)',  amount: 5 },
+      { label: 'A user saves your library item',                       amount: 5 },
+    ],
+  },
+  {
+    category: 'Recognition',
+    description: 'Lumens for influence and quality contributions',
+    items: [
+      { label: 'Your post is reposted',                                amount: 10  },
+      { label: 'A user you invited becomes active',                    amount: 100 },
+      { label: 'Your post is featured by Luminary',                    amount: 100 },
+      { label: 'Your community template is approved',                  amount: 50  },
+      { label: 'Your post sparks a discussion (3+ commenters)',        amount: 50  },
+    ],
+  },
+];
+
+export default function LumensScreen({ supabase, user, profile }) {
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: result } = await supabase.rpc('get_lumen_history', {
+        p_limit: 50,
+      });
+      setData(result);
+      setLoading(false);
+    };
+    load();
+  }, [supabase]);
+
+  if (loading) {
+    return <div style={{ padding: 60, textAlign: 'center' }}><Spinner /></div>;
+  }
+
+  const tier = data?.tier || 'catalyst';
+  const tierConfig = TIER_CONFIG[tier];
+  const lumens = data?.current_period_lumens || 0;
+  const next   = getNextTier(tier);
+  const nextConfig = next ? TIER_CONFIG[next] : null;
+  const periodStart = new Date(data?.current_period_started || Date.now());
+  const periodEnd = new Date(periodStart);
+  periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+
+  return (
+    <div style={{
+      maxWidth: 760,
+      margin: '0 auto',
+      padding: '24px 32px 60px',
+    }}>
+      {/* Tier hero card */}
+      <div style={{
+        background: `linear-gradient(135deg, ${tierConfig.color}15 0%, ${tierConfig.color}05 100%)`,
+        border: `2px solid ${tierConfig.color}`,
+        borderRadius: 16,
+        padding: '28px 32px',
+        marginBottom: 24,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Decorative accent */}
+        <div style={{
+          position: 'absolute',
+          top: -20,
+          right: -20,
+          width: 120,
+          height: 120,
+          borderRadius: '50%',
+          background: tierConfig.color,
+          opacity: 0.08,
+        }} />
+
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 12px',
+          borderRadius: 20,
+          background: tierConfig.bg,
+          color: tierConfig.color,
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          textTransform: 'uppercase',
+          marginBottom: 12,
+        }}>
+          ✦ {tierConfig.name}
+        </div>
+
+        {data?.is_founding_member && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 12px',
+            borderRadius: 20,
+            background: '#1A1B2E10',
+            color: '#1A1B2E',
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: 0.5,
+            textTransform: 'uppercase',
+            marginBottom: 12,
+            marginLeft: 6,
+          }}>
+            ★ Founding Member
+          </div>
+        )}
+
+        <h1 style={{
+          fontFamily: "'DM Serif Display', serif",
+          fontSize: 36,
+          color: T.text,
+          margin: '0 0 4px',
+        }}>
+          {lumens.toLocaleString()} Lumens
+        </h1>
+
+        <p style={{
+          fontSize: 14,
+          color: T.mu,
+          margin: '0 0 18px',
+        }}>
+          This period · ends {periodEnd.toLocaleDateString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+          })}
+        </p>
+
+        <p style={{
+          fontSize: 15,
+          color: T.text,
+          lineHeight: 1.6,
+          margin: '0 0 18px',
+          maxWidth: 560,
+        }}>
+          {tierConfig.description}
+        </p>
+
+        {/* Progress bar to next tier */}
+        {next && (
+          <div>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: 12,
+              color: T.mu,
+              marginBottom: 6,
+            }}>
+              <span>{tierConfig.name}</span>
+              <span style={{ fontWeight: 700 }}>
+                {(nextConfig.min - lumens).toLocaleString()} to {nextConfig.name}
+              </span>
+              <span>{nextConfig.name}</span>
+            </div>
+            <div style={{
+              height: 8,
+              background: T.bdr,
+              borderRadius: 4,
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.min(100, ((lumens - tierConfig.min) / (nextConfig.min - tierConfig.min)) * 100)}%`,
+                background: `linear-gradient(90deg, ${tierConfig.color}, ${nextConfig.color})`,
+                transition: 'width 0.5s ease',
+              }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Tier ladder */}
+      <div style={{
+        background: T.w,
+        border: `1px solid ${T.bdr}`,
+        borderRadius: 12,
+        padding: '20px 24px',
+        marginBottom: 24,
+      }}>
+        <h2 style={{
+          fontFamily: "'DM Serif Display', serif",
+          fontSize: 20,
+          color: T.text,
+          margin: '0 0 16px',
+        }}>
+          The four tiers
+        </h2>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+        }}>
+          {TIER_ORDER.map(t => {
+            const config = TIER_CONFIG[t];
+            const isCurrent = t === tier;
+            return (
+              <div key={t} style={{
+                padding: '14px 16px',
+                borderRadius: 10,
+                border: `2px solid ${isCurrent ? config.color : T.bdr}`,
+                background: isCurrent ? config.bg : T.w,
+              }}>
+                <div style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 0.5,
+                  textTransform: 'uppercase',
+                  color: config.color,
+                  marginBottom: 4,
+                }}>
+                  ✦ {config.name}
+                </div>
+                <div style={{
+                  fontSize: 13,
+                  color: T.text,
+                  fontWeight: 600,
+                }}>
+                  {config.min.toLocaleString()}
+                  {config.max !== null
+                    ? ` – ${config.max.toLocaleString()}`
+                    : '+'}
+                </div>
+                <div style={{
+                  fontSize: 11,
+                  color: T.mu,
+                }}>
+                  Lumens
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Earning rules */}
+      <div style={{
+        background: T.w,
+        border: `1px solid ${T.bdr}`,
+        borderRadius: 12,
+        padding: '20px 24px',
+        marginBottom: 24,
+      }}>
+        <h2 style={{
+          fontFamily: "'DM Serif Display', serif",
+          fontSize: 20,
+          color: T.text,
+          margin: '0 0 6px',
+        }}>
+          How Lumens are earned
+        </h2>
+        <p style={{
+          fontSize: 13,
+          color: T.mu,
+          margin: '0 0 18px',
+        }}>
+          Three ways: by creating, by being engaged with, and by being recognised.
+          Recognition counts more than creation.
+        </p>
+
+        {RULES.map(category => (
+          <div key={category.category} style={{ marginBottom: 18 }}>
+            <div style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: T.text,
+              marginBottom: 4,
+            }}>
+              {category.category}
+            </div>
+            <div style={{
+              fontSize: 12,
+              color: T.mu,
+              marginBottom: 10,
+            }}>
+              {category.description}
+            </div>
+            {category.items.map((item, i) => (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '8px 0',
+                borderBottom: i < category.items.length - 1
+                  ? `1px solid ${T.bdr}` : 'none',
+              }}>
+                <div style={{ fontSize: 13.5, color: T.text }}>
+                  {item.label}
+                  {item.oneTime && (
+                    <span style={{
+                      marginLeft: 8,
+                      fontSize: 11,
+                      color: T.mu,
+                      fontStyle: 'italic',
+                    }}>
+                      one-time
+                    </span>
+                  )}
+                </div>
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: tierConfig.color,
+                }}>
+                  +{item.amount}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Recent earnings history */}
+      <div style={{
+        background: T.w,
+        border: `1px solid ${T.bdr}`,
+        borderRadius: 12,
+        padding: '20px 24px',
+      }}>
+        <h2 style={{
+          fontFamily: "'DM Serif Display', serif",
+          fontSize: 20,
+          color: T.text,
+          margin: '0 0 16px',
+        }}>
+          Recent earnings
+        </h2>
+
+        {(data?.transactions || []).length === 0 ? (
+          <div style={{
+            padding: '40px 20px',
+            textAlign: 'center',
+            color: T.mu,
+            fontSize: 14,
+          }}>
+            No Lumens earned yet. Start by creating your first post or
+            joining a discussion.
+          </div>
+        ) : (
+          <div>
+            {data.transactions.map(tx => {
+              const reasonInfo = REASON_LABELS[tx.reason] || {
+                label: tx.reason,
+                icon: '•',
+              };
+              return (
+                <div key={tx.id} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '10px 0',
+                  borderBottom: `1px solid ${T.bdr}`,
+                }}>
+                  <div style={{
+                    fontSize: 20,
+                    flexShrink: 0,
+                    width: 28,
+                    textAlign: 'center',
+                  }}>
+                    {reasonInfo.icon}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13.5,
+                      color: T.text,
+                      fontWeight: 500,
+                    }}>
+                      {reasonInfo.label}
+                    </div>
+                    <div style={{
+                      fontSize: 11,
+                      color: T.mu,
+                      textTransform: 'capitalize',
+                    }}>
+                      {tx.category} · {new Date(tx.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric',
+                      })}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: tierConfig.color,
+                  }}>
+                    +{tx.amount}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 ```
 
-### 5c — Direct message button per row
+### Wire LumensScreen into navigation
 
-In `UserRow`, replace or augment the existing "View" button with two
-actions:
-
-```jsx
-<div style={{ display: 'flex', gap: 5 }}>
-  <button onClick={onOpen} style={rowBtnStyle}>
-    View
-  </button>
-  <button
-    onClick={(e) => { e.stopPropagation(); onDirectMessage(); }}
-    style={{ ...rowBtnStyle, color: T.v, borderColor: T.v }}
-    title="Send nudge"
-  >
-    ✉
-  </button>
-</div>
-```
-
-`onDirectMessage` selects just this user and opens `BulkNudgeModal`
-directly — same as clicking "Send nudge" in the UserDetailPanel.
-Add the handler in UsersSection:
+Find the main App.jsx routing logic. Add:
 
 ```javascript
-const handleDirectMessage = (userId) => {
-  setSelected(new Set([userId]));
-  setShowNudge(true);
-};
+import LumensScreen from './screens/LumensScreen';
+
+// In the screen conditional:
+{screen === 'lumens' && <LumensScreen supabase={supabase} user={user} profile={profile} />}
 ```
 
-Pass `onDirectMessage={() => handleDirectMessage(user.id)}` to each
-`UserRow`.
+Add a "Lumens" link in the sidebar nav (where Profile, Library, etc.
+are listed) — or alternatively only accessible via "View history →"
+button on the profile page. Recommendation: accessible via profile
+button only for now (keeps the sidebar uncluttered) — power users will
+discover it through the profile page.
 
 ---
 
-## Step 6 — UserDetailPanel: top-up invite codes
+## Step 7 — Sidebar XP badge → wire to Lumens
 
-Read `src/admin/UserDetailPanel.jsx` carefully before modifying.
+The sidebar currently shows a decorative XP badge that's unwired.
+Find this in the sidebar component (likely in `Sidebar.jsx` or
+`AppShell.jsx`).
 
-In the stats grid, show `invite_codes_remaining` as one of the stat
-cards with the same colour coding as Step 5a.
-
-Below the stats grid, add a "Top up invite codes" section — only
-visible when `invite_codes_remaining < 5`:
+Replace decorative XP/level display with real Lumens + tier:
 
 ```jsx
-{user.invite_codes_remaining < 5 && (
-  <div style={{
-    marginBottom: 20,
-    padding: '12px 14px',
-    background: T.s2,
-    borderRadius: 10,
-    border: `1px solid ${T.bdr}`,
+import { TIER_CONFIG, getTierFromLumens } from '../lib/constants';
+
+const tier = getTierFromLumens(profile.lumens_current_period || 0);
+const tierConfig = TIER_CONFIG[tier];
+
+<button
+  onClick={() => onNavigate('lumens')}
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 12px',
+    borderRadius: 9,
+    border: `1px solid ${tierConfig.color}40`,
+    background: tierConfig.bg,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    width: '100%',
+  }}
+>
+  <span style={{
+    fontSize: 14,
+    color: tierConfig.color,
   }}>
+    ✦
+  </span>
+  <div style={{ flex: 1, textAlign: 'left' }}>
     <div style={{
-      fontSize: 12, fontWeight: 700, color: T.mu,
-      textTransform: 'uppercase', letterSpacing: 0.4,
-      marginBottom: 8,
+      fontSize: 11,
+      color: T.mu,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+      fontWeight: 600,
     }}>
-      Invite codes
+      {tierConfig.name}
     </div>
     <div style={{
-      fontSize: 13, color: T.mu, marginBottom: 10,
+      fontSize: 13,
+      color: T.text,
+      fontWeight: 700,
     }}>
-      {user.invite_codes_remaining} of 5 codes remaining
-    </div>
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <select
-        value={topUpCount}
-        onChange={e => setTopUpCount(Number(e.target.value))}
-        style={{
-          padding: '6px 10px', borderRadius: 7,
-          border: `1px solid ${T.bdr}`, background: T.w,
-          fontSize: 13, color: T.text, fontFamily: 'inherit',
-          outline: 'none',
-        }}
-      >
-        {Array.from(
-          { length: 5 - user.invite_codes_remaining },
-          (_, i) => i + 1
-        ).map(n => (
-          <option key={n} value={n}>+{n} code{n > 1 ? 's' : ''}</option>
-        ))}
-      </select>
-      <button
-        onClick={handleTopUp}
-        disabled={toppingUp}
-        style={{
-          padding: '6px 14px', borderRadius: 7, border: 'none',
-          background: T.v, color: '#fff', fontSize: 13,
-          fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-          opacity: toppingUp ? 0.7 : 1,
-        }}
-      >
-        {toppingUp ? 'Generating…' : 'Generate'}
-      </button>
+      {(profile.lumens_current_period || 0).toLocaleString()} Lumens
     </div>
   </div>
-)}
+</button>
 ```
 
-Add state and handler:
-
-```javascript
-const [topUpCount, setTopUpCount] = useState(1);
-const [toppingUp, setToppingUp]  = useState(false);
-
-const handleTopUp = async () => {
-  setToppingUp(true);
-  const rows = Array.from({ length: topUpCount }, () => ({
-    code:        generateRandomCode(), // same pattern as CreateCodeModal
-    created_by:  user.id,
-    is_multi_use: false,
-    max_uses:    1,
-    uses_count:  0,
-    label:       'Admin top-up',
-  }));
-  await supabase.from('invite_codes').insert(rows);
-  setToppingUp(false);
-  // Notify parent to refresh user data
-  onNotesUpdated(user.admin_notes); // triggers a re-fetch or pass onRefresh prop
-};
-```
-
-Import the `generateRandomCode()` helper from wherever `CreateCodeModal`
-defines it (likely a shared utility or inline function). If it's inline
-in `CreateCodeModal`, extract it to `src/lib/utils.js` so both
-components can import it.
-
-The dropdown shows only as many options as codes needed to reach 5.
-If user has 4 remaining, only "+1" is available. If user has 0, options
-are "+1" through "+5".
+Clicking the badge navigates to the Lumens transparency page.
 
 ---
 
-## Step 7 — ContentSection Posts tab fixes
+## Step 8 — PostHog events
 
-Read `src/admin/ContentSection.jsx` carefully before modifying.
-
-### 7a — Remove invalid post type filters
-
-Find the `POST_TYPES` array. Replace:
-```javascript
-const POST_TYPES = ['text', 'paper', 'link', 'upload', 'tip'];
-```
-With:
-```javascript
-const POST_TYPES = ['text', 'paper'];
-```
-
-Update the filter select options to match.
-
-### 7b — Add sortable columns to Posts tab
-
-Add sort state to `PostsTab`:
+Add new event capture in analytics.js for Lumens-related actions.
+These complement the existing capture() calls — fire them alongside
+the award_lumens RPC:
 
 ```javascript
-const [sortCol, setSortCol]   = useState('created_at');
-const [sortDir, setSortDir]   = useState('desc');
-```
-
-Update `get_admin_posts` RPC call to pass sort parameters, OR sort
-client-side on the current page (simpler — the RPC already paginates).
-Since we have 50 posts per page, client-side sort is fine:
-
-```javascript
-const sortedPosts = [...posts].sort((a, b) => {
-  const aVal = a[sortCol] ?? 0;
-  const bVal = b[sortCol] ?? 0;
-  if (sortCol === 'created_at') {
-    return sortDir === 'desc'
-      ? new Date(bVal) - new Date(aVal)
-      : new Date(aVal) - new Date(bVal);
-  }
-  return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+capture('lumens_earned', {
+  amount:   p_amount,
+  reason:   p_reason,
+  category: p_category,
 });
 ```
 
-Sortable columns: `created_at`, `comment_count`, `like_count`,
-`participant_count` (distinct commenters).
+Add this to each award_lumens call site so PostHog tracks Lumens
+earning patterns.
 
-**Note:** `comment_count` and `like_count` likely come from
-`posts_with_meta` view. Verify these fields exist in the view — if not,
-the `get_admin_posts` RPC needs to be updated to include them. Check
-the view definition before proceeding.
-
-Update the Posts tab column headers:
-
+Also add:
+```javascript
+capture('tier_reached', { tier: 'pioneer' });
 ```
-Post | Type | Date▼ | Comments | Likes | Featured | Hidden | Actions
-```
+This requires detecting tier transitions — when a user's
+`lumens_current_period` crosses a tier threshold. Implement this in
+a SECURITY DEFINER function that runs after award_lumens, OR
+client-side after each Lumens earn by comparing previous tier to new
+tier.
 
-Replace the plain column headers with `SortableHeader` components
-(same pattern as Step 5b — extract to a shared component or duplicate
-the pattern).
-
-### 7c — Deep dive indicator
-
-In `PostRow`, detect deep-dive posts. A deep-dive is likely indicated
-by `post_type === 'deep_dive'` or a specific flag — read the posts
-table schema to confirm. Add a badge alongside the type column:
-
-```jsx
-{post.post_type === 'deep_dive' && (
-  <span style={{
-    fontSize: 10, fontWeight: 700, padding: '1px 6px',
-    borderRadius: 20, background: T.v2, color: T.v,
-    marginLeft: 4,
-  }}>
-    Deep dive
-  </span>
-)}
-```
-
-If the `get_admin_posts` RPC doesn't return a field that identifies
-deep-dive posts, check whether it's stored in `post_type` or as a
-separate boolean column, and add it to the RPC SELECT if needed.
-
-### 7d — Add participant_count to get_admin_posts RPC
-
-Update the `get_admin_posts` RPC to include participant count (distinct
-commenters per post):
-
-```sql
--- Add to the SELECT in get_admin_posts:
-(
-  select count(distinct user_id)::int
-  from comments
-  where post_id = p.id
-) as participant_count,
-(
-  select count(*)::int from likes where post_id = p.id
-) as like_count
-```
-
-If `comment_count` and `like_count` already come from `posts_with_meta`,
-verify they're passed through the RPC. Add only what's missing.
-
-Run the updated `get_admin_posts` as a CREATE OR REPLACE in Supabase
-SQL Editor. Tell the user to run it.
-
----
-
-## Step 8 — CLAUDE.md split into CLAUDE.md + SCHEMA.md
-
-### 8a — Create SCHEMA.md
-
-Extract from CLAUDE.md all content related to:
-- Database Schema (all tables with columns)
-- Views (`posts_with_meta`, `groups_with_stats`, etc.)
-- RPC functions (all `get_*`, `set_*`, `send_*` functions)
-- RLS policies
-- Edge Functions description
-
-Place extracted content in a new file `SCHEMA.md` at the repo root
-with a header:
-
-```markdown
-# Luminary — Database Schema Reference
-_Extracted from CLAUDE.md — last updated: [today's date]_
-
-> This file covers the live database schema. For coding conventions,
-> architecture, and file structure see CLAUDE.md.
-```
-
-### 8b — Update CLAUDE.md
-
-After extraction:
-- Remove the extracted schema sections from CLAUDE.md
-- Add a reference line where the schema sections were:
-  ```
-  ## Database Schema
-  See SCHEMA.md for full schema reference.
-  ```
-- Add to the "Read first" instruction at the top of CLAUDE.md:
-  ```
-  For tasks touching the database, also read SCHEMA.md.
-  ```
-
-### 8c — Post-type correction in CLAUDE.md
-
-Find any reference to `link`, `tip`, or `upload` as active post types
-in NewPostScreen or the posts table `post_type` enum. Update to reflect
-that **active post types are `text` and `paper` only**. Legacy rows
-with other types may exist in the DB but the UI no longer creates them.
-
-Add a convention note:
-```
-**Post types:** Active post types are `text` and `paper` only.
-Legacy rows with `post_type` values of `link`, `upload`, `tip`,
-`milestone`, `admin_nudge`, or `deep_dive` may exist in the DB
-but are not created by the current UI. Do not add filters or UI
-for these types unless explicitly asked.
+Client-side approach (simpler):
+```javascript
+const before = getTierFromLumens(profile.lumens_current_period - amount);
+const after  = getTierFromLumens(profile.lumens_current_period);
+if (before !== after) {
+  capture('tier_reached', { tier: after });
+}
 ```
 
 ---
@@ -679,11 +1254,11 @@ for these types unless explicitly asked.
 ## What NOT to change
 
 - `src/screens/GroupsScreen.jsx` — legacy file, do not touch
-- `groups.owner_id`, `groups.is_private` (legacy fields)
-- `projects.user_id` — legacy, coexists with `created_by`
-- InboxSection component itself — only wire it to the nav
-- Existing email types and HTML templates in Edge Function —
-  only add the new `group_member_joined` case
+- The unused `xp` and `level` columns on profiles — leave in place,
+  don't use, don't remove
+- The Luminary Team bot account — it's excluded from Lumens entirely
+- Existing tier descriptions text — match the TASK.md text exactly,
+  these are user-facing copy
 - Run `npm run build` when done
 
 ---
@@ -691,96 +1266,153 @@ for these types unless explicitly asked.
 ## Deployment
 
 ```bash
-# 1. Run migration_admin_enhancements.sql in Supabase SQL Editor
-#    (updates get_admin_user_list RPC + get_admin_posts RPC if changed)
+# 1. Run migration_gamification.sql in Supabase SQL Editor
 
-# 2. Sync and deploy Edge Function:
-supabase functions deploy send-email-notification
+# 2. Recreate posts_with_meta and group_posts_with_meta views to
+#    include author_tier — Claude Code generates the SQL based on
+#    current view definitions.
 
-# 3. Deploy app changes:
-git add . && git commit -m "Phase 7B: Admin inbox nav, group_member_joined email, user table sort + codes, content tab fixes, CLAUDE.md split" && git push
+# 3. Verify:
+#    select count(*) from lumen_transactions;  -- should be 0 (new)
+#    select award_lumens(auth.uid(), 5, 'test', 'creation', '{}');
+#    select * from lumen_transactions;  -- should show 1 row
+
+# 4. Deploy app changes:
+git add . && git commit -m "Phase 8: Gamification — Lumens, tiers (Catalyst→Pioneer→Beacon→Luminary), transparency page, Founding Member" && git push
 ```
 
 ---
 
 ## Remind the user
 
-**Testing group_member_joined email:**
-1. As User B, join a public group owned by User A
-2. Check User A's inbox — should receive "User B joined [group]" email
-3. Check User A's notification bell — should show the notification
+**Before testing — admin task:**
+Set the Founding Member cutoff date in admin_config:
+```sql
+update admin_config
+set value = jsonb_build_object('cutoff_date', '2026-08-01T00:00:00Z')
+where key = 'founding_member_cutoff';
+```
+Edit the date based on your launch plan. Users who complete onboarding
+before this date are marked as Founding Members.
 
-**Testing invite code top-up:**
-1. Admin panel → Users → click "View" on a user with < 5 codes
-2. UserDetailPanel should show invite codes count and top-up section
-3. Select "+2 codes", click Generate
-4. Verify 2 new invite_codes rows appear in Supabase with
-   `created_by = that user's ID`
-5. Codes count in the panel should update
+**Testing the gamification system:**
 
-**Testing sortable user table:**
-Click each sortable column header twice — first click sorts desc,
-second click sorts asc. Verify the sort indicator arrow flips.
+1. **Earn Lumens by creating content:**
+   - Create a post → check Lumens count increases by 5
+   - Add a comment → check Lumens count increases by 2
+   - Look at profile page → tier badge should show
 
-**Testing content tab:**
-- Post type filter should show only "text" and "paper" options
-- Clicking Comments / Likes column headers should sort posts
-- Deep dive posts (if any exist) should show the "Deep dive" badge
+2. **Earn Lumens through engagement:**
+   - User B comments on User A's post → User A earns 5 Lumens
+   - Check User A's transparency page → see "Your post received a comment +5"
+
+3. **Discussion threshold:**
+   - Three different users comment on User A's post → User A earns 50 Lumens
+   - Check transaction history shows "Your post sparked a discussion +50"
+
+4. **Tier progression:**
+   - Manually award test Lumens via SQL:
+     ```sql
+     select award_lumens(
+       'user-uuid'::uuid, 500, 'test', 'creation', '{}'::jsonb
+     );
+     ```
+   - User should now show as Pioneer with teal accent
+
+5. **Founding Member:**
+   - Verify is_founding_member = true on early users
+   - Check profile shows "★ Founding Member" badge
+
+6. **Avatar tier rings:**
+   - Look at posts in the feed — avatars of Pioneer+ users should
+     have coloured rings
+   - Top tier (Luminary) should have gold ring
+
+**Tuning thresholds:**
+The starting thresholds (500 / 2,000 / 5,000) are estimates. After
+20+ users, review the distribution and adjust if needed:
+```sql
+select tier, count(*)
+from (select compute_tier(lumens_current_period) as tier from profiles) t
+group by tier;
+```
+Healthy distribution: most users at Catalyst, some at Pioneer,
+few at Beacon, very rare Luminary. If too many users reach Luminary
+quickly, raise the threshold.
 
 ---
 
 ## Testing checklist
 
-**Admin Inbox nav:**
-- [ ] Inbox appears in AdminShell left nav between Interventions and Analytics
-- [ ] Clicking Inbox renders InboxSection correctly
-- [ ] All other nav items still work
+**Migration:**
+- [ ] `lumen_transactions` table exists with correct RLS
+- [ ] `profiles` has 5 new columns (lumens_current_period, lumens_lifetime,
+      current_period_started, previous_period_lumens, is_founding_member)
+- [ ] `admin_config` has 'founding_member_cutoff' key
+- [ ] `award_lumens()` function exists and rejects bot account
+- [ ] `compute_tier()` function returns correct tier for various inputs
+- [ ] `get_lumen_history()` RPC returns correct structure
+- [ ] `apply_founding_member_status` trigger fires on onboarding completion
 
-**group_member_joined email:**
-- [ ] Edge Function synced with dashboard version before edits
-- [ ] `group_member_joined` in EMAIL_TYPES and PREF_COLUMN map
-- [ ] Joining a public group triggers email to all group admins
-- [ ] Email subject: "[member] joined [group] ✦"
-- [ ] Email body shows member name and group name correctly
-- [ ] HTML-escaped to prevent injection
-- [ ] Function deploys without errors
+**Lumens earning:**
+- [ ] Post created → 5 Lumens to author
+- [ ] Comment posted → 2 Lumens to commenter
+- [ ] Comment received (first time per user) → 5 Lumens to post owner
+- [ ] Self-comments don't award engagement Lumens
+- [ ] Duplicate comments don't double-award engagement Lumens
+- [ ] Library item added → 1 Lumen to adder
+- [ ] Group created → 25 Lumens
+- [ ] Project created → 10 Lumens
+- [ ] Onboarding completed → 25 Lumens
+- [ ] Post reposted → 10 Lumens to original author
+- [ ] Discussion threshold (3+ distinct commenters) → 50 Lumens, one-time
+- [ ] Invited user creates first post → 100 Lumens to inviter
+- [ ] Post featured by admin → 100 Lumens to author
+- [ ] Template approved → 50 Lumens to submitter
+- [ ] Bot account (Luminary Team) earns no Lumens
 
-**User table:**
-- [ ] `invite_codes_remaining` column visible in table
-- [ ] Colour coding: green ≥3, amber 1–2, red 0
-- [ ] Clicking Posts column header sorts by posts_count
-- [ ] Clicking Groups column header sorts by groups_count
-- [ ] Clicking Codes column header sorts by invite_codes_remaining
-- [ ] Clicking Joined column header sorts by created_at
-- [ ] Clicking Last Active column header sorts by last_active
-- [ ] Second click on active column reverses sort direction
-- [ ] Sort arrow indicator shows correctly
-- [ ] ✉ button per row opens BulkNudgeModal with just that user
-- [ ] Existing bulk select and nudge flow unchanged
+**Tier visualisation:**
+- [ ] Luminary tier avatar shows subtle gold ring in PostCard feed
+- [ ] Luminary tier avatar shows gold ring on profile page header
+- [ ] Luminary tier avatar shows gold ring in NotifsScreen
+- [ ] Catalyst / Pioneer / Beacon avatars show NO ring — identical to before
+- [ ] Existing avatar callers that don't pass `tier` prop render identically
+- [ ] posts_with_meta view includes author_tier (null for non-Luminary)
+- [ ] group_posts_with_meta view includes author_tier
 
-**UserDetailPanel top-up:**
-- [ ] Stats grid shows invite_codes_remaining with colour coding
-- [ ] Top-up section visible only when codes < 5
-- [ ] Dropdown shows correct number of options (5 - remaining)
-- [ ] Generate button creates correct number of invite_codes rows
-- [ ] New codes have `created_by = user.id`, `is_multi_use = false`
-- [ ] New codes have `label = 'Admin top-up'`
+**Profile page:**
+- [ ] Tier badge displays on profile header
+- [ ] Founding Member badge displays for qualifying users
+- [ ] Own profile shows Lumens count + progress to next tier
+- [ ] "View history →" button navigates to Lumens transparency page
 
-**Content Posts tab:**
-- [ ] Post type filter shows only "text" and "paper"
-- [ ] No "link", "tip", "upload" options in filter
-- [ ] Comments column sortable (desc = most commented first)
-- [ ] Likes column sortable
-- [ ] Date column sortable (default desc = newest first)
-- [ ] Deep dive posts show "Deep dive" badge
-- [ ] Participant count visible per post
+**Lumens transparency page:**
+- [ ] Hero card shows current tier with tier-coloured background
+- [ ] Tier description text matches TIER_CONFIG description
+- [ ] Lumens count displays correctly
+- [ ] Progress bar shows accurate progress to next tier
+- [ ] Luminary tier shows no progress bar (already at top)
+- [ ] Four tier cards displayed with current tier highlighted
+- [ ] Earning rules table shows all categories with amounts
+- [ ] Recent earnings list shows last 50 transactions
+- [ ] Each transaction shows correct icon, label, category, date
+- [ ] Empty state shows when user has no transactions
 
-**CLAUDE.md split:**
-- [ ] `SCHEMA.md` created at repo root with database schema content
-- [ ] `CLAUDE.md` no longer contains full table/column listings
-- [ ] `CLAUDE.md` contains reference to SCHEMA.md
-- [ ] `CLAUDE.md` post-type convention note added
-- [ ] Both files committed to repo
+**Sidebar:**
+- [ ] Old XP/level badge replaced with tier + Lumens display
+- [ ] Sidebar badge shows correct tier name and Lumens count
+- [ ] Clicking sidebar badge navigates to Lumens screen
+
+**Founding Member:**
+- [ ] Trigger fires when user completes onboarding
+- [ ] Cutoff date check works correctly
+- [ ] Users who complete onboarding after cutoff are NOT marked
+- [ ] Admin can update cutoff_date in admin_config
+- [ ] Founding Member badge persists after period reset
+
+**PostHog:**
+- [ ] `lumens_earned` event fires for every Lumens award
+- [ ] `tier_reached` event fires only on actual tier transitions
 
 **Build:**
 - [ ] `npm run build` succeeds with no new warnings

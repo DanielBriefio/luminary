@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabase';
 import { initAnalytics, optInAndIdentify, optOutAndReset, capturePageview } from './lib/analytics';
-import { T, NAV } from './lib/constants';
+import { T, NAV, TIER_CONFIG, getTierFromLumens, getProgressToNextTier } from './lib/constants';
 import Av from './components/Av';
 import Spinner from './components/Spinner';
 import BottomNav from './components/BottomNav';
@@ -26,6 +26,7 @@ import CardQROverlay from './components/CardQROverlay';
 import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
+import LumensScreen from './screens/LumensScreen';
 import LegalPage from './screens/LegalPage';
 import PublicGroupProfileScreen from './groups/PublicGroupProfileScreen';
 import LibraryScreen from './library/LibraryScreen';
@@ -481,6 +482,7 @@ export default function App() {
     post:         <NewPostScreen user={user} profile={profile} onPostCreated={()=>setScreen('feed')}/>,
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
+    lumens:       <LumensScreen supabase={supabase} user={user} profile={profile} onBack={()=>setScreen('feed')}/>,
   };
 
   return (
@@ -641,10 +643,7 @@ export default function App() {
               ))}
             </div>
             <div style={{padding:"12px 14px",borderTop:`1px solid ${T.bdr}`}}>
-              <div style={{background:`linear-gradient(135deg,${T.v2},${T.bl2})`,border:`1px solid ${T.bdr}`,borderRadius:9,padding:"8px 11px",marginBottom:10}}>
-                <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:10,fontWeight:700,color:T.v}}>Lv.1 — Researcher</span><span style={{fontSize:9.5,color:T.mu}}>0 XP</span></div>
-                <div style={{height:4,background:T.s3,borderRadius:2,marginTop:5,overflow:"hidden"}}><div style={{height:"100%",width:"5%",background:`linear-gradient(90deg,${T.v},${T.bl})`,borderRadius:2}}/></div>
-              </div>
+              <LumensSidebarWidget profile={profile} onClick={()=>setScreen('lumens')}/>
               <div style={{display:"flex",alignItems:"center",gap:9}}>
                 <div onClick={()=>setScreen('profile')}
                   title="My Profile"
@@ -839,5 +838,59 @@ export default function App() {
         )}
       </div>
     </>
+  );
+}
+
+// Personal sidebar widget: shows tier name, current Lumens, progress to next
+// tier (not the top tier). Only visible to the user themselves — it lives in
+// the personal nav. Until migration_gamification.sql runs, profile.lumens_*
+// fields are undefined and the widget gracefully renders Catalyst / 0.
+function LumensSidebarWidget({ profile, onClick }) {
+  const lumens     = Number(profile?.lumens_current_period) || 0;
+  const tier       = getTierFromLumens(lumens);
+  const cfg        = TIER_CONFIG[tier];
+  const { progress, needed, nextTier } = getProgressToNextTier(lumens, tier);
+  const isTop = !nextTier;
+
+  return (
+    <button
+      onClick={onClick}
+      title="View Lumens history"
+      style={{
+        width:'100%', textAlign:'left', cursor:'pointer',
+        background:cfg.bg, border:`1px solid ${cfg.color}33`, borderRadius:9,
+        padding:'8px 11px', marginBottom:10, fontFamily:'inherit',
+        transition:'transform .12s ease',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
+    >
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <span style={{fontSize:10, fontWeight:700, color:cfg.color, letterSpacing:0.4, textTransform:'uppercase'}}>
+          ✦ {cfg.name}
+        </span>
+        <span style={{fontSize:9.5, color:T.mu, fontWeight:600}}>
+          {lumens.toLocaleString()} Lumens
+        </span>
+      </div>
+      {!isTop ? (
+        <>
+          <div style={{height:4, background:T.s3, borderRadius:2, marginTop:5, overflow:'hidden'}}>
+            <div style={{
+              height:'100%', width:`${progress}%`,
+              background:cfg.color, borderRadius:2,
+              transition:'width 0.4s ease',
+            }}/>
+          </div>
+          <div style={{fontSize:9.5, color:T.mu, marginTop:4}}>
+            {needed.toLocaleString()} to {TIER_CONFIG[nextTier].name}
+          </div>
+        </>
+      ) : (
+        <div style={{fontSize:9.5, color:T.mu, marginTop:5}}>
+          You've reached the top tier.
+        </div>
+      )}
+    </button>
   );
 }

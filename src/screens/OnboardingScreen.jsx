@@ -129,6 +129,13 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
     await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
     setProfile(p => ({ ...p, onboarding_completed: true }));
     capture('onboarding_completed');
+    supabase.rpc('award_lumens', {
+      p_user_id:  user.id,
+      p_amount:   25,
+      p_reason:   'onboarding_completed',
+      p_category: 'creation',
+      p_meta:     {},
+    }).catch(() => {});
     onComplete();
   };
 
