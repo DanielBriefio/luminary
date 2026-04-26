@@ -384,16 +384,6 @@ export default function NewPostScreen({ user, profile, onPostCreated }) {
     setLoading(false);
     if(error) { setError(error.message); return; }
 
-    if (newPost?.id) {
-      supabase.rpc('award_lumens', {
-        p_user_id:  user.id,
-        p_amount:   5,
-        p_reason:   'post_created',
-        p_category: 'creation',
-        p_meta:     { post_id: newPost.id, post_type: resolvedPostType },
-      }).catch(() => {});
-    }
-
     if (AUTO_TAG_ENABLED && newPost?.id) {
       smartAutoTag({
         postId:        newPost.id,
