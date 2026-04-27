@@ -21,6 +21,11 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
   const [deleteText,     setDeleteText]     = useState('');
   const [deleting,       setDeleting]       = useState(false);
   const [deleteError,    setDeleteError]    = useState('');
+  // Groups where the user is the only admin — they need to pick a
+  // successor (or dissolve the group) before deletion can proceed.
+  const [handoffGroups,  setHandoffGroups]  = useState([]);
+  const [handoffChoices, setHandoffChoices] = useState({}); // groupId → 'dissolve' | userId
+  const [handoffLoading, setHandoffLoading] = useState(false);
   const [exporting,      setExporting]      = useState(false);
   const [changePassword, setChangePassword] = useState(false);
   const [newPassword,    setNewPassword]    = useState('');
@@ -106,11 +111,57 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
     setExporting(false);
   };
 
+  // Open the confirm card AND fetch any groups where the user is the only
+  // admin so the user can pick a successor before typing DELETE.
+  const startScheduleFlow = async () => {
+    setConfirmDelete(true);
+    setDeleteError('');
+    setHandoffLoading(true);
+    const { data, error } = await supabase.rpc('get_my_admin_groups_for_handoff');
+    if (error) {
+      // Non-fatal — let the user proceed; we'll just skip handoffs.
+      setHandoffGroups([]);
+      setHandoffChoices({});
+      setHandoffLoading(false);
+      return;
+    }
+    const groups = data || [];
+    // Default each group's choice: longest-tenured other member, else 'dissolve'.
+    const defaults = {};
+    for (const g of groups) {
+      const members = g.other_members || [];
+      defaults[g.group_id] = members.length > 0 ? members[0].id : 'dissolve';
+    }
+    setHandoffGroups(groups);
+    setHandoffChoices(defaults);
+    setHandoffLoading(false);
+  };
+
+  const performHandoffs = async () => {
+    for (const g of handoffGroups) {
+      const choice = handoffChoices[g.group_id];
+      if (choice === 'dissolve' || !choice) {
+        const { error } = await supabase.from('groups').delete().eq('id', g.group_id);
+        if (error) throw new Error(`Couldn't dissolve "${g.group_name}": ${error.message}`);
+      } else {
+        const { error } = await supabase.from('group_members')
+          .update({ role: 'admin' })
+          .eq('group_id', g.group_id)
+          .eq('user_id', choice);
+        if (error) throw new Error(`Couldn't promote successor for "${g.group_name}": ${error.message}`);
+      }
+    }
+  };
+
   const deleteAccount = async () => {
     if (deleteText !== 'DELETE') return;
     setDeleting(true);
     setDeleteError('');
     try {
+      // Resolve admin handoffs first; abort if any of them fails so we
+      // don't end up with an orphaned group AND a scheduled deletion.
+      if (handoffGroups.length > 0) await performHandoffs();
+
       const { data, error } = await supabase.rpc('delete_own_account');
       if (error) throw error;
       // Stay signed in: bumping deletion_scheduled_at on the profile causes
@@ -119,6 +170,8 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
       setProfile(p => ({ ...(p || {}), deletion_scheduled_at: data }));
       setDeleteText('');
       setConfirmDelete(false);
+      setHandoffGroups([]);
+      setHandoffChoices({});
       setDeleting(false);
     } catch (e) {
       setDeleteError(e.message || 'Deletion failed. Please contact hello@luminary.to to delete your account.');
@@ -484,7 +537,7 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
                 final purge happens 30 days later. You can cancel any time during the grace period
                 by signing back in.
               </div>
-              <button onClick={() => setConfirmDelete(true)} style={{
+              <button onClick={startScheduleFlow} style={{
                 padding: '8px 16px', borderRadius: 9, border: `1.5px solid ${T.ro}`,
                 background: 'transparent', color: T.ro, cursor: 'pointer',
                 fontSize: 13, fontFamily: 'inherit', fontWeight: 600,
@@ -502,6 +555,58 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
                 We'll permanently delete everything in 30 days unless you cancel during
                 the grace period. Type <strong>DELETE</strong> to confirm.
               </div>
+
+              {/* Group admin handoff — only shown for groups where the user is the only admin */}
+              {handoffLoading && (
+                <div style={{ fontSize: 12, color: T.mu, marginBottom: 10 }}>
+                  Checking group ownership…
+                </div>
+              )}
+              {!handoffLoading && handoffGroups.length > 0 && (
+                <div style={{
+                  background: T.am2, border: `1px solid ${T.am}`, borderRadius: 9,
+                  padding: '10px 12px', marginBottom: 10,
+                }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: T.am, marginBottom: 6 }}>
+                    ⚠️ You're the only admin of {handoffGroups.length} group{handoffGroups.length === 1 ? '' : 's'}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: T.text, lineHeight: 1.5, marginBottom: 8 }}>
+                    Pick a successor for each, or dissolve the group when your account is purged.
+                  </div>
+                  {handoffGroups.map(g => {
+                    const members = g.other_members || [];
+                    return (
+                      <div key={g.group_id} style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 3 }}>
+                          {g.group_name}
+                        </div>
+                        <select
+                          value={handoffChoices[g.group_id] || 'dissolve'}
+                          onChange={e => setHandoffChoices(c => ({ ...c, [g.group_id]: e.target.value }))}
+                          style={{
+                            width: '100%', padding: '6px 9px', borderRadius: 7,
+                            border: `1px solid ${T.bdr}`, fontSize: 12,
+                            fontFamily: 'inherit', outline: 'none',
+                            background: 'white', color: T.text,
+                          }}
+                        >
+                          {members.map(m => (
+                            <option key={m.id} value={m.id}>
+                              Transfer admin to {m.name || 'Unnamed user'} ({m.role})
+                            </option>
+                          ))}
+                          <option value="dissolve">
+                            {members.length === 0
+                              ? 'Dissolve (no other members)'
+                              : 'Dissolve the group instead'}
+                          </option>
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <input
                 value={deleteText}
                 onChange={e => { setDeleteText(e.target.value); setDeleteError(''); }}
@@ -515,7 +620,7 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
               />
               {deleteError && <div style={{ fontSize: 12.5, color: T.ro, marginBottom: 8 }}>⚠️ {deleteError}</div>}
               <div style={{ display: 'flex', gap: 8 }}>
-                <Btn onClick={() => { setConfirmDelete(false); setDeleteText(''); }}>Cancel</Btn>
+                <Btn onClick={() => { setConfirmDelete(false); setDeleteText(''); setHandoffGroups([]); setHandoffChoices({}); }}>Cancel</Btn>
                 <button
                   onClick={deleteAccount}
                   disabled={deleteText !== 'DELETE' || deleting}
