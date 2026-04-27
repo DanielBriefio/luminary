@@ -72,12 +72,16 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
   };
 
   const fetchBookmarks = async () => {
+    // posts has two FKs to profiles (user_id + target_user_id) so PostgREST
+    // can't auto-resolve `profiles(...)` without a hint — disambiguate via
+    // the FK column name (returns PGRST201 / 300 Multiple Choices otherwise).
+    // group_posts only has user_id → profiles, so no hint needed there.
     const { data } = await supabase
       .from('saved_posts')
       .select(`
         id, saved_at, post_id, group_post_id,
         post:posts(id, content, paper_title, created_at,
-          profiles(name, avatar_url, avatar_color)),
+          profiles!posts_user_id_fkey(name, avatar_url, avatar_color)),
         group_post:group_posts(id, content, paper_title, group_id, created_at,
           profiles(name, avatar_url, avatar_color))
       `)
