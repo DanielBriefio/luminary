@@ -27,6 +27,7 @@ import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
 import LumensScreen from './screens/LumensScreen';
+import StorageScreen from './screens/StorageScreen';
 import LegalPage from './screens/LegalPage';
 import PublicGroupProfileScreen from './groups/PublicGroupProfileScreen';
 import LibraryScreen from './library/LibraryScreen';
@@ -501,6 +502,7 @@ export default function App() {
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     lumens:       <LumensScreen supabase={supabase} user={user} profile={profile} onBack={()=>setScreen('feed')}/>,
+    storage:      <StorageScreen onBack={()=>setScreen('feed')}/>,
   };
 
   return (
@@ -529,6 +531,7 @@ export default function App() {
           setProfile={setProfile}
           onClose={() => setShowSettings(false)}
           onSignOut={() => { setShowSettings(false); signOut(); }}
+          onOpenStorage={() => { setShowSettings(false); setScreen('storage'); }}
         />
       )}
       {/* ORCID import offer modal */}

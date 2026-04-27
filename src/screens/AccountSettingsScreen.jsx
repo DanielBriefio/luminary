@@ -4,7 +4,7 @@ import { T, WORK_MODES } from '../lib/constants';
 import Btn from '../components/Btn';
 import StoragePanel from '../components/StoragePanel';
 
-export default function AccountSettingsScreen({ user, profile, setProfile, onClose, onSignOut }) {
+export default function AccountSettingsScreen({ user, profile, setProfile, onClose, onSignOut, onOpenStorage }) {
   const [workModeValue,  setWorkModeValue]  = useState(profile?.work_mode || 'researcher');
   const [workModeSaving, setWorkModeSaving] = useState(false);
   const [saving,         setSaving]         = useState(false);
@@ -363,10 +363,8 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
           <SectionHead label="Storage"/>
           <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 12, lineHeight: 1.6 }}>
             Files you've uploaded — avatars, post attachments, and library PDFs.
-            Deleting a post attachment leaves the post in place; the file is replaced
-            with a "file removed" placeholder.
           </div>
-          <StoragePanel />
+          <StoragePanel onOpenStorage={onOpenStorage} />
 
           {/* Data */}
           <SectionHead label="Your data"/>
