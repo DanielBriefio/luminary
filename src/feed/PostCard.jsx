@@ -616,6 +616,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
                     style={{
                       display:'block', width:'100%', height:200,
                       objectFit:'cover',
+                      objectPosition: post.deep_dive_cover_position || '50% 50%',
                     }}/>
                 )}
                 <div style={{ padding:'14px 16px' }}>

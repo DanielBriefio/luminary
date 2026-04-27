@@ -49,6 +49,89 @@ async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, p
   }
 }
 
+// 200px-tall preview frame matching the PostCard feed crop. Drag the image
+// up or down to choose what's visible; horizontal stays centred. Returns
+// `y` as a 0–100 percentage stored as `object-position: 50% Y%` at save
+// time. Touch + mouse supported.
+function CoverRepositioner({ url, y, onChange, onRemove }) {
+  const [dragging, setDragging] = useState(false);
+  const startRef = useRef({ y: 0, posY: 50 });
+
+  const begin = (clientY) => {
+    startRef.current = { y: clientY, posY: y };
+    setDragging(true);
+  };
+  const move = (clientY) => {
+    if (!dragging) return;
+    const dy = clientY - startRef.current.y;
+    // Drag down → reveal upper part of the image (Y% toward 0).
+    // 200px drag ≈ 100% shift.
+    const next = Math.max(0, Math.min(100, startRef.current.posY - (dy / 200) * 100));
+    onChange(next);
+  };
+  const end = () => setDragging(false);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMouseMove = (e) => move(e.clientY);
+    const onTouchMove = (e) => { if (e.touches[0]) move(e.touches[0].clientY); };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('touchmove', onTouchMove);
+    window.addEventListener('mouseup', end);
+    window.addEventListener('touchend', end);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('mouseup', end);
+      window.removeEventListener('touchend', end);
+    };
+  }); // eslint-disable-line
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div
+        style={{
+          position: 'relative', width: '100%', height: 200,
+          borderRadius: 10, overflow: 'hidden',
+          border: `1px solid ${T.bdr}`, background: T.s2,
+          cursor: dragging ? 'grabbing' : 'grab',
+          userSelect: 'none', touchAction: 'none',
+        }}
+        onMouseDown={(e) => { e.preventDefault(); begin(e.clientY); }}
+        onTouchStart={(e) => { if (e.touches[0]) begin(e.touches[0].clientY); }}
+      >
+        <img src={url} alt="" draggable={false}
+          style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+            objectPosition: `50% ${y}%`,
+            display: 'block', pointerEvents: 'none',
+          }}/>
+        <div style={{
+          position: 'absolute', left: 8, bottom: 8,
+          background: 'rgba(0,0,0,.55)', color: '#fff',
+          padding: '3px 9px', borderRadius: 20,
+          fontSize: 11, fontWeight: 600, pointerEvents: 'none',
+        }}>
+          ↕ Drag to reposition
+        </div>
+      </div>
+      <button
+        onClick={onRemove}
+        style={{
+          position: 'absolute', top: 8, right: 8,
+          background: 'rgba(0,0,0,.55)', color: '#fff',
+          border: 'none', borderRadius: 20, padding: '4px 10px',
+          fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+        title="Remove cover image"
+      >
+        ✕ Remove
+      </button>
+    </div>
+  );
+}
+
 async function fetchDoiMetadata(doi) {
   const clean = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
   if(!clean) return null;
@@ -153,6 +236,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
   const [coverPath,        setCoverPath]        = useState('');
   const [coverFileMeta,    setCoverFileMeta]    = useState(null); // { size, type, name }
   const [coverUploading,   setCoverUploading]   = useState(false);
+  const [coverY,           setCoverY]           = useState(50);    // 0–100; vertical object-position %
   const coverInputRef = useRef(null);
   const [tags,setTags]                   = useState('');
   const [visibility,setVisibility]       = useState('everyone');
@@ -396,8 +480,9 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       tier2:          [],
       visibility,
       is_deep_dive:   isDeepDive,
-      deep_dive_title:     isDeepDive ? deepDiveTitle.trim() : '',
-      deep_dive_cover_url: isDeepDive ? coverUrl : '',
+      deep_dive_title:          isDeepDive ? deepDiveTitle.trim() : '',
+      deep_dive_cover_url:      isDeepDive ? coverUrl : '',
+      deep_dive_cover_position: (isDeepDive && coverUrl) ? `50% ${Math.round(coverY)}%` : '50% 50%',
     }).select('id').single();
     setLoading(false);
     if(error) { setError(error.message); return; }
@@ -770,27 +855,12 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
             />
 
             {coverUrl ? (
-              <div style={{position:'relative'}}>
-                <img src={coverUrl} alt=""
-                  style={{
-                    width:'100%', height:160, objectFit:'cover',
-                    borderRadius:10, display:'block',
-                    border:`1px solid ${T.bdr}`,
-                  }}/>
-                <button
-                  onClick={() => { setCoverUrl(''); setCoverPath(''); setCoverFileMeta(null); }}
-                  style={{
-                    position:'absolute', top:8, right:8,
-                    background:'rgba(0,0,0,.55)', color:'#fff',
-                    border:'none', borderRadius:20, padding:'4px 10px',
-                    fontSize:11.5, fontWeight:600, cursor:'pointer',
-                    fontFamily:'inherit',
-                  }}
-                  title="Remove cover image"
-                >
-                  ✕ Remove
-                </button>
-              </div>
+              <CoverRepositioner
+                url={coverUrl}
+                y={coverY}
+                onChange={setCoverY}
+                onRemove={() => { setCoverUrl(''); setCoverPath(''); setCoverFileMeta(null); setCoverY(50); }}
+              />
             ) : (
               <button
                 onClick={() => coverInputRef.current?.click()}
