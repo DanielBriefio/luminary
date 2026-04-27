@@ -55,17 +55,38 @@ const RULES = [
 ];
 
 export default function LumensScreen({ supabase, user, profile, onBack }) {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [postExcerpts, setExcerpts] = useState({});
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data: result } = await supabase.rpc('get_lumen_history', { p_limit: 50 });
-      if (!cancelled) {
-        setData(result);
-        setLoading(false);
-      }
+      if (cancelled) return;
+      setData(result);
+      setLoading(false);
+
+      // Pull excerpts for any transactions that reference a post_id, so
+      // each row can show "what this Lumens earn was about".
+      const postIds = [...new Set(
+        (result?.transactions || [])
+          .map(tx => tx?.meta?.post_id)
+          .filter(Boolean)
+      )];
+      if (!postIds.length) return;
+      const { data: posts } = await supabase
+        .from('posts')
+        .select('id, content, paper_title')
+        .in('id', postIds);
+      if (cancelled) return;
+      const map = {};
+      (posts || []).forEach(p => {
+        const text = p.paper_title
+          || (p.content || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        if (text) map[p.id] = text.length > 100 ? text.slice(0, 100).trim() + '…' : text;
+      });
+      setExcerpts(map);
     })();
     return () => { cancelled = true; };
   }, [supabase]);
@@ -174,6 +195,77 @@ export default function LumensScreen({ supabase, user, profile, onBack }) {
         )}
       </div>
 
+      {/* Recent earnings */}
+      <div style={{
+        background: T.w, border: `1px solid ${T.bdr}`,
+        borderRadius: 12, padding: '20px 24px', marginBottom: 24,
+      }}>
+        <h2 style={{
+          fontFamily: "'DM Serif Display', serif",
+          fontSize: 20, color: T.text, margin: '0 0 16px',
+        }}>
+          Recent earnings
+        </h2>
+
+        {(data?.transactions || []).length === 0 ? (
+          <div style={{
+            padding: '40px 20px', textAlign: 'center',
+            color: T.mu, fontSize: 14,
+          }}>
+            No Lumens earned yet. Start by creating your first post or
+            joining a discussion.
+          </div>
+        ) : (
+          <div>
+            {data.transactions.map(tx => {
+              const info    = REASON_LABELS[tx.reason] || { label: tx.reason, icon: '•' };
+              const postId  = tx?.meta?.post_id;
+              const excerpt = postId ? postExcerpts[postId] : null;
+              const when    = new Date(tx.created_at).toLocaleString('en-US', {
+                month:  'short', day:    'numeric',
+                hour:   '2-digit', minute: '2-digit',
+              });
+              return (
+                <div key={tx.id} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 12,
+                  padding: '10px 0', borderBottom: `1px solid ${T.bdr}`,
+                }}>
+                  <div style={{
+                    fontSize: 20, flexShrink: 0, width: 28,
+                    textAlign: 'center', paddingTop: 2,
+                  }}>
+                    {info.icon}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, color: T.text, fontWeight: 500 }}>
+                      {info.label}
+                    </div>
+                    {excerpt && (
+                      <div style={{
+                        fontSize: 12, color: T.mu, marginTop: 2,
+                        overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {excerpt}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: T.mu, textTransform: 'capitalize', marginTop: 2 }}>
+                      {tx.category} · {when}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: 14, fontWeight: 700, color: tierConfig.color,
+                    paddingTop: 2,
+                  }}>
+                    +{tx.amount}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Tier ladder */}
       <div style={{
         background: T.w, border: `1px solid ${T.bdr}`,
@@ -215,7 +307,7 @@ export default function LumensScreen({ supabase, user, profile, onBack }) {
       {/* Earning rules */}
       <div style={{
         background: T.w, border: `1px solid ${T.bdr}`,
-        borderRadius: 12, padding: '20px 24px', marginBottom: 24,
+        borderRadius: 12, padding: '20px 24px',
       }}>
         <h2 style={{
           fontFamily: "'DM Serif Display', serif",
@@ -261,60 +353,6 @@ export default function LumensScreen({ supabase, user, profile, onBack }) {
             ))}
           </div>
         ))}
-      </div>
-
-      {/* Recent earnings */}
-      <div style={{
-        background: T.w, border: `1px solid ${T.bdr}`,
-        borderRadius: 12, padding: '20px 24px',
-      }}>
-        <h2 style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 20, color: T.text, margin: '0 0 16px',
-        }}>
-          Recent earnings
-        </h2>
-
-        {(data?.transactions || []).length === 0 ? (
-          <div style={{
-            padding: '40px 20px', textAlign: 'center',
-            color: T.mu, fontSize: 14,
-          }}>
-            No Lumens earned yet. Start by creating your first post or
-            joining a discussion.
-          </div>
-        ) : (
-          <div>
-            {data.transactions.map(tx => {
-              const info = REASON_LABELS[tx.reason] || { label: tx.reason, icon: '•' };
-              return (
-                <div key={tx.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 0', borderBottom: `1px solid ${T.bdr}`,
-                }}>
-                  <div style={{ fontSize: 20, flexShrink: 0, width: 28, textAlign: 'center' }}>
-                    {info.icon}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, color: T.text, fontWeight: 500 }}>
-                      {info.label}
-                    </div>
-                    <div style={{ fontSize: 11, color: T.mu, textTransform: 'capitalize' }}>
-                      {tx.category} · {new Date(tx.created_at).toLocaleDateString('en-US', {
-                        month: 'short', day: 'numeric',
-                      })}
-                    </div>
-                  </div>
-                  <div style={{
-                    fontSize: 14, fontWeight: 700, color: tierConfig.color,
-                  }}>
-                    +{tx.amount}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
       </div>
     </div>
