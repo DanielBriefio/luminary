@@ -356,10 +356,13 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
         </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:14, marginBottom:20 }}>
-          {comments.map(c => (
+          {comments.map(c => {
+            const removed = !c.profiles;
+            return (
             <div key={c.id} style={{
               display:'flex', gap:12, padding:'14px 16px',
               background:T.w, borderRadius:10, border:`1px solid ${T.bdr}`,
+              opacity: removed ? 0.85 : 1,
             }}>
               {c.profiles?.profile_slug ? (
                 <a href={`/p/${c.profiles.profile_slug}`} style={{ flexShrink:0, textDecoration:'none' }}>
@@ -368,18 +371,22 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
                     url={c.profiles?.avatar_url || ''}/>
                 </a>
               ) : (
-                <Av size={32} name={c.profiles?.name || ''}
-                  color={c.profiles?.avatar_color || T.v}
+                <Av size={32} name={c.profiles?.name || '?'}
+                  color={c.profiles?.avatar_color || T.bdr}
                   url={c.profiles?.avatar_url || ''}/>
               )}
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'baseline', gap:8, marginBottom:4 }}>
-                  <span style={{ fontWeight:700, fontSize:13.5, color:T.text }}>
+                  <span style={{
+                    fontWeight:700, fontSize:13.5,
+                    color: removed ? T.mu : T.text,
+                    fontStyle: removed ? 'italic' : 'normal',
+                  }}>
                     {c.profiles?.profile_slug ? (
                       <a href={`/p/${c.profiles.profile_slug}`} style={{ color:T.text, textDecoration:'none' }}>
                         {c.profiles?.name || 'Unknown'}
                       </a>
-                    ) : (c.profiles?.name || 'Unknown')}
+                    ) : (c.profiles?.name || (removed ? 'Deleted user' : 'Unknown'))}
                   </span>
                   <span style={{ fontSize:11.5, color:T.mu }}>{timeAgo(c.created_at)}</span>
                   {currentUserId === c.user_id && (
@@ -392,12 +399,17 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
                     </button>
                   )}
                 </div>
-                <div style={{ fontSize:14, lineHeight:1.6, color:T.text, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                <div style={{
+                  fontSize:14, lineHeight:1.6,
+                  color: removed ? T.mu : T.text,
+                  whiteSpace:'pre-wrap', wordBreak:'break-word',
+                }}>
                   {c.content}
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

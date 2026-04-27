@@ -293,15 +293,18 @@ export default function ProjectPostCard({ post, currentUserId, myRole, activeFol
       {showComments && (
         <div style={{ marginTop: 10, borderTop: `1px solid ${T.bdr}`, paddingTop: 10 }}>
           {commLoading && <div style={{ fontSize: 12, color: T.mu, padding: '4px 0' }}>Loading…</div>}
-          {comments.map(c => (
+          {comments.map(c => {
+            const removed = !c.profiles;
+            return (
             <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <Av color={c.profiles?.avatar_color} url={c.profiles?.avatar_url} name={c.profiles?.name} size={26}/>
+              <Av color={c.profiles?.avatar_color || T.bdr} url={c.profiles?.avatar_url} name={c.profiles?.name || '?'} size={26}/>
               <div style={{ flex: 1, background: T.s2, borderRadius: 10, padding: '7px 11px' }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 2 }}>{c.profiles?.name}</div>
-                <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{c.content}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 2, color: removed ? T.mu : T.text, fontStyle: removed ? 'italic' : 'normal' }}>{c.profiles?.name || 'Deleted user'}</div>
+                <div style={{ fontSize: 12.5, lineHeight: 1.5, color: removed ? T.mu : T.text }}>{c.content}</div>
               </div>
             </div>
-          ))}
+            );
+          })}
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <input
               ref={commRef}

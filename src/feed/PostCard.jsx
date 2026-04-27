@@ -786,7 +786,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
                     borderRadius: '50%',
                     border: `1.5px solid ${T.w}`,
                   }}>
-                    <Av size={20} color={c.profiles?.avatar_color} name={c.profiles?.name} url={c.profiles?.avatar_url || ''}/>
+                    <Av size={20} color={c.profiles?.avatar_color || T.bdr} name={c.profiles?.name || '?'} url={c.profiles?.avatar_url || ''}/>
                   </div>
                 ))}
               </div>
@@ -840,13 +840,17 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           >
             <Av
               size={24}
-              color={topComment.profiles?.avatar_color}
-              name={topComment.profiles?.name}
+              color={topComment.profiles?.avatar_color || T.bdr}
+              name={topComment.profiles?.name || '?'}
               url={topComment.profiles?.avatar_url || ''}
             />
             <div style={{flex: 1, minWidth: 0}}>
-              <span style={{fontSize: 12, fontWeight: 700, marginRight: 5}}>
-                {topComment.profiles?.name}
+              <span style={{
+                fontSize: 12, fontWeight: 700, marginRight: 5,
+                color: topComment.profiles ? T.text : T.mu,
+                fontStyle: topComment.profiles ? 'normal' : 'italic',
+              }}>
+                {topComment.profiles?.name || 'Deleted user'}
               </span>
               <span style={{
                 fontSize: 12.5, color: T.text, lineHeight: 1.45,
@@ -935,25 +939,28 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       {showComments&&(
         <div style={{borderTop:`1px solid ${T.bdr}`,background:T.s2}}>
           {commLoading&&<div style={{padding:"14px 16px",fontSize:12.5,color:T.mu}}>Loading comments...</div>}
-          {!commLoading&&comments.map(c=>(
+          {!commLoading&&comments.map(c=>{
+            const removed = !c.profiles;
+            return (
             <div key={c.id} style={{display:"flex",gap:10,padding:"12px 16px",borderBottom:`1px solid ${T.bdr}`,background:T.w}}>
-              <div onClick={()=>goToProfile(c.user_id,c.profiles?.profile_slug)} style={{cursor:"pointer",flexShrink:0}}>
-                <Av color={c.profiles?.avatar_color||"me"} size={30} name={c.profiles?.name} url={c.profiles?.avatar_url||""}/>
+              <div onClick={removed?undefined:()=>goToProfile(c.user_id,c.profiles?.profile_slug)} style={{cursor:removed?"default":"pointer",flexShrink:0}}>
+                <Av color={c.profiles?.avatar_color||T.bdr} size={30} name={c.profiles?.name||'?'} url={c.profiles?.avatar_url||""}/>
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"baseline",gap:7,marginBottom:4,flexWrap:"wrap"}}>
-                  <span onClick={()=>goToProfile(c.user_id,c.profiles?.profile_slug)} style={{fontSize:12.5,fontWeight:700,cursor:"pointer",color:T.v}}>{c.profiles?.name||"Researcher"}</span>
+                  <span onClick={removed?undefined:()=>goToProfile(c.user_id,c.profiles?.profile_slug)} style={{fontSize:12.5,fontWeight:700,cursor:removed?"default":"pointer",color:removed?T.mu:T.v,fontStyle:removed?"italic":"normal"}}>{c.profiles?.name||"Deleted user"}</span>
                   {c.profiles?.institution&&<span style={{fontSize:10.5,color:T.mu}}>{c.profiles.institution}</span>}
                   <span style={{fontSize:10.5,color:T.mu,marginLeft:"auto"}}>{timeAgo(c.created_at)}</span>
                 </div>
-                <div style={{fontSize:13,lineHeight:1.65,color:T.text,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{c.content}</div>
+                <div style={{fontSize:13,lineHeight:1.65,color:removed?T.mu:T.text,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{c.content}</div>
               </div>
               {currentUserId===c.user_id&&(
                 <button onClick={()=>deleteComment(c.id)}
                   style={{fontSize:12,color:T.mu,border:"none",background:"transparent",cursor:"pointer",flexShrink:0,opacity:.5,padding:"0 4px",alignSelf:"flex-start"}}>✕</button>
               )}
             </div>
-          ))}
+            );
+          })}
           {!commLoading&&comments.length===0&&commLoaded&&(
             <div style={{padding:"14px 16px",fontSize:12.5,color:T.mu,textAlign:"center",background:T.w}}>No comments yet — be the first to reply.</div>
           )}
