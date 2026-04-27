@@ -133,6 +133,10 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
   const [epError,setEpError]             = useState('');
   const [epTotal,      setEpTotal]       = useState(null);
 
+  // Inline images uploaded by the rich-text editor (deep dive only) before
+  // we know the post.id. We flush record_storage_file for each after publish.
+  const pendingImagesRef = useRef([]);
+
   // Attachments (for text / tip posts)
   const [attachType,setAttachType]       = useState(null); // null | 'file'
   const [uploadFile,setUploadFile]       = useState(null);
@@ -398,6 +402,23 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
         p_source_kind: 'post',
         p_source_id:   newPost.id,
       }).then(() => {}, () => {});
+    }
+
+    // Flush deferred records for any inline images uploaded by the editor
+    // before we knew the post id.
+    if (newPost?.id && pendingImagesRef.current.length > 0) {
+      for (const rec of pendingImagesRef.current) {
+        supabase.rpc('record_storage_file', {
+          p_bucket:      rec.bucket,
+          p_path:        rec.path,
+          p_size_bytes:  rec.size,
+          p_mime_type:   rec.mime,
+          p_file_name:   rec.name,
+          p_source_kind: 'post',
+          p_source_id:   newPost.id,
+        }).then(() => {}, () => {});
+      }
+      pendingImagesRef.current = [];
     }
 
     if (LUMENS_ENABLED && newPost?.id) {
@@ -713,10 +734,12 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
             value={content}
             onChange={setContent}
             isDeepDive={isDeepDive}
+            user={user}
+            onPendingImage={(rec) => { pendingImagesRef.current.push(rec); }}
             minHeight={isMobile ? (uploadFile ? 120 : 200) : (uploadFile ? 70 : 110)}
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
-              isDeepDive ? "Use H2 headings for sections, ❝ for pull quotes, 📄 Cite to add paper references..." :
+              isDeepDive ? "Start with a title on the first line, then use Heading 2 for sections, ❝ for pull quotes, 📄 Cite to add paper references…" :
               composerPrompt
             }/>
         </div>

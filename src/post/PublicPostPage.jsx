@@ -14,10 +14,10 @@ import { timeAgo } from '../lib/utils';
 
 const READING = {
   maxWidth:    680,
-  fontSize:    18,
-  lineHeight:  1.75,
-  paraSpacing: 20,
-  titleSize:   38,
+  fontSize:    20,
+  lineHeight:  1.7,
+  paraSpacing: 22,
+  titleSize:   42,
   metaSize:    13,
   authorSize:  15,
   sidepadding: 24,
@@ -148,18 +148,28 @@ function ArticleBody({ post, isDeepDive }) {
       {bodyHtml && <SafeHtml html={bodyHtml} tags={post.tags}/>}
       <style>{`
         .article-body p { margin: 0 0 ${READING.paraSpacing}px; }
+        .article-body h1 {
+          font-family: 'DM Serif Display', serif;
+          font-size: 32px; color: ${T.text};
+          margin: 40px 0 16px; font-weight: 400; line-height: 1.25;
+        }
         .article-body h2 {
           font-family: 'DM Serif Display', serif;
-          font-size: 24px; color: ${T.text};
+          font-size: 26px; color: ${T.text};
           margin: 36px 0 14px; font-weight: 400; line-height: 1.3;
         }
         .article-body h3 {
           font-family: 'DM Sans', sans-serif;
-          font-size: 18px; font-weight: 700; color: ${T.text};
+          font-size: 20px; font-weight: 700; color: ${T.text};
           margin: 28px 0 10px;
         }
+        .article-body h4 {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 17px; font-weight: 700; color: ${T.text};
+          margin: 22px 0 8px;
+        }
         .article-body ul, .article-body ol {
-          margin: 0 0 ${READING.paraSpacing}px; padding-left: 24px;
+          margin: 0 0 ${READING.paraSpacing}px; padding-left: 26px;
         }
         .article-body li { margin-bottom: 8px; }
         .article-body blockquote {
@@ -168,7 +178,15 @@ function ArticleBody({ post, isDeepDive }) {
           color: ${T.mu}; font-style: italic;
         }
         .article-body a { color: ${T.v}; text-decoration: underline; }
-        .article-body img { max-width: 100%; border-radius: 8px; margin: 16px 0; }
+        .article-body img {
+          max-width: 100%; height: auto; border-radius: 8px;
+          margin: 20px 0; display: block;
+        }
+        .article-body iframe {
+          width: 100%; max-width: 100%;
+          aspect-ratio: 16/9; height: auto;
+          border-radius: 8px; margin: 20px 0; display: block; border: 0;
+        }
         .article-body strong { font-weight: 700; color: ${T.text}; }
       `}</style>
     </div>
