@@ -7,7 +7,6 @@ import Spinner from '../components/Spinner';
 const REASON_LABELS = {
   post_created:         { label: 'You created a post',               icon: '✏️' },
   comment_posted:       { label: 'You commented on a post',          icon: '💬' },
-  library_item_added:   { label: 'You added to your library',        icon: '📚' },
   group_created:        { label: 'You created a group',              icon: '👥' },
   project_created:      { label: 'You created a project',            icon: '🗂️' },
   onboarding_completed: { label: 'You completed onboarding',         icon: '✓'  },
@@ -25,7 +24,6 @@ const RULES = [
     items: [
       { label: 'Create a post',       amount: 5  },
       { label: 'Comment on a post',   amount: 2  },
-      { label: 'Add to your library', amount: 1  },
       { label: 'Create a group',      amount: 25 },
       { label: 'Create a project',    amount: 10 },
       { label: 'Complete onboarding', amount: 25, oneTime: true },

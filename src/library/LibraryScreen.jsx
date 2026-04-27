@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T, LUMENS_ENABLED } from '../lib/constants';
+import { T } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
@@ -124,20 +124,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
       added_by:  user.id,
       ...paperData,
     });
-    if (!error) {
-      capture('library_item_added', { source });
-      if (LUMENS_ENABLED) {
-        try {
-          supabase.rpc('award_lumens', {
-            p_user_id:  user.id,
-            p_amount:   1,
-            p_reason:   'library_item_added',
-            p_category: 'creation',
-            p_meta:     { source },
-          }).catch(() => {});
-        } catch {}
-      }
-    }
+    if (!error) capture('library_item_added', { source });
     fetchItems(activeFolderID);
     setShowSearch(false);
   };
@@ -207,20 +194,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
       pdf_url:   data.publicUrl,
       pdf_name:  file.name,
     });
-    if (!insertError) {
-      capture('library_item_added', { source: 'upload' });
-      if (LUMENS_ENABLED) {
-        try {
-          supabase.rpc('award_lumens', {
-            p_user_id:  user.id,
-            p_amount:   1,
-            p_reason:   'library_item_added',
-            p_category: 'creation',
-            p_meta:     { source: 'upload' },
-          }).catch(() => {});
-        } catch {}
-      }
-    }
+    if (!insertError) capture('library_item_added', { source: 'upload' });
     fetchItems(activeFolderID);
   };
 

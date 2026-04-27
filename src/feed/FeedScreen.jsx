@@ -7,7 +7,7 @@ import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
 import { useWindowSize } from '../lib/useWindowSize';
 
-export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup, savedPostIds = new Set(), onSaveToggled }) {
+export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup, savedPostIds = new Set(), onSaveToggled, unreadNotifs = 0, onOpenNotifs }) {
   const { isMobile } = useWindowSize();
   const [posts,setPosts]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -371,7 +371,44 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
             <div key={m} onClick={()=>setFp(m)} style={{flex:isMobile?1:undefined,textAlign:"center",padding:"5px 14px",borderRadius:18,fontSize:12,color:fp===m?T.v:T.mu,cursor:"pointer",fontWeight:600,background:fp===m?T.w:"transparent"}}>{l}</div>
           ))}
         </div>
-        <button onClick={fetchPosts} style={{fontSize:11,color:T.mu,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>↻</button>
+        <button onClick={fetchPosts} title="Refresh feed"
+          style={{
+            width:32, height:32, fontSize:18,
+            color:T.mu, border:"none", background:"transparent",
+            cursor:"pointer", fontFamily:"inherit",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            borderRadius:7,
+          }}>
+          ↻
+        </button>
+        {onOpenNotifs && (
+          <button onClick={onOpenNotifs} title="Notifications"
+            style={{
+              position:"relative",
+              width:32, height:32, borderRadius:7,
+              border:"none", background:"transparent",
+              cursor:"pointer", color:T.mu,
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            {unreadNotifs > 0 && (
+              <span style={{
+                position:"absolute", top:-2, right:-2,
+                minWidth:16, height:16, padding:"0 4px",
+                borderRadius:20, background:T.ro, color:"#fff",
+                fontSize:10, fontWeight:700,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                border:`2px solid ${T.w}`,
+              }}>
+                {unreadNotifs > 9 ? "9+" : unreadNotifs}
+              </span>
+            )}
+          </button>
+        )}
       </div>
       <div style={{display:"flex",alignItems:"center",background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:"0 18px",flexShrink:0}}>
         {[["all","All"],["papers","📄 Papers"]].map(([k,l])=>(
