@@ -4,7 +4,7 @@ import { T, getTierFromLumens } from '../lib/constants';
 import Av from '../components/Av';
 import Bdg from '../components/Bdg';
 import Spinner from '../components/Spinner';
-import SafeHtml from '../components/SafeHtml';
+import { sanitiseHtml } from '../lib/htmlUtils';
 import PaperPreview from '../components/PaperPreview';
 import FilePreview from '../components/FilePreview';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
@@ -151,7 +151,12 @@ function ArticleBody({ post, isDeepDive }) {
           : "'DM Sans', Arial, sans-serif",
       }}
     >
-      {bodyHtml && <SafeHtml html={bodyHtml} tags={post.tags}/>}
+      {/* Render directly via the sanitiser. Wrapping in <SafeHtml> would
+          inject its own outer div with fontSize:13 / lineHeight:1.8 that
+          overrides the reading typography defined here. */}
+      {bodyHtml && (
+        <div dangerouslySetInnerHTML={{ __html: sanitiseHtml(bodyHtml) }}/>
+      )}
       <style>{`
         .article-body p { margin: 0 0 ${READING.paraSpacing}px; }
         .article-body h1 {

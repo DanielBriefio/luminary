@@ -66,7 +66,12 @@ export function normalisePastedHtml(html) {
 
   // 1) Strip Word/Docs metadata containers
   tmp.querySelectorAll('style, script, meta, link, title, head').forEach(el => el.remove());
-  tmp.querySelectorAll('o\\:p, w\\:*, xml').forEach(el => el.remove());
+  // Word emits namespaced elements (o:p, w:WordDocument, etc). CSS can't
+  // select `w:*` reliably, so walk and check the local name manually.
+  tmp.querySelectorAll('*').forEach(el => {
+    const ln = el.localName || '';
+    if (ln.startsWith('o:') || ln.startsWith('w:') || ln === 'xml') el.remove();
+  });
 
   // 2) Convert style-encoded formatting → semantic tags. Walk every element
   //    and inspect its inline style; wrap text content if a style implies
