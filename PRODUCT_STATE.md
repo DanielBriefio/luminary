@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-28 (rev 16)_
+_Last updated: 2026-04-28 (rev 17)_
 
 ## What exists and works
 
@@ -27,14 +27,14 @@ _Last updated: 2026-04-28 (rev 16)_
 - Like, comment (threaded, inline), edit, delete, repost
 - Quick-reply input on PostCard hides whenever the inline comment thread is open — no double-input UI
 - **Long-post truncation**: text posts > 400 chars clip to ~6 lines with a gradient fade and inline Read more / Show less. Paper posts and admin posts are never truncated. Same behaviour in `GroupPostCard` and `ProjectPostCard`.
-- **Deep-dive article card** (PostCard only): when `is_deep_dive` and content has ≥50 words, the body is replaced with a compact preview — optional cover image (full-width 200px, object-cover, rounded top corners), explicit `deep_dive_title` (or first-line extraction for old posts), ~325-char preview, read-time, and "Continue reading →" linking to `/s/:postId`.
+- **Deep-dive article card** (PostCard only): when `is_deep_dive` and content has ≥50 words, the body is replaced with a compact preview — optional cover image (full-width 200px, `object-fit:cover`, `object-position` from `deep_dive_cover_position` so the author's chosen crop is honoured, rounded top corners), explicit `deep_dive_title` (or first-line extraction for old posts), ~325-char preview, read-time, and "Continue reading →" linking to `/s/:postId`.
 - AI auto-tagging via `auto-tag` edge function; manual hashtags; visibility (Everyone / Followers only)
 - Right sidebar: Paper of the Week (config-driven — `most_discussed` total posts, `most_commented` total comments, or admin manual DOI pick; uses `get_paper_stats_public()` RPC; min engagement filter ≥2 posts OR ≥1 comment) + Founding Fellows banner
 - `FeedTipCard` / Luminary Board: shows admin-configured board message (title, message, optional CTA) when `admin_config.luminary_board.enabled = true`; falls back to cycling `FEED_TIPS` from constants.js when board is off or unconfigured
 
 ### Rich-text editor (NewPostScreen, PostCard edit, ComposeTab, project + group composers)
 - Shared component `RichTextEditor`. Default mode: bold / italic / underline / lists / Style dropdown (Paragraph / Heading / Subheading) / link
-- **Deep-dive mode** (`isDeepDive=true`): WYSIWYG body matching the published `PublicPostPage` typography (Source Serif 4 20px / 1.7, h1-h4 + blockquote + img + iframe), Style dropdown extended to H1-H4, plus ❝ blockquote, ─ divider, 📄 Cite, 🖼️ image, ▶ video. **Sticky toolbar** stays pinned to the top of the viewport while scrolling long articles. NewPostScreen also surfaces a serif **Title input** + **Cover image uploader** above the editor when deep-dive is on (saved to `posts.deep_dive_title` / `posts.deep_dive_cover_url`).
+- **Deep-dive mode** (`isDeepDive=true`): WYSIWYG body matching the published `PublicPostPage` typography (Source Serif 4 20px / 1.7, h1-h4 + blockquote + img + iframe), Style dropdown extended to H1-H4, plus ❝ blockquote, ─ divider, 📄 Cite, 🖼️ image, ▶ video. **Sticky toolbar** stays pinned to the top of the viewport while scrolling long articles. NewPostScreen also surfaces a serif **Title input** + **Cover image uploader with drag-to-reposition** above the editor when deep-dive is on (saved to `posts.deep_dive_title` / `posts.deep_dive_cover_url` / `posts.deep_dive_cover_position`). The 200px-tall reposition preview matches the PostCard feed crop, so the author can pick exactly what's visible there.
 - **Inline images** (deep-dive): file picker → uploads to `post-files` bucket → inserts `<img>`. Storage tracking handled per the convention: pass `postId` to record immediately, or `onPendingImage` to defer (NewPostScreen flushes via `pendingImagesRef` after the post insert). Cover image follows the same deferred-record flow.
 - **Video embeds** (deep-dive): YouTube / Vimeo URL → normalised through `toEmbedUrl()` into the canonical `/embed/` form → inserted as a sandboxed `<iframe>` (sanitiser rejects any other iframe src)
 - **DOI cite** (deep-dive): inserts `<sup>(N)</sup>` at cursor + appends a Vancouver-style numbered reference at the bottom; deep-link to `https://doi.org/<doi>`
@@ -202,14 +202,16 @@ _Last updated: 2026-04-28 (rev 16)_
 - Reply box sends as Luminary Team bot via `send_bot_message` RPC (Enter to send)
 - Reads bypass RLS via `get_bot_conversations` + `get_bot_conversation_messages` SECURITY DEFINER RPCs
 
-### Account deletion (30-day soft-delete with recovery)
-- "Schedule deletion" in Account Settings → Danger zone calls `delete_own_account()` RPC, which sets `profiles.deletion_scheduled_at = now()` and inserts an `account_deletion_scheduled` notification (which fires the email webhook with the recovery link)
-- User stays signed in; the local profile bumps `deletion_scheduled_at` and `App.jsx` swaps in a full-screen recovery modal showing the purge date + "Cancel deletion" / "Sign out" buttons
-- Account remains hidden from the feed during the grace window — `posts_with_meta` view filters `where pr.deletion_scheduled_at is null`. Profile / group lookups also hide pending-delete users
-- Recovery: opening any URL while signed in surfaces the modal; the email contains a `?recover_account=1` deep link
-- `cancel_account_deletion()` RPC clears the timestamp; everything is restored
-- After 30 days, `purge_deleted_accounts()` (pg_cron daily 03:17 UTC) hard-deletes the account: removes tracked storage blobs, then `auth.users` (cascade does the rest)
-- Email is wired through the existing `send-email-notification` edge function. `account_deletion_scheduled` is a critical type — it bypasses the master `email_notifications` toggle so the user always sees the recovery option
+### Account deletion (30-day soft-delete with recovery + admin handoff)
+- "Schedule deletion" in Account Settings → Danger zone runs `get_my_admin_groups_for_handoff()` first. If the user is the only admin of any groups, the confirm card grows a per-group successor dropdown (longest-tenured other member as default, "Dissolve" as fallback). Handoffs run before the schedule timestamp is set; if any fail, the whole flow aborts so the user is never left mid-state.
+- After handoffs, `delete_own_account()` sets `profiles.deletion_scheduled_at = now()` and inserts an `account_deletion_scheduled` notification (fires the email webhook with the recovery link).
+- User stays signed in; the local profile bumps `deletion_scheduled_at` and `App.jsx` swaps in a full-screen recovery modal showing the purge date + "Cancel deletion" / "Sign out" buttons.
+- Account remains hidden from the feed during the grace window — `posts_with_meta` view filters `where pr.deletion_scheduled_at is null`. Profile / group lookups also hide pending-delete users.
+- Recovery: opening any URL while signed in surfaces the modal; the email contains a `?recover_account=1` deep link. `cancel_account_deletion()` RPC clears the timestamp.
+- After 30 days, `purge_deleted_accounts()` (pg_cron daily 03:17 UTC) hard-deletes the account: removes tracked storage blobs, then `auth.users` (cascade does the rest).
+- **What survives the purge** (Phases 12.2 + 12.4): DM threads + every message stay (`conversations.user_id_a/b` and `messages.sender_id` are SET NULL); comments on others' posts stay (`comments` / `group_post_comments` / `project_post_comments` user_id SET NULL). Frontend renders "Deleted user" + greyed avatar across MessagesScreen, PostCard / GroupPostCard / ProjectPostCard comments, and the PublicPostPage CommentsSection. Compose area in MessagesScreen is replaced with a polite "replies aren't possible" banner.
+- **What gets removed** (right-to-be-forgotten): authored posts (text + group + project), profile, library, bookmarks, lumens, likes, reposts, follows, publications, storage blobs.
+- Email is wired through the existing `send-email-notification` edge function. `account_deletion_scheduled` is a critical type — it bypasses the master `email_notifications` toggle so the user always sees the recovery option.
 
 ### Storage management
 - Every upload (post / group post / library / avatar / group avatar+cover) writes a row to `user_storage_files` via the `record_storage_file` RPC at the call site — see CLAUDE.md "Storage tracking (mandatory pattern)".
@@ -269,6 +271,10 @@ _Last updated: 2026-04-28 (rev 16)_
 - **`migration_account_soft_delete.sql`** + **`migration_account_soft_delete_fix.sql`** (Phase 10): adds `profiles.deletion_scheduled_at`, rewrites `delete_own_account()` (returns timestamptz; inserts `account_deletion_scheduled` notification using `notif_type` column — fix migration patches the original which used wrong column name `type`), adds `cancel_account_deletion()` and `purge_deleted_accounts()`, DROP+CREATE `posts_with_meta` to filter deletion-pending authors. pg_cron schedule pinned in a comment block — run manually once.
 - **`migration_bookmark_folders.sql`** (Phase 11): creates `bookmark_folders` (self-FK `parent_id`) + RLS, adds `saved_posts.folder_id` (FK ON DELETE SET NULL so deleting a folder unsets bookmarks instead of dropping them).
 - **`migration_deepdive_title_cover.sql`** (Phase 12): adds `posts.deep_dive_title` + `posts.deep_dive_cover_url`, then DROP+CREATE `posts_with_meta` so the new columns flow through the view (preserves the deletion-pending filter from Phase 10).
+- **`migration_deepdive_cover_position.sql`** (Phase 12.1): adds `posts.deep_dive_cover_position` (text, default `'50% 50%'`) for the drag-to-reposition cover preview; DROP+CREATE `posts_with_meta`.
+- **`migration_account_deletion_safety.sql`** (Phase 12.2): drops legacy `groups.owner_id` (cascade footgun) and switches `conversations.user_id_a/b` + `messages.sender_id` from CASCADE to SET NULL so DM threads survive when one party is purged.
+- **`migration_handoff_groups.sql`** (Phase 12.3): adds `get_my_admin_groups_for_handoff()` RPC — returns groups where the caller is the sole admin, used by the schedule-delete confirm flow to prompt for a successor.
+- **`migration_tombstone_comments.sql`** (Phase 12.4): switches `comments` / `group_post_comments` / `project_post_comments` `user_id` from CASCADE to SET NULL so threads keep their structure when an author is purged. Frontend renders "Deleted user" + greyed avatar in place of the missing author across all four comment surfaces (PostCard top + thread, GroupPostCard top + thread, ProjectPostCard, PublicPostPage CommentsSection).
 
 ---
 
