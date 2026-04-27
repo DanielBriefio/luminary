@@ -343,7 +343,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   const toggleTier2 = (t2) =>
     setFilterTier2(prev => prev.includes(t2) ? prev.filter(x => x !== t2) : [...prev, t2]);
 
-  const activeFilters = filterTier1.length + filterTier2.length;
+  const activeFilters = filterTier1.length + filterTier2.length + (tab !== 'all' ? 1 : 0);
 
   const filteredPosts = posts.filter(p => {
     if (!activeFilters) return true;
@@ -410,16 +410,51 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
           </button>
         )}
       </div>
-      <div style={{display:"flex",alignItems:"center",background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:"0 18px",flexShrink:0}}>
-        {[["all","All"],["papers","📄 Papers"]].map(([k,l])=>(
-          <div key={k} onClick={()=>setTab(k)} style={{padding:"8px 16px",fontSize:12.5,color:tab===k?T.v:T.mu,cursor:"pointer",borderBottom:`2.5px solid ${tab===k?T.v:"transparent"}`,fontWeight:600}}>{l}</div>
-        ))}
-        <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
+      {/* Mode pills + Sort + Filter — single combined row */}
+      <div style={{
+        display:'flex', alignItems:'center', gap:8,
+        padding:'7px 16px', borderBottom:`1px solid ${T.bdr}`,
+        background:T.w, flexShrink:0, flexWrap:'wrap',
+      }}>
+        {fp === 'sug' && (
+          <div style={{
+            display:'flex', gap:5, flex:1, minWidth:0,
+            overflowX:'auto', scrollbarWidth:'none', msOverflowStyle:'none',
+          }}>
+            {[
+              { id: 'all',      label: '🌐 All'     },
+              { id: 'myfield',  label: '⭐ My Field' },
+              { id: 'research', label: '🔬 Research' },
+              { id: 'clinical', label: '🏥 Clinical' },
+              { id: 'industry', label: '💊 Industry' },
+            ].map(f => (
+              <button key={f.id} onClick={() => setModeFilter(f.id)} style={{
+                padding: '4px 11px', borderRadius: 20, cursor: 'pointer',
+                fontSize: 12, fontWeight: 600, fontFamily: 'inherit', flexShrink: 0,
+                border: `1.5px solid ${modeFilter === f.id ? T.v : T.bdr}`,
+                background: modeFilter === f.id ? T.v2 : T.w,
+                color: modeFilter === f.id ? T.v : T.mu,
+                transition: 'all .12s',
+              }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+        <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:fp==='sug'?0:'auto',flexShrink:0}}>
           {fp==='sug'&&!isMobile&&(
             <>
+              <div style={{width:1,height:16,background:T.bdr,margin:'0 2px'}}/>
               <span style={{fontSize:11,color:T.mu}}>Sort:</span>
-              {[['personalised','Research interests'],['chronological','Chronological']].map(([mode,label])=>(
-                <button key={mode} onClick={()=>setFeedMode(mode)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:600,fontFamily:'inherit',cursor:'pointer',border:`1.5px solid ${feedMode===mode?T.v:T.bdr}`,background:feedMode===mode?T.v2:'transparent',color:feedMode===mode?T.v:T.mu,transition:'all .15s'}}>
+              {[['personalised','Personalised'],['chronological','Chronological']].map(([mode,label])=>(
+                <button key={mode} onClick={()=>setFeedMode(mode)} style={{
+                  padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:600,
+                  fontFamily:'inherit',cursor:'pointer',
+                  border:`1.5px solid ${feedMode===mode?T.v:T.bdr}`,
+                  background:feedMode===mode?T.v2:'transparent',
+                  color:feedMode===mode?T.v:T.mu,
+                  transition:'all .15s',
+                }}>
                   {label}
                 </button>
               ))}
@@ -437,35 +472,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
           </button>
         </div>
       </div>
-
-      {fp === 'sug' && (
-        <div style={{
-          display: 'flex', gap: 5, padding: '8px 16px',
-          borderBottom: `1px solid ${T.bdr}`,
-          background: T.w, overflowX: 'auto',
-          scrollbarWidth: 'none', msOverflowStyle: 'none',
-          flexShrink: 0,
-        }}>
-          {[
-            { id: 'all',      label: '🌐 All'     },
-            { id: 'myfield',  label: '⭐ My Field' },
-            { id: 'research', label: '🔬 Research' },
-            { id: 'clinical', label: '🏥 Clinical' },
-            { id: 'industry', label: '💊 Industry' },
-          ].map(f => (
-            <button key={f.id} onClick={() => setModeFilter(f.id)} style={{
-              padding: '5px 13px', borderRadius: 20, cursor: 'pointer',
-              fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', flexShrink: 0,
-              border: `1.5px solid ${modeFilter === f.id ? T.v : T.bdr}`,
-              background: modeFilter === f.id ? T.v2 : T.w,
-              color: modeFilter === f.id ? T.v : T.mu,
-              transition: 'all .12s',
-            }}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-      )}
 
       {fp === 'sug' && showModeTooltip && modeFilter === 'myfield' && (
         <div style={{
@@ -496,6 +502,22 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
 
       {showFilter && (
         <div style={{background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:'10px 18px',flexShrink:0}}>
+          {/* Content type */}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,color:T.mu,textTransform:'uppercase',letterSpacing:0.4,fontWeight:700}}>Content type</span>
+            {[['all','All'],['papers','📄 Papers']].map(([k,l])=>(
+              <button key={k} onClick={()=>setTab(k)} style={{
+                padding:'4px 11px',borderRadius:20,fontSize:11,fontWeight:600,
+                fontFamily:'inherit',cursor:'pointer',transition:'all .15s',
+                border:`1.5px solid ${tab===k?T.v:T.bdr}`,
+                background:tab===k?T.v2:T.w,
+                color:tab===k?T.v:T.mu,
+              }}>{l}</button>
+            ))}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,color:T.mu,textTransform:'uppercase',letterSpacing:0.4,fontWeight:700}}>Discipline</span>
+          </div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
             {TIER1_LIST.map(t1 => (
               <button key={t1} onClick={()=>toggleTier1(t1)} style={{
@@ -521,7 +543,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
             </div>
           )}
           {activeFilters > 0 && (
-            <button onClick={()=>{setFilterTier1([]);setFilterTier2([]);}} style={{
+            <button onClick={()=>{setFilterTier1([]);setFilterTier2([]);setTab('all');}} style={{
               marginTop:8,fontSize:11,color:T.ro,border:'none',background:'transparent',
               cursor:'pointer',fontFamily:'inherit',padding:0,display:'block',
             }}>Clear all filters</button>
