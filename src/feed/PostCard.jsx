@@ -593,7 +593,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             const extractedTitle = lines[0] && lines[0].length < 120 ? lines[0] : null;
             const previewStart = extractedTitle ? plain.indexOf('\n') + 1 : 0;
             const remaining    = plain.slice(previewStart).trim();
-            const previewText  = remaining.slice(0, 150).trim();
+            const previewText  = remaining.slice(0, 325).trim();
             const preview      = previewText.length < remaining.length ? previewText + '…' : previewText;
             const readMins     = Math.max(1, Math.round(wordCount / 200));
             return (
@@ -604,13 +604,6 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
                   padding: '14px 16px', cursor: 'pointer', marginTop: 4,
                 }}
               >
-                <div style={{
-                  display:'inline-flex', alignItems:'center', gap:5,
-                  fontSize:11, fontWeight:700, color:T.v,
-                  textTransform:'uppercase', letterSpacing:0.5, marginBottom:8,
-                }}>
-                  📝 Article
-                </div>
                 {extractedTitle && (
                   <div style={{
                     fontFamily:"'DM Serif Display', serif", fontSize:17,
