@@ -283,7 +283,7 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
     const { data, error } = await supabase.storage.from('post-files').upload(path, file, { contentType: file.type, upsert: false });
     if (error) throw error;
     const { data: { publicUrl } } = supabase.storage.from('post-files').getPublicUrl(data.path);
-    return publicUrl;
+    return { url: publicUrl, path: data.path };
   };
 
   const publish = async () => {
@@ -292,10 +292,13 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
     if (postType !== 'paper' && !plain && !uploadFile) { setError('Please write something or attach a file.'); return; }
     setLoading(true); setError('');
 
-    let fileUrl = '';
+    let fileUrl = '', uploadedPath = '';
     if (uploadFile) {
       setUploading(true);
-      try { fileUrl = await uploadFileToStorage(uploadFile); }
+      try {
+        const r = await uploadFileToStorage(uploadFile);
+        fileUrl = r.url; uploadedPath = r.path;
+      }
       catch (e) { setError(`Upload failed: ${e.message}`); setLoading(false); setUploading(false); return; }
       setUploading(false);
     }
@@ -327,6 +330,18 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
 
     setLoading(false);
     if (pe) { setError(pe.message); return; }
+
+    if (uploadFile && uploadedPath && post?.id) {
+      supabase.rpc('record_storage_file', {
+        p_bucket:      'post-files',
+        p_path:        uploadedPath,
+        p_size_bytes:  uploadFile.size,
+        p_mime_type:   uploadFile.type || '',
+        p_file_name:   uploadFile.name,
+        p_source_kind: 'group_post',
+        p_source_id:   post.id,
+      }).catch(() => {});
+    }
 
     if (AUTO_TAG_ENABLED && post?.id) {
       smartAutoTag({

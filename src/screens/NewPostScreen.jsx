@@ -336,7 +336,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       .upload(path, file, { contentType: file.type, upsert: false });
     if(error) throw error;
     const { data:{ publicUrl } } = supabase.storage.from('post-files').getPublicUrl(data.path);
-    return publicUrl;
+    return { url: publicUrl, path: data.path };
   };
 
   const publish = async () => {
@@ -347,10 +347,13 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     }
     setLoading(true); setError('');
 
-    let fileUrl = '';
+    let fileUrl = '', uploadedPath = '';
     if(uploadFile) {
       setUploading(true);
-      try { fileUrl = await uploadFileToStorage(uploadFile); }
+      try {
+        const r = await uploadFileToStorage(uploadFile);
+        fileUrl = r.url; uploadedPath = r.path;
+      }
       catch(err) { setError(`Upload failed: ${err.message}`); setLoading(false); setUploading(false); return; }
       setUploading(false);
     }
@@ -383,6 +386,18 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     }).select('id').single();
     setLoading(false);
     if(error) { setError(error.message); return; }
+
+    if (uploadFile && uploadedPath && newPost?.id) {
+      supabase.rpc('record_storage_file', {
+        p_bucket:      'post-files',
+        p_path:        uploadedPath,
+        p_size_bytes:  uploadFile.size,
+        p_mime_type:   uploadFile.type || '',
+        p_file_name:   uploadFile.name,
+        p_source_kind: 'post',
+        p_source_id:   newPost.id,
+      }).catch(() => {});
+    }
 
     if (LUMENS_ENABLED && newPost?.id) {
       try {

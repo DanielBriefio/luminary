@@ -237,6 +237,15 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     }
     const { data } = supabase.storage.from('post-files').getPublicUrl(upData.path);
     await supabase.from('groups').update({ avatar_url: data.publicUrl }).eq('id', groupId);
+    supabase.rpc('record_storage_file', {
+      p_bucket:      'post-files',
+      p_path:        upData.path,
+      p_size_bytes:  file.size,
+      p_mime_type:   file.type || '',
+      p_file_name:   file.name,
+      p_source_kind: 'group_avatar',
+      p_source_id:   groupId,
+    }).catch(() => {});
     setAvatarUploading(false);
     onGroupUpdate?.();
   };
@@ -256,6 +265,15 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     }
     const { data } = supabase.storage.from('post-files').getPublicUrl(upData.path);
     await supabase.from('groups').update({ cover_url: data.publicUrl }).eq('id', groupId);
+    supabase.rpc('record_storage_file', {
+      p_bucket:      'post-files',
+      p_path:        upData.path,
+      p_size_bytes:  file.size,
+      p_mime_type:   file.type || '',
+      p_file_name:   file.name,
+      p_source_kind: 'group_cover',
+      p_source_id:   groupId,
+    }).catch(() => {});
     setCoverUploading(false);
     onGroupUpdate?.();
   };

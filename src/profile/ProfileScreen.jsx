@@ -433,6 +433,15 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
     const { data:{ publicUrl } } = supabase.storage.from('post-files').getPublicUrl(data.path);
     const { data:updated } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id).select().single();
     if(updated) setProfile(updated);
+    supabase.rpc('record_storage_file', {
+      p_bucket:      'post-files',
+      p_path:        data.path,
+      p_size_bytes:  file.size,
+      p_mime_type:   file.type || '',
+      p_file_name:   file.name,
+      p_source_kind: 'avatar',
+      p_source_id:   user.id,
+    }).catch(() => {});
     setAvatarUploading(false);
   };
 

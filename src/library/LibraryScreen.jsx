@@ -187,14 +187,27 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
     const { error } = await supabase.storage.from('library-files').upload(path, file);
     if (error) { alert('Upload failed.'); return; }
     const { data } = supabase.storage.from('library-files').getPublicUrl(path);
-    const { error: insertError } = await supabase.from('library_items').insert({
+    const { data: item, error: insertError } = await supabase.from('library_items').insert({
       folder_id: activeFolderID,
       added_by:  user.id,
       title:     file.name.replace(/\.[^/.]+$/, ''),
       pdf_url:   data.publicUrl,
       pdf_name:  file.name,
-    });
-    if (!insertError) capture('library_item_added', { source: 'upload' });
+    }).select('id').single();
+    if (!insertError) {
+      capture('library_item_added', { source: 'upload' });
+      if (item?.id) {
+        supabase.rpc('record_storage_file', {
+          p_bucket:      'library-files',
+          p_path:        path,
+          p_size_bytes:  file.size,
+          p_mime_type:   file.type || '',
+          p_file_name:   file.name,
+          p_source_kind: 'library',
+          p_source_id:   item.id,
+        }).catch(() => {});
+      }
+    }
     fetchItems(activeFolderID);
   };
 

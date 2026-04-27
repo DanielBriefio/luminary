@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../supabase';
 import { T, WORK_MODES } from '../lib/constants';
 import Btn from '../components/Btn';
+import StoragePanel from '../components/StoragePanel';
 
 export default function AccountSettingsScreen({ user, profile, setProfile, onClose, onSignOut }) {
   const [workModeValue,  setWorkModeValue]  = useState(profile?.work_mode || 'researcher');
@@ -357,6 +358,15 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
               Privacy Policy
             </a>
           </div>
+
+          {/* Storage */}
+          <SectionHead label="Storage"/>
+          <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 12, lineHeight: 1.6 }}>
+            Files you've uploaded — avatars, post attachments, and library PDFs.
+            Deleting a post attachment leaves the post in place; the file is replaced
+            with a "file removed" placeholder.
+          </div>
+          <StoragePanel />
 
           {/* Data */}
           <SectionHead label="Your data"/>

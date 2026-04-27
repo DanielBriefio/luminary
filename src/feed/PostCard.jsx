@@ -591,7 +591,17 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           </>
         )}
 
-        {post.image_url&&<FilePreview url={post.image_url} fileType={post.file_type||'image'} fileName={post.file_name}/>}
+        {post.file_deleted_at ? (
+          <div style={{
+            marginTop:10, padding:'10px 14px', borderRadius:10,
+            background:T.s2, border:`1px dashed ${T.bdr}`,
+            fontSize:12.5, color:T.mu, fontStyle:'italic',
+          }}>
+            📎 File removed by author
+          </div>
+        ) : post.image_url ? (
+          <FilePreview url={post.image_url} fileType={post.file_type||'image'} fileName={post.file_name}/>
+        ) : null}
         {post.post_type==='paper'&&post.paper_title&&!hidePaperDetails&&<PaperPreview post={post} currentUserId={currentUserId} onViewPaper={onViewPaper} abstractExpanded={abstractExpanded} onToggleAbstract={() => setAbstractExpanded(e => !e)}/>}
 
         {/* Taxonomy tags — hidden on mobile */}
