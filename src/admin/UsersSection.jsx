@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { T } from '../lib/constants';
+import { T, TIER_CONFIG, getTierFromLumens } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import { timeAgo } from '../lib/utils';
@@ -218,6 +218,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
             <SortableHeader label="Posts"       col="posts_count"            sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <SortableHeader label="Groups"      col="groups_count"           sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <SortableHeader label="Codes"       col="invite_codes_remaining" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+            <SortableHeader label="Lumens"      col="lumens_current_period"  sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <div>Stage</div>
             <div>Ghost</div>
             <div></div>
@@ -329,6 +330,9 @@ function UserRow({ user, isLast, selected, onToggle, onOpen, onDirectMessage }) 
   const ghost = user.ghost_segment ? GHOST_STYLES[user.ghost_segment] : null;
   const codes = user.invite_codes_remaining ?? 0;
   const codesColor = codes >= 3 ? T.gr : codes >= 1 ? T.am : T.ro;
+  const lumens = user.lumens_current_period ?? 0;
+  const tier   = getTierFromLumens(lumens);
+  const tierCfg = TIER_CONFIG[tier];
 
   return (
     <div style={{
@@ -392,6 +396,18 @@ function UserRow({ user, isLast, selected, onToggle, onOpen, onDirectMessage }) 
         {codes}
       </div>
 
+      <div style={{ fontSize: 12, lineHeight: 1.2, textAlign: 'left' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>
+          {lumens.toLocaleString()}
+        </div>
+        <div style={{
+          fontSize: 10, fontWeight: 700, color: tierCfg.color,
+          textTransform: 'uppercase', letterSpacing: 0.3,
+        }}>
+          {tierCfg.name}
+        </div>
+      </div>
+
       <div>
         <span style={{
           fontSize: 11, fontWeight: 700, padding: '2px 8px',
@@ -441,7 +457,7 @@ function UserRow({ user, isLast, selected, onToggle, onOpen, onDirectMessage }) 
   );
 }
 
-const GRID_COLS = '32px 1fr 110px 90px 90px 50px 50px 60px 100px 80px 100px';
+const GRID_COLS = '32px 1fr 110px 90px 90px 50px 50px 60px 80px 100px 80px 100px';
 
 function SortableHeader({ label, col, sortBy, sortDir, onSort }) {
   const active = sortBy === col;

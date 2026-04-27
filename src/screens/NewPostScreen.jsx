@@ -400,6 +400,33 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           lumens_current_period: (p.lumens_current_period || 0) + 5,
           lumens_lifetime:       (p.lumens_lifetime       || 0) + 5,
         } : p);
+
+        // Recognition: if this is the user's first post, find the inviter and
+        // award them +100 Lumens. Best-effort; never blocks the publish flow.
+        (async () => {
+          try {
+            const { count } = await supabase
+              .from('posts')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id);
+            if (count !== 1) return;
+            const { data: code } = await supabase
+              .from('invite_codes')
+              .select('created_by')
+              .eq('claimed_by', user.id)
+              .maybeSingle();
+            const inviterId = code?.created_by;
+            if (inviterId && inviterId !== user.id) {
+              supabase.rpc('award_lumens', {
+                p_user_id:  inviterId,
+                p_amount:   100,
+                p_reason:   'invited_user_active',
+                p_category: 'recognition',
+                p_meta:     { invited_user_id: user.id },
+              }).catch(() => {});
+            }
+          } catch {}
+        })();
       } catch {}
     }
 

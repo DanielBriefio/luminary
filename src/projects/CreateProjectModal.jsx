@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T } from '../lib/constants';
+import { T, LUMENS_ENABLED } from '../lib/constants';
 import { FAST_TEMPLATES, PROJECT_TEMPLATES, applyTemplate } from '../lib/projectTemplates';
 import Btn from '../components/Btn';
 
@@ -124,6 +124,17 @@ export default function CreateProjectModal({
       }
 
       capture('project_created', { template_type: selectedTemplate || 'blank' });
+      if (LUMENS_ENABLED) {
+        try {
+          supabase.rpc('award_lumens', {
+            p_user_id:  user.id,
+            p_amount:   10,
+            p_reason:   'project_created',
+            p_category: 'creation',
+            p_meta:     { project_id: project.id },
+          }).catch(() => {});
+        } catch {}
+      }
       onProjectCreated(project.id);
     } catch (e) {
       setError(e.message || 'Failed to create project.');

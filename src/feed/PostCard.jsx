@@ -41,11 +41,39 @@ async function awardLumensForComment(post, commenterId) {
       if (count === 1) {
         supabase.rpc('award_lumens', {
           p_user_id:  post.user_id,
-          p_amount:   5,
+          p_amount:   10,
           p_reason:   'comment_received',
           p_category: 'engagement',
           p_meta:     { post_id: post.id, actor_id: commenterId },
         }).catch(() => {});
+      }
+
+      // Discussion threshold: when distinct commenter count just hits 3,
+      // award the post owner +50 Lumens (recognition). One-time per post —
+      // dedup via lumen_transactions row check on (post.user_id, reason,
+      // meta.post_id).
+      const { data: distinct } = await supabase
+        .from('comments')
+        .select('user_id')
+        .eq('post_id', post.id);
+      const uniq = new Set((distinct || []).map(r => r.user_id));
+      if (uniq.size === 3) {
+        const { data: existing } = await supabase
+          .from('lumen_transactions')
+          .select('id')
+          .eq('user_id', post.user_id)
+          .eq('reason',  'discussion_threshold')
+          .filter('meta->>post_id', 'eq', post.id)
+          .limit(1);
+        if (!existing?.length) {
+          supabase.rpc('award_lumens', {
+            p_user_id:  post.user_id,
+            p_amount:   50,
+            p_reason:   'discussion_threshold',
+            p_category: 'recognition',
+            p_meta:     { post_id: post.id },
+          }).catch(() => {});
+        }
       }
     }
   } catch {
@@ -250,8 +278,24 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
     setReposting(true);
     const nr = !reposted;
     setReposted(nr); setRepostCount(c => nr ? c+1 : Math.max(0,c-1));
-    if (nr) await supabase.from('reposts').insert({user_id:currentUserId, post_id:post.id});
-    else    await supabase.from('reposts').delete().eq('user_id',currentUserId).eq('post_id',post.id);
+    if (nr) {
+      await supabase.from('reposts').insert({user_id:currentUserId, post_id:post.id});
+      // Reward the post owner +20 Lumens for the repost (recognition).
+      // Skip self-reposts. Best-effort.
+      if (LUMENS_ENABLED && post?.user_id && post.user_id !== currentUserId) {
+        try {
+          supabase.rpc('award_lumens', {
+            p_user_id:  post.user_id,
+            p_amount:   20,
+            p_reason:   'post_reposted',
+            p_category: 'recognition',
+            p_meta:     { post_id: post.id, actor_id: currentUserId },
+          }).catch(() => {});
+        } catch {}
+      }
+    } else {
+      await supabase.from('reposts').delete().eq('user_id',currentUserId).eq('post_id',post.id);
+    }
     setReposting(false);
   };
 

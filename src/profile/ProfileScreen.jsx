@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T, TIER1_LIST, getTier2, getTier1ForTier2, WORK_MODE_MAP } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, getTier1ForTier2, WORK_MODE_MAP, TIER_CONFIG, getTierFromLumens } from '../lib/constants';
 import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
 import { formatDateRange } from '../lib/linkedInUtils';
 import Av from '../components/Av';
@@ -869,7 +869,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               <input type="file" accept="image/*" style={{display:'none'}}
                 onChange={e=>e.target.files?.[0]&&uploadAvatar(e.target.files[0])}/>
               <div style={{borderRadius:'50%',border:'4px solid white',boxShadow:'0 4px 18px rgba(108,99,255,.2)',display:'inline-block',position:'relative',overflow:'hidden'}}>
-                <Av color={profile?.avatar_color||'me'} size={84} name={profile?.name} url={profile?.avatar_url||''}/>
+                <Av color={profile?.avatar_color||'me'} size={84} name={profile?.name} url={profile?.avatar_url||''} tier={getTierFromLumens(profile?.lumens_current_period)}/>
                 <div style={{
                   position:'absolute',inset:0,borderRadius:'50%',
                   background:'rgba(0,0,0,.45)',
@@ -1032,6 +1032,38 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               {profile?.title&&(
                 <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>{profile.title}</div>
               )}
+              {/* Tier badge + Founding Member badge */}
+              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:6}}>
+                {(() => {
+                  const tier = getTierFromLumens(profile?.lumens_current_period);
+                  const cfg  = TIER_CONFIG[tier];
+                  return (
+                    <span style={{
+                      display:'inline-flex', alignItems:'center', gap:4,
+                      padding:'3px 10px', borderRadius:20,
+                      background:cfg.bg, color:cfg.color,
+                      fontSize:11, fontWeight:700, letterSpacing:0.4,
+                      textTransform:'uppercase',
+                      cursor:'pointer',
+                    }}
+                      onClick={()=>setScreen('lumens')}
+                      title={`${(profile?.lumens_current_period||0).toLocaleString()} Lumens · click to see history`}>
+                      ✦ {cfg.name}
+                    </span>
+                  );
+                })()}
+                {profile?.is_founding_member && (
+                  <span style={{
+                    display:'inline-flex', alignItems:'center', gap:4,
+                    padding:'3px 10px', borderRadius:20,
+                    background:'#1A1B2E10', color:'#1A1B2E',
+                    fontSize:11, fontWeight:700, letterSpacing:0.4,
+                    textTransform:'uppercase',
+                  }}>
+                    ★ Founding Member
+                  </span>
+                )}
+              </div>
               {(profile?.identity_tier1||profile?.identity_tier2)&&(
                 <div style={{fontSize:11.5,color:T.mu,marginBottom:5}}>
                   <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em'}}>Discipline</span>

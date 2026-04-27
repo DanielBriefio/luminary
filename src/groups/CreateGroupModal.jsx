@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T, TIER1_LIST, getTier2 } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, LUMENS_ENABLED } from '../lib/constants';
 
 const GROUP_TYPES = [
   { value: 'research',   label: '🔬 Research Group'  },
@@ -55,6 +55,17 @@ export default function CreateGroupModal({ user, onGroupCreated, onClose }) {
       });
 
       capture('group_created', { is_public: isPublic });
+      if (LUMENS_ENABLED) {
+        try {
+          supabase.rpc('award_lumens', {
+            p_user_id:  user.id,
+            p_amount:   25,
+            p_reason:   'group_created',
+            p_category: 'creation',
+            p_meta:     { group_id: group.id },
+          }).catch(() => {});
+        } catch {}
+      }
       onGroupCreated(group.id);
     } catch (e) {
       setError(e.message || 'Failed to create group.');

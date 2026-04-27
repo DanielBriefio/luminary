@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { T } from '../lib/constants';
+import { T, LUMENS_ENABLED } from '../lib/constants';
 import { capture } from '../lib/analytics';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
@@ -48,8 +48,25 @@ export default function TemplatesSection({ supabase }) {
 
   const approve = async (id) => {
     setActing(id);
+    // Look up the submitter so we can award them on approval.
+    const { data: tpl } = await supabase
+      .from('community_templates')
+      .select('submitted_by')
+      .eq('id', id)
+      .maybeSingle();
     await supabase.from('community_templates').update({ status: 'approved' }).eq('id', id);
     capture('template_approved');
+    if (LUMENS_ENABLED && tpl?.submitted_by) {
+      try {
+        supabase.rpc('award_lumens', {
+          p_user_id:  tpl.submitted_by,
+          p_amount:   50,
+          p_reason:   'template_approved',
+          p_category: 'recognition',
+          p_meta:     { template_id: id },
+        }).catch(() => {});
+      } catch {}
+    }
     setActing(null);
     load();
   };

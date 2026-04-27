@@ -15,7 +15,6 @@ const REASON_LABELS = {
   library_saved:        { label: 'Your library item was saved',      icon: '🔖' },
   post_reposted:        { label: 'Your post was reposted',           icon: '↻'  },
   invited_user_active:  { label: 'A user you invited became active', icon: '🎟️' },
-  post_featured:        { label: 'Your post was featured',           icon: '✦'  },
   template_approved:    { label: 'Your template was approved',       icon: '📋' },
   discussion_threshold: { label: 'Your post sparked a discussion',   icon: '🔥' },
 };
@@ -37,17 +36,16 @@ const RULES = [
     category: 'Engagement',
     description: 'Lumens earned when others engage with your contributions',
     items: [
-      { label: 'A user comments on your post (first time per user)', amount: 5 },
-      { label: 'A user saves your library item',                    amount: 5 },
+      { label: 'A user comments on your post (first time per user)', amount: 10 },
+      { label: 'A user saves your library item',                    amount: 5  },
     ],
   },
   {
     category: 'Recognition',
     description: 'Lumens for influence and quality contributions',
     items: [
-      { label: 'Your post is reposted',                         amount: 10  },
+      { label: 'Your post is reposted',                         amount: 20  },
       { label: 'A user you invited becomes active',             amount: 100 },
-      { label: 'Your post is featured by Luminary',             amount: 100 },
       { label: 'Your community template is approved',           amount: 50  },
       { label: 'Your post sparks a discussion (3+ commenters)', amount: 50  },
     ],

@@ -668,7 +668,7 @@ export default function App() {
                   style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,cursor:"pointer",borderRadius:8,padding:"3px 4px",margin:"-3px -4px",transition:"background .15s"}}
                   onMouseEnter={e=>e.currentTarget.style.background=T.s2}
                   onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <Av color={profile?.avatar_color||"me"} size={32} name={profile?.name} url={profile?.avatar_url||""}/>
+                  <Av color={profile?.avatar_color||"me"} size={32} name={profile?.name} url={profile?.avatar_url||""} tier={getTierFromLumens(profile?.lumens_current_period)}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.name||user.email?.split('@')[0]}</div>
                     <div style={{fontSize:10,color:T.mu,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.institution||user.email}</div>
