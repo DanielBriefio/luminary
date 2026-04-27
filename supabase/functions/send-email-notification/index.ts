@@ -21,7 +21,13 @@ const EMAIL_TYPES = new Set([
   'group_member_joined',
   'new_comment',
   'invite_redeemed',
+  'account_deletion_scheduled',
 ]);
+
+// Critical / security emails bypass the master email_notifications toggle —
+// the user explicitly initiated the action and needs the confirmation +
+// recovery link regardless of their marketing/transactional preferences.
+const CRITICAL_TYPES = new Set(['account_deletion_scheduled']);
 
 const PREF_COLUMN: Record<string, string> = {
   new_follower:           'email_notif_new_follower',
@@ -63,7 +69,7 @@ serve(async (req) => {
 
     if (!recipient) return new Response('recipient not found', { status: 200 });
 
-    if (recipient.email_notifications === false) {
+    if (recipient.email_notifications === false && !CRITICAL_TYPES.has(notif_type)) {
       return new Response('email notifications disabled', { status: 200 });
     }
 
@@ -82,6 +88,8 @@ serve(async (req) => {
       .eq('id', actor_id)
       .single();
 
+    // For self-initiated emails (e.g. account_deletion_scheduled) actor === recipient,
+    // which is allowed; only bail when the actor record genuinely cannot be found.
     if (!actor) return new Response('actor not found', { status: 200 });
 
     let templateVariables: Record<string, string> = {
@@ -187,6 +195,17 @@ serve(async (req) => {
       };
     }
 
+    if (notif_type === 'account_deletion_scheduled') {
+      const scheduledFor = meta?.scheduled_for ? new Date(meta.scheduled_for) : new Date();
+      const purgeAt      = meta?.purge_at      ? new Date(meta.purge_at)      : new Date(scheduledFor.getTime() + 30*24*60*60*1000);
+      templateVariables = {
+        ...templateVariables,
+        scheduled_for_human: scheduledFor.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+        purge_at_human:      purgeAt.toLocaleDateString('en-US',      { year: 'numeric', month: 'long', day: 'numeric' }),
+        recovery_url:        `${APP_URL}/?recover_account=1`,
+      };
+    }
+
     const html = renderHtml(notif_type, templateVariables);
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
@@ -236,6 +255,8 @@ function buildSubject(
       return `${actorName} commented on your post on Luminary ✦`;
     case 'invite_redeemed':
       return `${actorName} just joined Luminary using your invite ✦`;
+    case 'account_deletion_scheduled':
+      return 'Your Luminary account is scheduled for deletion';
     default:
       return 'New notification from Luminary ✦';
   }
@@ -355,6 +376,20 @@ function renderHtml(notifType: string, v: Record<string, string>): string {
        <p style="margin:0;">Drop them a follow or a message — early connections shape the community.</p>`,
       'https://luminary.to',
       'Open Luminary →',
+    );
+  }
+
+  if (notifType === 'account_deletion_scheduled') {
+    return shell(
+      `<p style="margin:0 0 12px;">Hi ${name},</p>
+       <p style="margin:0 0 12px;">You scheduled your Luminary account for deletion on <strong>${escape(v.scheduled_for_human)}</strong>.</p>
+       <p style="margin:0 0 12px;">Your account is hidden from the rest of Luminary now and will be <strong>permanently deleted on ${escape(v.purge_at_human)}</strong>. Until then, you can change your mind and recover everything in one click.</p>
+       <p style="margin:0 0 12px;padding:12px 14px;background:#fff1f3;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;font-size:13.5px;color:#1b1d36;">
+         If this wasn't you, sign in and cancel the deletion immediately, then change your password.
+       </p>
+       <p style="margin:0;">After the 30-day window, your account, posts, publications, and uploaded files will be removed from active systems. Backup copies are purged within an additional 90 days.</p>`,
+      v.recovery_url,
+      'Cancel deletion →',
     );
   }
 

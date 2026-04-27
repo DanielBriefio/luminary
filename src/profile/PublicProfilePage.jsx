@@ -34,6 +34,8 @@ export default function PublicProfilePage({ slug }) {
 
       if (cancelled) return;
       if (!p) { setNotFound(true); setLoading(false); return; }
+      // Treat deletion-pending profiles as not found on public surfaces.
+      if (p.deletion_scheduled_at) { setNotFound(true); setLoading(false); return; }
 
       setProfile(p);
       if (p.name) {

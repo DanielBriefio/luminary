@@ -395,6 +395,27 @@ export default function App() {
     }
   }, [session]);
 
+  // Strip ?recover_account=… from the URL once we've consumed it; the
+  // <DeletionPendingModal/> below renders whenever profile.deletion_scheduled_at
+  // is set, regardless of how the user got here.
+  useEffect(() => {
+    if (!session) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('recover_account')) {
+      params.delete('recover_account');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+  }, [session]);
+
+  const cancelDeletion = async () => {
+    const { error } = await supabase.rpc('cancel_account_deletion');
+    if (error) { alert('Could not cancel deletion: ' + error.message); return; }
+    const { data: updated } = await supabase
+      .from('profiles').select().eq('id', session.user.id).single();
+    if (updated) setProfile(updated);
+  };
+
   // Handle luminary:// deep links dispatched by FeedTipCard board CTAs
   useEffect(() => {
     const handler = (e) => {
@@ -478,6 +499,69 @@ export default function App() {
   }
 
   const user=session.user;
+
+  // Deletion-pending modal: when the signed-in profile has
+  // deletion_scheduled_at set, block normal app access and ask the user
+  // to either cancel deletion or sign out. This is the recovery surface
+  // for both the deletion-confirmation email link and a regular sign-in
+  // during the 30-day grace window.
+  if (profile?.deletion_scheduled_at) {
+    const scheduled = new Date(profile.deletion_scheduled_at);
+    const purgeAt   = new Date(scheduled.getTime() + 30*24*60*60*1000);
+    return (
+      <>
+        {fonts}
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(27,29,54,.6)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          zIndex:2000, fontFamily:"'DM Sans',sans-serif", padding:20,
+        }}>
+          <div style={{
+            background:T.w, borderRadius:16, maxWidth:480, width:'100%',
+            padding:'28px 28px 22px', boxShadow:'0 8px 40px rgba(0,0,0,.18)',
+          }}>
+            <div style={{ fontSize:36, marginBottom:8 }}>⏳</div>
+            <h2 style={{
+              fontFamily:"'DM Serif Display', serif", fontSize:24,
+              color:T.text, margin:'0 0 8px',
+            }}>
+              Your account is scheduled for deletion
+            </h2>
+            <p style={{ fontSize:14, color:T.text, lineHeight:1.6, margin:'0 0 8px' }}>
+              We'll permanently delete your account and all your data on{' '}
+              <strong>{purgeAt.toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' })}</strong>.
+            </p>
+            <p style={{ fontSize:13.5, color:T.mu, lineHeight:1.6, margin:'0 0 18px' }}>
+              Until then your profile and posts are hidden from other Luminary users.
+              Cancel the deletion now to restore everything immediately.
+            </p>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              <button
+                onClick={cancelDeletion}
+                style={{
+                  background:T.v, color:'white', border:'none', borderRadius:10,
+                  padding:'10px 18px', fontSize:14, fontWeight:700,
+                  cursor:'pointer', fontFamily:'inherit',
+                }}
+              >
+                Cancel deletion
+              </button>
+              <button
+                onClick={signOut}
+                style={{
+                  background:'transparent', color:T.mu, border:`1.5px solid ${T.bdr}`,
+                  borderRadius:10, padding:'10px 18px', fontSize:14, fontWeight:600,
+                  cursor:'pointer', fontFamily:'inherit',
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   // Admin route: gate on profile.is_admin
   if (isAdminRoute) {

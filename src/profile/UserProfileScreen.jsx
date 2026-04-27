@@ -67,6 +67,23 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
     </div>
   );
 
+  // Deletion-pending users are hidden from in-app profile views during the
+  // 30-day grace window. Show a neutral placeholder rather than their data.
+  if (profile?.deletion_scheduled_at) return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      <TopBar onBack={onBack} />
+      <div style={{ flex: 1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', padding:24 }}>
+        <div style={{ fontSize:42, marginBottom:12 }}>👤</div>
+        <div style={{ fontFamily:"'DM Serif Display', serif", fontSize:22, color:T.text, marginBottom:6 }}>
+          User not available
+        </div>
+        <div style={{ fontSize:13.5, color:T.mu, maxWidth:360 }}>
+          This account has left Luminary. Their profile and posts are no longer visible.
+        </div>
+      </div>
+    </div>
+  );
+
   const p = profile || {};
   const wh  = p.work_history   || [];
   const edu = p.education      || [];

@@ -281,14 +281,21 @@ as needed to provide the Platform. Specifically:
 
 | Data type | Retention period |
 |---|---|
-| Account and profile data | Duration of account + 90 days after deletion |
-| Posts and content | Duration of account + 90 days after deletion |
-| Direct messages | Duration of account + 90 days after deletion |
+| Account and profile data | Duration of account + 30 days after scheduled deletion |
+| Posts and content | Duration of account + 30 days after scheduled deletion |
+| Direct messages | Duration of account + 30 days after scheduled deletion |
 | Uploaded files | Deleted within 0 days of post/library item deletion |
 | Analytics event data | 12 months from event date (PostHog) |
 | Technical logs | 90 days |
 | Backup copies | Up to 90 days after original deletion |
 | Anonymised/aggregated data | Indefinitely (cannot be attributed to you) |
+
+When you schedule account deletion, your profile and posts are hidden
+from other users immediately, and a 30-day grace period begins. You can
+sign in any time during that window to cancel the deletion and restore
+your account. After 30 days, your account, posts, publications,
+direct messages, and uploaded files are permanently deleted from active
+systems. Backup copies are then purged within an additional 90 days.
 
 After your account is deleted, we may retain certain anonymised or
 aggregated data that cannot identify you for platform analytics and

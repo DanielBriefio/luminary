@@ -321,12 +321,17 @@ legitimate business purposes even after an erasure request.
 
 ### 5.7 Account and data deletion
 
-You may delete your account at any time through your account settings or
-by contacting legal@luminary.to. Upon deletion:
+You may schedule deletion of your account at any time through your
+account settings or by contacting legal@luminary.to. When you do:
 
-- Your profile will be removed from public view immediately
-- Your posts will be deleted or anonymised within [X] days
-- Backup copies may be retained for up to [X] days before permanent deletion
+- Your profile and posts are removed from public view immediately
+- A 30-day grace period begins. Sign in during that window to cancel
+  the deletion and restore your account in one click.
+- After 30 days, your account, profile, posts, publications, direct
+  messages, and uploaded files are permanently deleted from active
+  systems
+- Backup copies may be retained for up to 90 days after the 30-day
+  window before permanent deletion
 - Some aggregate or anonymised data derived from your activity may be
   retained for analytics purposes and cannot be individually attributed
   to you

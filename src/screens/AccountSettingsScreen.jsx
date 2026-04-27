@@ -113,11 +113,29 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
     try {
       const { error } = await supabase.rpc('delete_own_account');
       if (error) throw error;
+      // Soft-delete: account is now scheduled for deletion in 30 days.
+      // Sign out so the user lands on the unauth landing; signing back in
+      // will surface the recovery modal.
       await supabase.auth.signOut();
     } catch (e) {
       setDeleteError(e.message || 'Deletion failed. Please contact hello@luminary.to to delete your account.');
       setDeleting(false);
     }
+  };
+
+  const cancelDeletion = async () => {
+    setDeleting(true);
+    setDeleteError('');
+    const { error } = await supabase.rpc('cancel_account_deletion');
+    if (error) {
+      setDeleteError(error.message);
+      setDeleting(false);
+      return;
+    }
+    const { data: updated } = await supabase
+      .from('profiles').select().eq('id', user.id).single();
+    if (updated) setProfile(updated);
+    setDeleting(false);
   };
 
   const Toggle = ({ value, onChange, label, sublabel }) => (
@@ -427,26 +445,59 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
 
           {/* Danger zone */}
           <SectionHead label="Danger zone"/>
-          {!confirmDelete ? (
+          {profile?.deletion_scheduled_at ? (
+            <div style={{ background: T.am2, border: `1.5px solid ${T.am}`, borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.am, marginBottom: 8 }}>
+                ⏳ Account scheduled for deletion
+              </div>
+              <div style={{ fontSize: 12.5, color: T.text, marginBottom: 12, lineHeight: 1.6 }}>
+                Your account will be permanently deleted on{' '}
+                <strong>
+                  {new Date(new Date(profile.deletion_scheduled_at).getTime() + 30*24*60*60*1000)
+                    .toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                </strong>
+                . Your profile and posts are hidden from other Luminary users until then.
+                Cancel the deletion to restore your account.
+              </div>
+              {deleteError && <div style={{ fontSize: 12.5, color: T.ro, marginBottom: 8 }}>⚠️ {deleteError}</div>}
+              <button
+                onClick={cancelDeletion}
+                disabled={deleting}
+                style={{
+                  padding: '8px 16px', borderRadius: 9, border: 'none',
+                  background: T.v, color: 'white',
+                  cursor: deleting ? 'wait' : 'pointer',
+                  fontSize: 13, fontFamily: 'inherit', fontWeight: 700,
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                {deleting ? 'Cancelling…' : 'Cancel deletion'}
+              </button>
+            </div>
+          ) : !confirmDelete ? (
             <div>
               <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 12, lineHeight: 1.6 }}>
-                Permanently delete your account, profile, posts, publications, and all other data. This cannot be undone.
+                Schedule your account for deletion. Your profile and posts are hidden immediately;
+                final purge happens 30 days later. You can cancel any time during the grace period
+                by signing back in.
               </div>
               <button onClick={() => setConfirmDelete(true)} style={{
                 padding: '8px 16px', borderRadius: 9, border: `1.5px solid ${T.ro}`,
                 background: 'transparent', color: T.ro, cursor: 'pointer',
                 fontSize: 13, fontFamily: 'inherit', fontWeight: 600,
               }}>
-                Delete my account
+                Schedule deletion
               </button>
             </div>
           ) : (
             <div style={{ background: T.ro2, border: `1.5px solid ${T.ro}`, borderRadius: 12, padding: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.ro, marginBottom: 8 }}>
-                Are you sure? This cannot be undone.
+                Schedule account deletion?
               </div>
               <div style={{ fontSize: 12.5, color: T.text, marginBottom: 12, lineHeight: 1.6 }}>
-                All your data will be permanently deleted. Type <strong>DELETE</strong> to confirm.
+                You'll be signed out and your account will be hidden immediately.
+                We'll permanently delete everything in 30 days unless you sign back in
+                and cancel. Type <strong>DELETE</strong> to confirm.
               </div>
               <input
                 value={deleteText}
@@ -473,7 +524,7 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
                     fontSize: 13, fontFamily: 'inherit', fontWeight: 700,
                   }}
                 >
-                  {deleting ? 'Deleting...' : 'Permanently delete'}
+                  {deleting ? 'Scheduling…' : 'Schedule deletion'}
                 </button>
               </div>
             </div>
