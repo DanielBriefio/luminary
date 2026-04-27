@@ -384,7 +384,9 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     setLoading(false);
     if(error) { setError(error.message); return; }
 
+    console.log('[lumens] gate', { LUMENS_ENABLED, newPostId: newPost?.id, error });
     if (LUMENS_ENABLED && newPost?.id) {
+      console.log('[lumens] firing post_created rpc');
       try {
         supabase.rpc('award_lumens', {
           p_user_id:  user.id,
@@ -392,15 +394,19 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           p_reason:   'post_created',
           p_category: 'creation',
           p_meta:     { post_id: newPost.id, post_type: resolvedPostType },
-        }).catch(() => {});
-        // Optimistic local update so the sidebar widget reflects the +5 right
-        // away without waiting for a profile re-fetch.
+        })
+          .then(r => console.log('[lumens] rpc result', r))
+          .catch(e => console.error('[lumens] rpc rejected', e));
         setProfile?.(p => p ? {
           ...p,
           lumens_current_period: (p.lumens_current_period || 0) + 5,
           lumens_lifetime:       (p.lumens_lifetime       || 0) + 5,
         } : p);
-      } catch {}
+      } catch (e) {
+        console.error('[lumens] sync throw', e);
+      }
+    } else {
+      console.warn('[lumens] gate skipped — block not entered');
     }
 
     if (AUTO_TAG_ENABLED && newPost?.id) {
