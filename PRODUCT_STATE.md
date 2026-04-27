@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-27 (rev 14)_
+_Last updated: 2026-04-27 (rev 15)_
 
 ## What exists and works
 
@@ -26,9 +26,18 @@ _Last updated: 2026-04-27 (rev 14)_
 - Post types: `text` (rich text, with live link preview) and `paper` (DOI or EPMC lookup); file attachments (image/video/audio/PDF/CSV/file) can be added to text posts and set the stored `post_type` to the upload category
 - Like, comment (threaded, inline), edit, delete, repost
 - Quick-reply input on PostCard hides whenever the inline comment thread is open — no double-input UI
+- **Long-post truncation**: text posts > 400 chars clip to ~6 lines with a gradient fade and inline Read more / Show less. Paper posts and admin posts are never truncated. Same behaviour in `GroupPostCard` and `ProjectPostCard`.
+- **Deep-dive article card** (PostCard only): when `is_deep_dive` and content has ≥50 words, the body is replaced with a compact preview (extracted serif title, ~325-char preview, read-time, "Continue reading →") that links to `/s/:postId`.
 - AI auto-tagging via `auto-tag` edge function; manual hashtags; visibility (Everyone / Followers only)
 - Right sidebar: Paper of the Week (config-driven — `most_discussed` total posts, `most_commented` total comments, or admin manual DOI pick; uses `get_paper_stats_public()` RPC; min engagement filter ≥2 posts OR ≥1 comment) + Founding Fellows banner
 - `FeedTipCard` / Luminary Board: shows admin-configured board message (title, message, optional CTA) when `admin_config.luminary_board.enabled = true`; falls back to cycling `FEED_TIPS` from constants.js when board is off or unconfigured
+
+### Rich-text editor (NewPostScreen, PostCard edit, ComposeTab, project + group composers)
+- Shared component `RichTextEditor`. Default mode: bold / italic / underline / lists / Style dropdown (Paragraph / Heading / Subheading) / link
+- **Deep-dive mode** (`isDeepDive=true`): WYSIWYG body matching the published `PublicPostPage` typography (serif 20px / 1.7, h1-h4 + blockquote + img + iframe), Style dropdown extended to H1-H4, plus ❝ blockquote, ─ divider, 📄 Cite, 🖼️ image, ▶ video. **Sticky toolbar** stays pinned to the top of the viewport while scrolling long articles
+- **Inline images** (deep-dive): file picker → uploads to `post-files` bucket → inserts `<img>`. Storage tracking handled per the convention: pass `postId` to record immediately, or `onPendingImage` to defer (NewPostScreen flushes via `pendingImagesRef` after the post insert)
+- **Video embeds** (deep-dive): YouTube / Vimeo URL → normalised through `toEmbedUrl()` into the canonical `/embed/` form → inserted as a sandboxed `<iframe>` (sanitiser rejects any other iframe src)
+- **DOI cite** (deep-dive): inserts `<sup>(N)</sup>` at cursor + appends a Vancouver-style numbered reference at the bottom; deep-link to `https://doi.org/<doi>`
 
 ### Explore
 - Tabs: Posts, Researchers, Papers, Groups
@@ -105,19 +114,25 @@ _Last updated: 2026-04-27 (rev 14)_
 - Metadata, abstract, linked posts; follow paper; compose post (auth only); public + in-app
 
 ### Public Post (`/s/:postId`)
-- Single post + comments, no auth
+- Substack-style article reading view: 680px column on `T.bg`, fixed scroll progress bar, conditional "← Back" link, top bar (Lumi/nary + "Join Luminary →" hidden when signed in)
+- `ArticleHeader`: 40px author avatar (with tier ring), author name + title + institution + formatted date + read time; large serif title (extracted from first line for deep dives < 120 chars)
+- `ArticleBody`: 20px / 1.7 reading typography. Serif body for deep dives, DM Sans for regular posts. Scoped CSS for h1 / h2 / h3 / h4 / blockquote / lists / images / iframes
+- `ArticleFooter`: divider + author bio card (avatar + bio + Follow) + Share + 💬 Join the discussion (smooth-scrolls to comments)
+- `CommentsSection`: real comments table (joined to profiles), readable by everyone, signed-in users get a textarea (Enter to submit, own-comment delete). Unauth visitors see a violet "Sign in to join the discussion" CTA
+- Auth detected inside the page via `getSession` + `onAuthStateChange`
 
 ### Public Profile (`/p/:slug`)
 - Respects `profile_visibility` JSONB; clinical block shown for `clinician` only; `clinician_scientist` shows researcher stats; discipline format matches auth views
 
 ### Library
-- **Personal library**: LibraryFolderSidebar (200px) + main content; Unsorted virtual folder (folder_id IS NULL)
+- **Sidebar (220px)**: unified left rail with two sections — **Bookmarks** at the top (All bookmarks / Unsorted / nested folders, capped at 2 levels via `bookmark_folders.parent_id`) and **Library Folders** below. Selecting any bookmark folder takes over the main panel; the right-side Bookmarks card was removed.
+- **Personal library**: Unsorted virtual folder (folder_id IS NULL)
 - **Add options per folder**: Search PMC, Enter DOI, Upload file, Import .ris/.bib, Search ClinicalTrials.gov
 - **ClinicalTrials.gov search** (`LibraryClinicalTrialSearch`): ClinicalTrials.gov API v2, returns study cards for import
 - **LibraryRisImporter**: parse client-side, preview 5 items, folder picker (existing or auto-create "Import YYYY-MM-DD"), bulk insert
-- **LibraryItemCard**: 3-dot menu (move to folder / remove); "Share this paper" → prefills NewPostScreen
+- **LibraryItemCard**: 3-dot menu (rename / move to folder / remove); "Share this paper" → prefills NewPostScreen. Inline rename edits `library_items.title` (Enter saves, Esc cancels) — useful for cryptic filenames after upload.
 - **Unsorted view**: inline "Move to folder" select per item
-- Right panel: Bookmarks (saved posts, unsave + navigate)
+- **Bookmarks main view**: card list filtered by selected folder (or "All"); per-card folder dropdown moves a bookmark; "All bookmarks" view shows each item's current folder name as a tag.
 
 ### Projects
 - **ProjectsScreen**: card grid with unread badge, "Last post X ago", 🟢 Active / ⚪ Quiet indicator; quiet nudge (dismissible, localStorage, 5-day threshold); 📌 on pinned cards; "📦 Archived (N)" collapsed section at bottom
@@ -186,6 +201,15 @@ _Last updated: 2026-04-27 (rev 14)_
 - Reply box sends as Luminary Team bot via `send_bot_message` RPC (Enter to send)
 - Reads bypass RLS via `get_bot_conversations` + `get_bot_conversation_messages` SECURITY DEFINER RPCs
 
+### Account deletion (30-day soft-delete with recovery)
+- "Schedule deletion" in Account Settings → Danger zone calls `delete_own_account()` RPC, which sets `profiles.deletion_scheduled_at = now()` and inserts an `account_deletion_scheduled` notification (which fires the email webhook with the recovery link)
+- User stays signed in; the local profile bumps `deletion_scheduled_at` and `App.jsx` swaps in a full-screen recovery modal showing the purge date + "Cancel deletion" / "Sign out" buttons
+- Account remains hidden from the feed during the grace window — `posts_with_meta` view filters `where pr.deletion_scheduled_at is null`. Profile / group lookups also hide pending-delete users
+- Recovery: opening any URL while signed in surfaces the modal; the email contains a `?recover_account=1` deep link
+- `cancel_account_deletion()` RPC clears the timestamp; everything is restored
+- After 30 days, `purge_deleted_accounts()` (pg_cron daily 03:17 UTC) hard-deletes the account: removes tracked storage blobs, then `auth.users` (cascade does the rest)
+- Email is wired through the existing `send-email-notification` edge function. `account_deletion_scheduled` is a critical type — it bypasses the master `email_notifications` toggle so the user always sees the recovery option
+
 ### Storage management
 - Every upload (post / group post / library / avatar / group avatar+cover) writes a row to `user_storage_files` via the `record_storage_file` RPC at the call site — see CLAUDE.md "Storage tracking (mandatory pattern)".
 - **Account Settings → Storage**: violet total card with bytes + per-bucket chips and a `Manage storage →` button. Lightweight overview for the drawer; no file list inside the drawer.
@@ -220,7 +244,6 @@ _Last updated: 2026-04-27 (rev 14)_
 - **Push notifications / email digests**: Transactional emails ship (Resend, six event types + welcome). No push, no weekly digest.
 - **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state.
 - **Public-group-join email**: Joining a public group inserts a `group_member_joined` notification for admins, but that type isn't in the email function's `EMAIL_TYPES` set yet.
-- **Account deletion retention**: `delete_own_account` RPC hard-deletes immediately; no 30-day soft-delete grace period or admin recovery yet, despite Privacy Policy / Terms language implying retention.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.
 - **Lumens analytics**: PostHog `lumens_earned` and `tier_reached` events are not yet instrumented; tier crossings only update DB state, no event fires.
@@ -242,6 +265,8 @@ _Last updated: 2026-04-27 (rev 14)_
 - **`migration_storage_tracking.sql`** (Phase 9): creates `user_storage_files` table + RLS, adds `file_deleted_at` to posts / group_posts / project_posts, installs `record_storage_file`, `delete_user_file`, `get_my_storage_usage`, `get_admin_storage_usage` RPCs, backfills from `storage.objects`, and DROP+CREATEs all three `*_with_meta` views to expose `file_deleted_at`.
 - **`migration_storage_enriched.sql`** (Phase 9.1): replaces `get_my_storage_usage` to enrich each file row with `context_label`, `context_group_slug`, and `already_deleted` so the dedicated `StorageScreen` can show paper titles / content excerpts and per-row deep links.
 - **`migration_admin_storage_files.sql`** (Phase 9.2): adds the admin-only `get_admin_user_storage_files(p_user_id)` RPC for the per-user drill-down in the admin Storage section.
+- **`migration_account_soft_delete.sql`** + **`migration_account_soft_delete_fix.sql`** (Phase 10): adds `profiles.deletion_scheduled_at`, rewrites `delete_own_account()` (returns timestamptz; inserts `account_deletion_scheduled` notification using `notif_type` column — fix migration patches the original which used wrong column name `type`), adds `cancel_account_deletion()` and `purge_deleted_accounts()`, DROP+CREATE `posts_with_meta` to filter deletion-pending authors. pg_cron schedule pinned in a comment block — run manually once.
+- **`migration_bookmark_folders.sql`** (Phase 11): creates `bookmark_folders` (self-FK `parent_id`) + RLS, adds `saved_posts.folder_id` (FK ON DELETE SET NULL so deleting a folder unsets bookmarks instead of dropping them).
 
 ---
 
