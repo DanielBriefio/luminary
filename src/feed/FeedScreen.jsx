@@ -7,7 +7,7 @@ import Spinner from '../components/Spinner';
 import PostCard from './PostCard';
 import { useWindowSize } from '../lib/useWindowSize';
 
-export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup, savedPostIds = new Set(), onSaveToggled, unreadNotifs = 0, onOpenNotifs }) {
+export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup, savedPostIds = new Set(), onSaveToggled, unreadNotifs = 0, onOpenNotifs, onCompose }) {
   const { isMobile } = useWindowSize();
   const [posts,setPosts]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -532,6 +532,23 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         <div style={{padding:"16px 18px",boxSizing:"border-box",width:"100%"}}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 264px",gap:16,alignItems:"start",minWidth:0,width:"100%"}}>
             <div style={{display:"flex",flexDirection:"column",gap:12,minWidth:0}}>
+              {/* Compose entry — opens the dedicated NewPost screen */}
+              {onCompose && (
+                <button onClick={onCompose}
+                  style={{
+                    display:'flex', alignItems:'center', gap:12,
+                    width:'100%', padding:'12px 16px',
+                    background:T.w, border:`1.5px dashed ${T.bdr}`,
+                    borderRadius:14, cursor:'pointer', fontFamily:'inherit',
+                    color:T.mu, fontSize:13, textAlign:'left',
+                    transition:'border-color .15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = T.v}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = T.bdr}
+                >
+                  ✏️ Share something with the scientific community…
+                </button>
+              )}
               {fp==='sug'&&feedMode==='personalised'&&!profile?.topic_interests?.length&&(
                 <div style={{fontSize:12.5,color:T.mu,padding:'10px 16px',background:T.s2,borderRadius:9,display:'flex',alignItems:'center',gap:8}}>
                   <span>✨</span>
