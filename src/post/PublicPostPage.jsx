@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { T } from '../lib/constants';
+import { T, getTierFromLumens } from '../lib/constants';
 import Av from '../components/Av';
 import Bdg from '../components/Bdg';
 import Spinner from '../components/Spinner';
@@ -9,16 +9,421 @@ import PaperPreview from '../components/PaperPreview';
 import FilePreview from '../components/FilePreview';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
+import FollowBtn from '../components/FollowBtn';
 import { timeAgo } from '../lib/utils';
 
-export default function PublicPostPage({ postId }) {
-  const [post,     setPost]     = useState(null);
-  const [loading,  setLoading]  = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [sharing,  setSharing]  = useState(false);
+const READING = {
+  maxWidth:    680,
+  fontSize:    18,
+  lineHeight:  1.75,
+  paraSpacing: 20,
+  titleSize:   38,
+  metaSize:    13,
+  authorSize:  15,
+  sidepadding: 24,
+};
 
-  // Inject / clean up OG + Twitter meta tags dynamically
-  // (covers JS-executing crawlers like LinkedIn's bot)
+function calcReadMins(content) {
+  const plain = (content || '').replace(/<[^>]+>/g, '').trim();
+  const words = plain ? plain.split(/\s+/).filter(Boolean).length : 0;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  });
+}
+
+function ReadingProgressBar() {
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    const onScroll = () => {
+      const el    = document.documentElement;
+      const total = el.scrollHeight - el.clientHeight;
+      if (total <= 0) { setProgress(100); return; }
+      setProgress(Math.min(100, (el.scrollTop / total) * 100));
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return (
+    <div style={{
+      position:'fixed', top:0, left:0, right:0,
+      height:3, background:T.bdr, zIndex:100,
+    }}>
+      <div style={{
+        height:'100%', width:`${progress}%`,
+        background:T.v, transition:'width .1s linear',
+      }}/>
+    </div>
+  );
+}
+
+function ArticleHeader({ post, author, readMins }) {
+  const isDeepDive = post.is_deep_dive === true;
+  const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
+  const lines = plain.split('\n').filter(l => l.trim());
+  const title = isDeepDive && lines[0] && lines[0].length < 120 ? lines[0] : null;
+
+  return (
+    <header style={{ marginBottom: 32 }}>
+      {title && (
+        <h1 style={{
+          fontFamily:"'DM Serif Display', serif",
+          fontSize: READING.titleSize,
+          color: T.text,
+          lineHeight: 1.2,
+          margin:'0 0 20px',
+          fontWeight: 400,
+        }}>
+          {title}
+        </h1>
+      )}
+      <div style={{
+        display:'flex', alignItems:'center', gap:12,
+        paddingBottom: 20, borderBottom:`1px solid ${T.bdr}`,
+        marginBottom: 28,
+      }}>
+        {author?.profile_slug ? (
+          <a href={`/p/${author.profile_slug}`} style={{ flexShrink:0, textDecoration:'none' }}>
+            <Av size={40} name={author?.name || ''} color={author?.avatar_color || T.v}
+              url={author?.avatar_url || ''} tier={author?.tier || null}/>
+          </a>
+        ) : (
+          <Av size={40} name={author?.name || ''} color={author?.avatar_color || T.v}
+            url={author?.avatar_url || ''} tier={author?.tier || null}/>
+        )}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize: READING.authorSize, fontWeight:700, color:T.text, marginBottom:2 }}>
+            {author?.profile_slug ? (
+              <a href={`/p/${author.profile_slug}`} style={{ color:T.text, textDecoration:'none' }}>
+                {author?.name || 'Unknown'}
+              </a>
+            ) : (author?.name || 'Unknown')}
+          </div>
+          <div style={{
+            fontSize: READING.metaSize, color: T.mu,
+            display:'flex', flexWrap:'wrap', gap:'0 8px',
+          }}>
+            {author?.title && <span>{author.title}</span>}
+            {author?.title && author?.institution && <span>·</span>}
+            {author?.institution && <span>{author.institution}</span>}
+            {(author?.title || author?.institution) && <span>·</span>}
+            <span>{formatDate(post.created_at)}</span>
+            {readMins > 0 && <><span>·</span><span>{readMins} min read</span></>}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function ArticleBody({ post, isDeepDive }) {
+  const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
+  const lines = plain.split('\n').filter(l => l.trim());
+  const hasExtractedTitle = isDeepDive && lines[0] && lines[0].length < 120;
+
+  let bodyHtml = post.content || '';
+  if (hasExtractedTitle) {
+    bodyHtml = bodyHtml
+      .replace(/^<p[^>]*>.*?<\/p>/i, '')
+      .replace(/^[^\n<]+(\n|<br\s*\/?>)?/, '')
+      .trim();
+  }
+
+  return (
+    <div
+      className="article-body"
+      style={{
+        fontSize: READING.fontSize,
+        lineHeight: READING.lineHeight,
+        color: T.text,
+        fontFamily: isDeepDive
+          ? "'DM Serif Display', Georgia, serif"
+          : "'DM Sans', Arial, sans-serif",
+      }}
+    >
+      {bodyHtml && <SafeHtml html={bodyHtml} tags={post.tags}/>}
+      <style>{`
+        .article-body p { margin: 0 0 ${READING.paraSpacing}px; }
+        .article-body h2 {
+          font-family: 'DM Serif Display', serif;
+          font-size: 24px; color: ${T.text};
+          margin: 36px 0 14px; font-weight: 400; line-height: 1.3;
+        }
+        .article-body h3 {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 18px; font-weight: 700; color: ${T.text};
+          margin: 28px 0 10px;
+        }
+        .article-body ul, .article-body ol {
+          margin: 0 0 ${READING.paraSpacing}px; padding-left: 24px;
+        }
+        .article-body li { margin-bottom: 8px; }
+        .article-body blockquote {
+          border-left: 3px solid ${T.v};
+          margin: 24px 0; padding: 4px 0 4px 20px;
+          color: ${T.mu}; font-style: italic;
+        }
+        .article-body a { color: ${T.v}; text-decoration: underline; }
+        .article-body img { max-width: 100%; border-radius: 8px; margin: 16px 0; }
+        .article-body strong { font-weight: 700; color: ${T.text}; }
+      `}</style>
+    </div>
+  );
+}
+
+function ArticleFooter({ post, author, currentUserId, onShare, onJoinDiscussion }) {
+  const isOwn = currentUserId && currentUserId === post.user_id;
+  return (
+    <footer style={{ marginTop: 48 }}>
+      <div style={{ height:1, background:T.bdr, marginBottom:32 }}/>
+      <div style={{
+        display:'flex', gap:16, alignItems:'flex-start',
+        padding:'20px 24px', background:T.w,
+        borderRadius:12, border:`1px solid ${T.bdr}`, marginBottom:24,
+      }}>
+        {author?.profile_slug ? (
+          <a href={`/p/${author.profile_slug}`} style={{ flexShrink:0, textDecoration:'none' }}>
+            <Av size={52} name={author?.name || ''} color={author?.avatar_color || T.v}
+              url={author?.avatar_url || ''} tier={author?.tier || null}/>
+          </a>
+        ) : (
+          <Av size={52} name={author?.name || ''} color={author?.avatar_color || T.v}
+            url={author?.avatar_url || ''} tier={author?.tier || null}/>
+        )}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:2 }}>
+            {author?.name}
+          </div>
+          {(author?.title || author?.institution) && (
+            <div style={{ fontSize:13, color:T.mu, marginBottom:8 }}>
+              {[author?.title, author?.institution].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {author?.bio && (
+            <div style={{
+              fontSize:14, color:T.text, lineHeight:1.6, marginBottom:12,
+              display:'-webkit-box', WebkitLineClamp:3,
+              WebkitBoxOrient:'vertical', overflow:'hidden',
+            }}>
+              {author.bio}
+            </div>
+          )}
+          {!isOwn && currentUserId && (
+            <FollowBtn targetType="user" targetId={post.user_id} currentUserId={currentUserId}/>
+          )}
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
+        <button onClick={onShare} style={{
+          padding:'10px 24px', borderRadius:9,
+          border:`1px solid ${T.bdr}`, background:T.w,
+          fontSize:14, fontWeight:600, color:T.text,
+          cursor:'pointer', fontFamily:'inherit',
+          display:'flex', alignItems:'center', gap:6,
+        }}>
+          ↗ Share
+        </button>
+        <button onClick={onJoinDiscussion} style={{
+          padding:'10px 24px', borderRadius:9, border:'none',
+          background:T.v, fontSize:14, fontWeight:600, color:'#fff',
+          cursor:'pointer', fontFamily:'inherit',
+          display:'flex', alignItems:'center', gap:6,
+        }}>
+          💬 Join the discussion
+        </button>
+      </div>
+    </footer>
+  );
+}
+
+function CommentsSection({ post, currentUserId, sectionRef }) {
+  const [comments,    setComments]    = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [text,        setText]        = useState('');
+  const [submitting,  setSubmitting]  = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('comments')
+        .select('*, profiles(name, avatar_color, avatar_url, profile_slug, institution)')
+        .eq('post_id', post.id)
+        .order('created_at', { ascending: true });
+      if (cancelled) return;
+      setComments(data || []);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [post.id]);
+
+  const submit = async () => {
+    if (!text.trim() || !currentUserId || submitting) return;
+    setSubmitting(true);
+    const { data } = await supabase
+      .from('comments')
+      .insert({ post_id: post.id, user_id: currentUserId, content: text.trim() })
+      .select('*, profiles(name, avatar_color, avatar_url, profile_slug, institution)')
+      .single();
+    if (data) {
+      setComments(c => [...c, data]);
+      setText('');
+    }
+    setSubmitting(false);
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Delete this comment?')) return;
+    await supabase.from('comments').delete().eq('id', id);
+    setComments(c => c.filter(x => x.id !== id));
+  };
+
+  return (
+    <section ref={sectionRef} style={{ marginTop: 48 }}>
+      <div style={{ height:1, background:T.bdr, marginBottom:24 }}/>
+      <h2 style={{
+        fontFamily:"'DM Serif Display', serif",
+        fontSize:22, color:T.text, margin:'0 0 18px',
+        fontWeight:400,
+      }}>
+        Discussion {comments.length > 0 && (
+          <span style={{ color:T.mu, fontSize:16, fontFamily:"'DM Sans',sans-serif" }}>
+            · {comments.length}
+          </span>
+        )}
+      </h2>
+
+      {loading ? (
+        <div style={{ padding:'14px 0', color:T.mu, fontSize:13 }}>Loading comments…</div>
+      ) : comments.length === 0 ? (
+        <div style={{
+          padding:'18px 16px', background:T.w, borderRadius:10,
+          border:`1px solid ${T.bdr}`, color:T.mu, fontSize:13.5,
+          textAlign:'center',
+        }}>
+          No comments yet — be the first to reply.
+        </div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:14, marginBottom:20 }}>
+          {comments.map(c => (
+            <div key={c.id} style={{
+              display:'flex', gap:12, padding:'14px 16px',
+              background:T.w, borderRadius:10, border:`1px solid ${T.bdr}`,
+            }}>
+              {c.profiles?.profile_slug ? (
+                <a href={`/p/${c.profiles.profile_slug}`} style={{ flexShrink:0, textDecoration:'none' }}>
+                  <Av size={32} name={c.profiles?.name || ''}
+                    color={c.profiles?.avatar_color || T.v}
+                    url={c.profiles?.avatar_url || ''}/>
+                </a>
+              ) : (
+                <Av size={32} name={c.profiles?.name || ''}
+                  color={c.profiles?.avatar_color || T.v}
+                  url={c.profiles?.avatar_url || ''}/>
+              )}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:'flex', alignItems:'baseline', gap:8, marginBottom:4 }}>
+                  <span style={{ fontWeight:700, fontSize:13.5, color:T.text }}>
+                    {c.profiles?.profile_slug ? (
+                      <a href={`/p/${c.profiles.profile_slug}`} style={{ color:T.text, textDecoration:'none' }}>
+                        {c.profiles?.name || 'Unknown'}
+                      </a>
+                    ) : (c.profiles?.name || 'Unknown')}
+                  </span>
+                  <span style={{ fontSize:11.5, color:T.mu }}>{timeAgo(c.created_at)}</span>
+                  {currentUserId === c.user_id && (
+                    <button onClick={() => remove(c.id)} style={{
+                      marginLeft:'auto', fontSize:11, color:T.mu,
+                      border:'none', background:'transparent',
+                      cursor:'pointer', opacity:.6, fontFamily:'inherit',
+                    }}>
+                      Delete
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize:14, lineHeight:1.6, color:T.text, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                  {c.content}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {currentUserId ? (
+        <div style={{ display:'flex', gap:10, alignItems:'flex-end' }}>
+          <textarea
+            ref={inputRef}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
+            placeholder="Add to the discussion…"
+            rows={2}
+            style={{
+              flex:1, padding:'10px 14px', borderRadius:10,
+              border:`1.5px solid ${T.bdr}`, fontSize:14,
+              fontFamily:'inherit', outline:'none', resize:'vertical',
+              minHeight:44, color:T.text, background:T.w,
+            }}
+          />
+          <button onClick={submit} disabled={submitting || !text.trim()} style={{
+            padding:'10px 20px', borderRadius:9, border:'none',
+            background: text.trim() && !submitting ? T.v : T.bdr,
+            color: text.trim() && !submitting ? '#fff' : T.mu,
+            fontSize:14, fontWeight:700, fontFamily:'inherit',
+            cursor: text.trim() && !submitting ? 'pointer' : 'default',
+          }}>
+            {submitting ? '…' : 'Reply'}
+          </button>
+        </div>
+      ) : (
+        <div style={{
+          padding:'18px 20px', borderRadius:10,
+          background:T.v2, border:`1px solid rgba(108,99,255,.2)`,
+          textAlign:'center',
+        }}>
+          <div style={{ fontSize:14, color:T.text, marginBottom:8 }}>
+            Sign in to join the discussion.
+          </div>
+          <a href="/" style={{
+            display:'inline-block', background:T.v, color:'#fff',
+            fontWeight:700, fontSize:13, textDecoration:'none',
+            borderRadius:22, padding:'8px 22px',
+          }}>
+            Sign in to Luminary →
+          </a>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default function PublicPostPage({ postId }) {
+  const [post,          setPost]          = useState(null);
+  const [author,        setAuthor]        = useState(null);
+  const [loading,       setLoading]       = useState(true);
+  const [notFound,      setNotFound]      = useState(false);
+  const [sharing,       setSharing]       = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const commentsRef = useRef(null);
+
+  // Auth — public page, but if signed in we enable comment + follow.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setCurrentUserId(data?.session?.user?.id || null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setCurrentUserId(s?.user?.id || null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Inject / clean up OG + Twitter meta tags
   useEffect(() => {
     if (!post) return;
 
@@ -27,9 +432,9 @@ export default function PublicPostPage({ postId }) {
 
     if (post.post_type === 'paper' && post.paper_title) {
       ogTitle = post.paper_title;
-      const byline = [post.paper_authors, post.paper_journal, post.paper_year].filter(Boolean).join(' · ');
+      const byline   = [post.paper_authors, post.paper_journal, post.paper_year].filter(Boolean).join(' · ');
       const abstract = post.paper_abstract ? post.paper_abstract.slice(0, 250) : '';
-      ogDescription = [byline, abstract].filter(Boolean).join(' — ');
+      ogDescription  = [byline, abstract].filter(Boolean).join(' — ');
     } else if (post.post_type === 'link' && post.link_title) {
       ogTitle = post.link_title;
       ogDescription = post.link_url || '';
@@ -77,167 +482,161 @@ export default function PublicPostPage({ postId }) {
     return () => { document.title = 'Luminary'; };
   }, []);
 
+  // Fetch post + author
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
 
       const { data: p } = await supabase
-        .from('posts_with_meta')
-        .select('*')
-        .eq('id', postId)
-        .single();
-
+        .from('posts_with_meta').select('*').eq('id', postId).single();
       if (cancelled) return;
       if (!p) { setNotFound(true); setLoading(false); return; }
 
-      // Fetch author profile for slug + avatar
       const { data: profile } = await supabase
         .from('profiles')
-        .select('name, avatar_color, avatar_url, institution, profile_slug')
-        .eq('id', p.user_id)
-        .single();
+        .select('id, name, avatar_color, avatar_url, title, institution, bio, profile_slug, lumens_current_period')
+        .eq('id', p.user_id).single();
 
-      if (!cancelled) {
-        const post = {
-          ...p,
-          author_name:       profile?.name        || p.author_name,
-          author_avatar:     profile?.avatar_color || p.author_avatar,
-          author_avatar_url: profile?.avatar_url   || '',
-          author_institution:profile?.institution  || p.author_institution,
-          author_slug:       profile?.profile_slug || null,
-        };
-        setPost(post);
-        const title = p.post_type === 'paper' && p.paper_title
-          ? p.paper_title
-          : (p.content || '').replace(/<[^>]+>/g, '').trim().slice(0, 80);
-        if (title) document.title = `${title} — Luminary`;
-        setLoading(false);
-      }
+      if (cancelled) return;
+      const tier = profile ? getTierFromLumens(profile.lumens_current_period || 0) : null;
+
+      setPost(p);
+      setAuthor(profile ? { ...profile, tier } : null);
+
+      const title = p.post_type === 'paper' && p.paper_title
+        ? p.paper_title
+        : (p.content || '').replace(/<[^>]+>/g, '').trim().slice(0, 80);
+      if (title) document.title = `${title} — Luminary`;
+      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [postId]);
 
-  const typeColor = { text:'v', paper:'v', photo:'t', audio:'r', link:'a', tip:'g' };
-  const typeLabel = { text:'Post', paper:'Paper', photo:'Photo', audio:'Audio', link:'Link', tip:'Tip' };
-
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: "'DM Sans',sans-serif" }}>
-      <Spinner />
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
+      height:'100vh', fontFamily:"'DM Sans',sans-serif" }}>
+      <Spinner/>
     </div>
   );
 
   if (notFound) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: "'DM Sans',sans-serif", color: T.text, textAlign: 'center', padding: '0 24px' }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
-      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, marginBottom: 8 }}>Post not found</div>
-      <div style={{ fontSize: 14, color: T.mu, marginBottom: 24 }}>This post may have been deleted or is no longer public.</div>
-      <a href="/" style={{ color: T.v, fontWeight: 600, textDecoration: 'none', background: T.v2, border: `1px solid rgba(108,99,255,.2)`, borderRadius: 8, padding: '8px 18px' }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      height:'100vh', fontFamily:"'DM Sans',sans-serif", color:T.text, textAlign:'center', padding:'0 24px' }}>
+      <div style={{ fontSize:48, marginBottom:16 }}>🔍</div>
+      <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:24, marginBottom:8 }}>Post not found</div>
+      <div style={{ fontSize:14, color:T.mu, marginBottom:24 }}>This post may have been deleted or is no longer public.</div>
+      <a href="/" style={{ color:T.v, fontWeight:600, textDecoration:'none',
+        background:T.v2, border:`1px solid rgba(108,99,255,.2)`, borderRadius:8, padding:'8px 18px' }}>
         ← Go to Luminary
       </a>
     </div>
   );
 
+  const isDeepDive = post.is_deep_dive === true;
+  const readMins   = calcReadMins(post.content);
+  const canGoBack  = typeof window !== 'undefined' && window.history.length > 1;
+
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.text }}>
-      {/* Top bar */}
-      <div style={{ background: T.w, borderBottom: `1px solid ${T.bdr}`, padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52, position: 'sticky', top: 0, zIndex: 10 }}>
-        <a href="/" style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, textDecoration: 'none', color: T.text }}>
-          Lumi<span style={{ color: T.v }}>nary</span>
+    <div style={{ minHeight:'100vh', background:T.bg, fontFamily:"'DM Sans',sans-serif", color:T.text }}>
+      <ReadingProgressBar/>
+
+      {/* Top bar — kept for unauth visitor wayfinding */}
+      <div style={{
+        background:T.w, borderBottom:`1px solid ${T.bdr}`,
+        padding:'0 24px', display:'flex', alignItems:'center',
+        justifyContent:'space-between', height:52,
+        position:'sticky', top:0, zIndex:50,
+      }}>
+        <a href="/" style={{ fontFamily:"'DM Serif Display',serif", fontSize:20, textDecoration:'none', color:T.text }}>
+          Lumi<span style={{ color:T.v }}>nary</span>
         </a>
-        <a href="/" style={{ fontSize: 12.5, color: T.v, fontWeight: 600, textDecoration: 'none', background: T.v2, border: `1px solid rgba(108,99,255,.2)`, borderRadius: 8, padding: '7px 16px' }}>
-          Join Luminary →
-        </a>
-      </div>
-
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 18px 64px' }}>
-        {/* Post card */}
-        <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
-          <div style={{ padding: 20 }}>
-
-            {/* Author row */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
-              {post.author_slug ? (
-                <a href={`/p/${post.author_slug}`} style={{ flexShrink: 0 }}>
-                  <Av color={post.author_avatar || 'me'} size={42} name={post.author_name} url={post.author_avatar_url || ''} />
-                </a>
-              ) : (
-                <div style={{ flexShrink: 0 }}>
-                  <Av color={post.author_avatar || 'me'} size={42} name={post.author_name} url={post.author_avatar_url || ''} />
-                </div>
-              )}
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                  {post.author_slug ? (
-                    <a href={`/p/${post.author_slug}`} style={{ fontWeight: 700, fontSize: 14, color: T.v, textDecoration: 'none' }}>
-                      {post.author_name || 'Researcher'}
-                    </a>
-                  ) : (
-                    <span style={{ fontWeight: 700, fontSize: 14, color: T.v }}>{post.author_name || 'Researcher'}</span>
-                  )}
-                  <Bdg color={typeColor[post.post_type] || 'v'}>{typeLabel[post.post_type] || 'Post'}</Bdg>
-                </div>
-                <div style={{ fontSize: 11, color: T.mu, marginTop: 2 }}>
-                  {post.author_institution && `${post.author_institution} · `}{timeAgo(post.created_at)}
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            {post.content && <SafeHtml html={post.content} tags={post.tags} />}
-
-            {/* Link preview for text posts */}
-            {post.post_type === 'text' && (() => {
-              const url = extractFirstUrl(post.content || '');
-              return url ? <LinkPreview url={url} /> : null;
-            })()}
-
-            {/* File attachment */}
-            {post.image_url && (
-              <FilePreview url={post.image_url} fileType={post.file_type || 'image'} fileName={post.file_name} />
-            )}
-
-            {/* Paper */}
-            {post.post_type === 'paper' && post.paper_title && (
-              <PaperPreview post={post} currentUserId={null} />
-            )}
-
-
-            {/* Stats row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.bdr}` }}>
-              <span style={{ fontSize: 12, color: T.mu, fontWeight: 600 }}>🤍 {parseInt(post.like_count) || 0}</span>
-              <span style={{ fontSize: 12, color: T.mu, fontWeight: 600 }}>💬 {parseInt(post.comment_count) || 0}</span>
-              <button
-                onClick={() => setSharing(true)}
-                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 13px', borderRadius: 20, border: `1.5px solid ${T.bdr}`, background: T.w, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 600, color: T.mu }}>
-                ↗ Share
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <div style={{ background: `linear-gradient(135deg, ${T.v2}, ${T.bl2})`, border: `1px solid rgba(108,99,255,.2)`, borderRadius: 14, padding: '22px 24px', marginTop: 16, textAlign: 'center' }}>
-          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 19, marginBottom: 8 }}>
-            Join the conversation on Luminary
-          </div>
-          <div style={{ fontSize: 13, color: T.mu, marginBottom: 16, maxWidth: 400, margin: '0 auto 16px' }}>
-            Like, comment, and connect with scientists and medical affairs professionals.
-          </div>
-          <a href="/" style={{ display: 'inline-block', background: T.v, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none', borderRadius: 22, padding: '10px 26px', boxShadow: '0 3px 14px rgba(108,99,255,.3)' }}>
-            Create your free account →
+        {!currentUserId && (
+          <a href="/" style={{
+            fontSize:12.5, color:T.v, fontWeight:600, textDecoration:'none',
+            background:T.v2, border:`1px solid rgba(108,99,255,.2)`,
+            borderRadius:8, padding:'7px 16px',
+          }}>
+            Join Luminary →
           </a>
-        </div>
-
-        {/* Footer */}
-        <div style={{ textAlign: 'center', padding: '24px 0 0', color: T.mu, fontSize: 12 }}>
-          Posted on{' '}
-          <a href="/" style={{ color: T.v, fontWeight: 600, textDecoration: 'none' }}>Luminary</a>
-          {' '}— Research networking for scientists
-        </div>
+        )}
       </div>
 
-      {sharing && <ShareModal post={post} onClose={() => setSharing(false)} />}
+      {canGoBack && (
+        <div style={{
+          maxWidth: READING.maxWidth + 48, margin:'0 auto',
+          padding:'16px 24px 0',
+        }}>
+          <button onClick={() => window.history.back()} style={{
+            background:'none', border:'none', color:T.mu, fontSize:13,
+            cursor:'pointer', fontFamily:'inherit', padding:0,
+            display:'flex', alignItems:'center', gap:6,
+          }}>
+            ← Back
+          </button>
+        </div>
+      )}
+
+      <article style={{
+        maxWidth: READING.maxWidth, margin:'0 auto',
+        padding:`32px ${READING.sidepadding}px 0`,
+      }}>
+        <ArticleHeader post={post} author={author} readMins={readMins}/>
+
+        <ArticleBody post={post} isDeepDive={isDeepDive}/>
+
+        {/* Link preview */}
+        {post.post_type === 'text' && (() => {
+          const url = extractFirstUrl(post.content || '');
+          return url ? <div style={{ marginTop:20 }}><LinkPreview url={url}/></div> : null;
+        })()}
+
+        {/* File attachment */}
+        {post.image_url && (
+          <div style={{ marginTop:20 }}>
+            <FilePreview url={post.image_url} fileType={post.file_type || 'image'} fileName={post.file_name}/>
+          </div>
+        )}
+
+        {/* Paper card */}
+        {post.post_type === 'paper' && post.paper_title && (
+          <div style={{ marginTop:28 }}>
+            <PaperPreview post={post} currentUserId={currentUserId}/>
+          </div>
+        )}
+
+        {/* Tags */}
+        {(post.tier2?.length > 0 || post.tags?.length > 0) && (
+          <div style={{ marginTop:28, paddingTop:18, borderTop:`1px solid ${T.bdr}`,
+            display:'flex', gap:6, flexWrap:'wrap' }}>
+            {(post.tier2 || []).map(t => (
+              <Bdg key={`t2-${t}`} color="v">{t}</Bdg>
+            ))}
+            {(post.tags || []).map(t => (
+              <span key={`tag-${t}`} style={{
+                fontSize:11.5, color:T.mu, padding:'2px 9px',
+                borderRadius:20, background:T.s2, border:`1px solid ${T.bdr}`,
+              }}>
+                #{t}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <ArticleFooter
+          post={post}
+          author={author}
+          currentUserId={currentUserId}
+          onShare={() => setSharing(true)}
+          onJoinDiscussion={() => commentsRef.current?.scrollIntoView({ behavior:'smooth', block:'start' })}
+        />
+
+        <CommentsSection post={post} currentUserId={currentUserId} sectionRef={commentsRef}/>
+      </article>
+
+      <div style={{ height: 80 }}/>
+
+      {sharing && <ShareModal post={post} onClose={() => setSharing(false)}/>}
     </div>
   );
 }
