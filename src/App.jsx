@@ -473,7 +473,7 @@ export default function App() {
 
   const signOut=async()=>{ optOutAndReset(); await supabase.auth.signOut(); setScreen('feed'); };
 
-  const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>;
+  const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet"/>;
 
   // Public pages — no auth required
   if(publicSlug)      return <>{fonts}<PublicProfilePage slug={publicSlug}/></>;

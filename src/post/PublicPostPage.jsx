@@ -146,8 +146,11 @@ function ArticleBody({ post, isDeepDive }) {
         fontSize: READING.fontSize,
         lineHeight: READING.lineHeight,
         color: READING.textColor,
+        // Source Serif 4 is a true reading serif (regular + bold cuts);
+        // DM Serif Display is a display font with only weight 400, so
+        // bold can't be visually distinguished from regular.
         fontFamily: isDeepDive
-          ? "'DM Serif Display', Georgia, serif"
+          ? "'Source Serif 4', 'Source Serif Pro', Georgia, serif"
           : "'DM Sans', Arial, sans-serif",
       }}
     >

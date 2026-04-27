@@ -61,16 +61,27 @@ export function isHtml(str) {
 // `<strong>…</strong>`, plus a lot of Word-specific cruft.
 export function normalisePastedHtml(html) {
   if (!html) return '';
+
+  // 0) Pre-DOM regex cleanup. Word puts metadata in conditional comments
+  //    and `<xml>` blocks containing `<w:*>` / `<o:*>` elements. If they
+  //    survive into the DOM their text content can leak into the editor
+  //    ("Normal 0 21 false false false de-JP JA X-NONE …"). Strip them
+  //    before parsing.
+  html = html
+    .replace(/<!--\[if [^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '')  // mso conditional comments
+    .replace(/<!--[\s\S]*?-->/g, '')                             // any other HTML comments
+    .replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, '')                  // raw <xml>…</xml> blocks
+    .replace(/<\/?(?:o|w|m|v):[a-z][\w-]*[^>]*>/gi, '');         // dangling o:/w:/m:/v: tags
+
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
 
   // 1) Strip Word/Docs metadata containers
   tmp.querySelectorAll('style, script, meta, link, title, head').forEach(el => el.remove());
-  // Word emits namespaced elements (o:p, w:WordDocument, etc). CSS can't
-  // select `w:*` reliably, so walk and check the local name manually.
+  // Belt + braces: also strip any namespaced elements that survived.
   tmp.querySelectorAll('*').forEach(el => {
     const ln = el.localName || '';
-    if (ln.startsWith('o:') || ln.startsWith('w:') || ln === 'xml') el.remove();
+    if (ln.startsWith('o:') || ln.startsWith('w:') || ln.startsWith('m:') || ln.startsWith('v:') || ln === 'xml') el.remove();
   });
 
   // 2) Convert style-encoded formatting → semantic tags. Walk every element

@@ -466,7 +466,7 @@ export default function RichTextEditor({
           borderRadius: "0 0 10px 10px",
           fontSize: isDeepDive ? 20 : 13,
           fontFamily: isDeepDive
-            ? "'DM Serif Display', Georgia, serif"
+            ? "'Source Serif 4', 'Source Serif Pro', Georgia, serif"
             : "inherit",
           lineHeight: isDeepDive ? 1.7 : 1.75,
           color: T.text,
@@ -597,7 +597,7 @@ export default function RichTextEditor({
         [contenteditable]:not([data-deep-dive]) ol { list-style-type:decimal !important; padding-left:22px !important; margin:6px 0; }
         [contenteditable]:not([data-deep-dive]) li { display:list-item !important; margin:3px 0; }
 
-        [data-deep-dive] { font-family:'DM Serif Display', Georgia, serif; }
+        [data-deep-dive] { font-family:'Source Serif 4', 'Source Serif Pro', Georgia, serif; }
         [data-deep-dive] p  { margin:0 0 22px; }
         [data-deep-dive] h1 { font-family:'DM Serif Display',serif; font-size:32px; font-weight:400; line-height:1.25; margin:32px 0 14px; color:${T.text}; }
         [data-deep-dive] h2 { font-family:'DM Serif Display',serif; font-size:26px; font-weight:400; line-height:1.3; margin:30px 0 12px; color:${T.text}; }
