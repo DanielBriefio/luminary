@@ -55,10 +55,11 @@ src/
   components/ — Av, Btn, Bdg, Inp, Spinner, FollowBtn, PaperPreview, FilePreview, SafeHtml,
                 RichTextEditor, ConflictResolverModal, ReportModal, ExpandableBio, Linkify,
                 LinkPreview, ShareModal, BottomNav, TopicInterestsPicker,
-                ProfileCompletionMeter, FeedTipCard, Footer
+                ProfileCompletionMeter, FeedTipCard, Footer, StoragePanel
   screens/    — LandingScreen, LegalPage, AuthScreen, OnboardingScreen, NewPostScreen,
                 ExploreScreen, NotifsScreen, NetworkScreen, MessagesScreen,
-                AccountSettingsScreen, SettingsScreen, ResetPasswordScreen, LumensScreen
+                AccountSettingsScreen, SettingsScreen, ResetPasswordScreen, LumensScreen,
+                StorageScreen
   feed/       — FeedScreen, PostCard
   profile/    — ProfileScreen, PublicationsTab, UserProfileScreen, PublicProfilePage,
                 ShareProfilePanel, PubRow, SectionGroup, BusinessCardView, CardPage,
@@ -73,7 +74,8 @@ src/
   projects/   — ProjectsScreen, ProjectScreen, ProjectFeed, ProjectPostCard, ProjectMembers,
                 CreateProjectModal, TemplateGallery, SaveAsTemplateModal
   admin/      — AdminShell, InvitesSection, CreateCodeModal, UsersSection, UserDetailPanel,
-                BulkNudgeModal, TemplatesSection, ContentSection, InboxSection, InterventionsSection
+                BulkNudgeModal, TemplatesSection, ContentSection, InboxSection, InterventionsSection,
+                StorageSection
   admin/interventions/ — ComposeTab, BoardTab, PaperOfWeekTab, MilestoneTab
 ```
 
@@ -143,10 +145,11 @@ All are SECURITY DEFINER. Admin-only RPCs require `is_admin = true` on the calle
 - `get_lumen_history(p_limit)` — own transaction history for `LumensScreen`
 - `record_storage_file(p_bucket, p_path, p_size_bytes, p_mime_type, p_file_name, p_source_kind, p_source_id)` — fire-and-forget; upserts a `user_storage_files` row keyed on (bucket, path). **Must be called after every successful `supabase.storage.upload()`** — see Storage tracking convention below.
 - `delete_user_file(p_id)` — own-only. Returns `{ bucket, path }` for the client to call `supabase.storage.from(bucket).remove([path])`. Side-effects by `source_kind`: `post`/`group_post` → set `file_deleted_at = now()` + null out image_url/file_name/file_type; `library` → DELETE the library_items row; `avatar`/`group_avatar`/`group_cover` → raises an error (must be replaced, not deleted).
-- `get_my_storage_usage()` — returns `{ total_bytes, total_files, buckets: [{bucket, bytes, files}], files: [...] }`. Powers the user Storage panel in Account Settings; future quota check reads `total_bytes` from here.
+- `get_my_storage_usage()` — returns `{ total_bytes, total_files, buckets: [{bucket, bytes, files}], files: [...] }`. Each file row is enriched (via `migration_storage_enriched.sql`) with `context_label` (paper title / 80-char content excerpt / library item title / "Profile photo" / "Group: NAME"), `context_group_slug` (so the client can build `/g/:slug` deep links for group items), and `already_deleted` (true when the linked post's `file_deleted_at` is set). Powers `StoragePanel` totals + `StorageScreen` review UI; future quota check reads `total_bytes` from here.
 
 **Admin storage:**
 - `get_admin_storage_usage()` — returns `{ total_bytes, total_files, per_user: [...], per_bucket: [...] }`. Admin only.
+- `get_admin_user_storage_files(p_user_id)` — admin-only drill-down used by the admin Storage section row expand. Returns the same enriched file rows as `get_my_storage_usage().files` for any user. Read-only by design — admins do not delete user files via this UI; they use the existing moderation tools (hide post, etc.).
 
 ## Edge Functions
 

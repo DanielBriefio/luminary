@@ -1,11 +1,11 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-25 (rev 12)_
+_Last updated: 2026-04-27 (rev 14)_
 
 ## What exists and works
 
 ### Landing page (unauthenticated `/`)
 - Replaces direct-to-AuthScreen for unauth visitors at root
-- Sticky header (Have-an-invite-code / Join with ORCID / Log in), hero with tagline + dual CTAs, inline invite-code form with client-side validation, 3 feature pillars, 12-card auto-advancing use-case carousel (pauses on hover), 3 "Who Luminary is for" cards (Researchers / Clinicians / Industry), waitlist form (with `?ref=` URL-param capture for source attribution), legal footer
+- Sticky header (Have-an-invite-code / Join with ORCID / Log in), hero with tagline + dual CTAs, inline invite-code form with client-side validation, 3 feature pillars, 12-card auto-advancing use-case carousel (pauses on hover), 3 "Who Luminary is for" cards (Researchers / Clinicians / Industry), **"Built for scientists, not advertisers" privacy block** (4 trust facts in 2x2 grid: no third-party tracking / consent-only analytics / data never sold / inbox control + forward-looking note on sponsored content), **violet "Luminary is free" strip** (3 checkmarks: full access / no card / no premium tier), waitlist form (with `?ref=` URL-param capture for source attribution), legal footer
 - Validated invite code is handed off to AuthScreen via `sessionStorage.prefill_invite_code` so the user lands directly on the signup form with their code pre-filled
 - Mobile responsive (single-column grids, full-width CTAs, compact header) below 768px via `useWindowSize`
 - ORCID OAuth handler matches AuthScreen exactly (same client ID, redirect URI, `state=signup`)
@@ -16,11 +16,16 @@ _Last updated: 2026-04-25 (rev 12)_
 - First-run onboarding wizard: follow suggested users + add first publication
 - Auto-generated `profile_slug` for public profile URLs
 - Invite-code gate: dual-mode validation — personal (single-use, `claimed_by`) and event (multi-use, `invite_code_uses` table); checks `locked_at`, `expires_at`, and use limits; validated code stored in `useRef` for post-signup claim step
+- **Privacy context box** in AuthScreen `ConsentBlock` (above the four consent toggles): violet panel with "🔒 A note on privacy" — explains no third-party data sharing, no retargeting pixels, anonymised analytics gated on consent below, and the future sponsored-content carve-out. Toggles themselves unchanged.
 
 ### Feed
-- For You / Following toggle; All / Papers tab filter
+- Sort modes (Personalised / Chronological) and mode pills (All / My Field / Researcher) on a single header row alongside the Filter button
+- All / Papers content-type tabs live **inside** the Filter panel (not as a separate row) and are tracked separately from tier filters: client-side post filter only fires when tier filters are set, so `Papers` is server-side only
+- Bell icon (with unread badge) sits next to the reload icon at the top of the feed; reload icon enlarged
+- Compose card at top: dashed-border "Share your thoughts…" button that opens NewPostScreen
 - Post types: `text` (rich text, with live link preview) and `paper` (DOI or EPMC lookup); file attachments (image/video/audio/PDF/CSV/file) can be added to text posts and set the stored `post_type` to the upload category
 - Like, comment (threaded, inline), edit, delete, repost
+- Quick-reply input on PostCard hides whenever the inline comment thread is open — no double-input UI
 - AI auto-tagging via `auto-tag` edge function; manual hashtags; visibility (Everyone / Followers only)
 - Right sidebar: Paper of the Week (config-driven — `most_discussed` total posts, `most_commented` total comments, or admin manual DOI pick; uses `get_paper_stats_public()` RPC; min engagement filter ≥2 posts OR ≥1 comment) + Founding Fellows banner
 - `FeedTipCard` / Luminary Board: shows admin-configured board message (title, message, optional CTA) when `admin_config.luminary_board.enabled = true`; falls back to cycling `FEED_TIPS` from constants.js when board is off or unconfigured
@@ -58,6 +63,7 @@ _Last updated: 2026-04-25 (rev 12)_
 ### Email notifications (Resend)
 - Two Edge Functions: `send-email-notification` (notifications-table INSERT webhook) and `send-welcome-email` (profiles-table UPDATE webhook)
 - Wired types: `new_follower`, `new_message`, `group_join_request`, `group_request_approved`, `new_comment`, `invite_redeemed`, plus the one-shot welcome on profile UPDATE with `name` set
+- Welcome email body includes a "🔒 Your data, your science" privacy + free-tier panel between the feature bullets and the sign-off (matches the landing-page trust messaging)
 - Inline branded HTML bodies (DM Sans + DM Serif Display, violet accent, "Manage preferences" link with `?settings=email` deep-link to AccountSettings)
 - Per-recipient gate: master `email_notifications` toggle plus five granular toggles (`email_notif_new_follower`, `_new_message`, `_group_request`, `_new_comment`, `_invite_redeemed`); UI lives under Account Settings → Email preferences as nested toggles, only shown when master is on
 - `welcome_email_sent` flag prevents duplicate welcomes; existing pre-system users were backfilled to true
@@ -180,9 +186,24 @@ _Last updated: 2026-04-25 (rev 12)_
 - Reply box sends as Luminary Team bot via `send_bot_message` RPC (Enter to send)
 - Reads bypass RLS via `get_bot_conversations` + `get_bot_conversation_messages` SECURITY DEFINER RPCs
 
-### Gamification
-- Sidebar: static "Lv.1 — Researcher, 0 XP" badge — decorative
-- `ProfileCompletionMeter`: live milestone system (5 stages, confetti) — wired to real DB counts
+### Storage management
+- Every upload (post / group post / library / avatar / group avatar+cover) writes a row to `user_storage_files` via the `record_storage_file` RPC at the call site — see CLAUDE.md "Storage tracking (mandatory pattern)".
+- **Account Settings → Storage**: violet total card with bytes + per-bucket chips and a `Manage storage →` button. Lightweight overview for the drawer; no file list inside the drawer.
+- **`StorageScreen`** (`screen === 'storage'`): full-width manager grouped by source kind (Post attachments / Group post attachments / Library files / Profile photo / Group avatars / Group covers / Other). Each row shows the linked context (paper title or content excerpt / library title / group name), size, date, a `View ↗` deep link (`/s/:postId` for posts, `/g/:slug` for group items), and a Delete button where deletable.
+- **Soft-delete attachments**: deleting a post / group post attachment sets `file_deleted_at = now()` on the row + nulls `image_url` / `file_name` / `file_type`. PostCard / GroupPostCard / ProjectPostCard render `📎 File removed by author` placeholder; the post body stays. Library deletions remove the `library_items` row entirely. Avatars and group images cannot be deleted — only replaced via the regular upload flow.
+- **Admin Storage section** (`/admin → Storage`): global total, per-bucket totals, sortable per-user roll-up. Click any user row to expand; lazy-fetches that user's enriched file list via `get_admin_user_storage_files(p_user_id)` and renders inline. Read-only — admins moderate via existing tools (hide / delete post).
+- Quotas not enforced yet. `total_bytes` from `get_my_storage_usage()` is the future hook for a per-user quota check.
+
+### Lumens / Gamification
+- **Lumens** are points awarded for contributing to the community. Live system, gated behind `LUMENS_ENABLED` feature flag in constants.js.
+- Four tiers (computed from `lumens_current_period`): **Catalyst** 0–499 / **Pioneer** 500–1999 / **Beacon** 2000–4999 / **Luminary** 5000+. Only the Luminary tier carries any visible decoration: a 2px gold (#C9A961) ring on the avatar (via the optional `tier` prop on `Av`).
+- **Earning hooks** (frontend, fire-and-forget RPC, all `try/catch`-wrapped): `post_created` +5 (NewPostScreen), `comment_posted` +2 (PostCard, commenter), `comment_received` +10 (PostCard, post owner — deduped to first comment per commenter via `lumen_transactions` lookup), `post_reposted` +20 (PostCard, post owner — skip self), `discussion_threshold` +50 (PostCard, post owner when distinct commenter count first hits 3, deduped), `invited_user_active` +100 (NewPostScreen, on inviter's first post — looks up `invite_codes.created_by`)
+- **Sidebar widget**: Lumens count + tier name merged into the profile box (avatar + first name + tier line); top bar removed entirely. Settings gear moved to the sidebar header next to the QR icon.
+- **LumensScreen** (`screen === 'lumens'`): tier hero card with progress bar to next tier, "Recent earnings" list (timestamps include date+time, post excerpts hydrated from `tx.meta.post_id`), tier ladder, and earning rules table.
+- **Cross-user sync**: `award_lumens` runs server-side, so App.jsx subscribes to a realtime UPDATE on the user's own `profiles` row to keep the sidebar count in sync. Optimistic `setProfile` bump applied locally for snappier UX.
+- **Admin Users tab**: Lumens column with sort, showing count + tier name; uses the updated `get_admin_user_list()` RPC.
+- `ProfileCompletionMeter`: live milestone system (5 stages, confetti) — wired to real DB counts. Separate from Lumens; tracks profile completeness, not contribution.
+- Founding members: `is_founding_member` flag set by trigger for signups before `admin_config.founding_member_cutoff`.
 
 ### Analytics
 - PostHog consent-gated analytics via `analytics_consent_at` on profiles (separate from `marketing_consent_at` for email marketing)
@@ -196,13 +217,14 @@ _Last updated: 2026-04-25 (rev 12)_
 ## Known gaps / not yet built
 
 - **Mobile layout (in-app)**: Landing page is responsive, but the authenticated app is still desktop-only — 200px sidebar + multi-column grids break on phones. `useWindowSize` is wired into `App.jsx`, `BottomNav`, and `LandingScreen` but most authenticated screens haven't been adapted.
-- **XP / leveling system**: Sidebar badge is decorative. ProfileCompletionMeter stages are real but don't write to the `xp`/`level` columns.
 - **Push notifications / email digests**: Transactional emails ship (Resend, six event types + welcome). No push, no weekly digest.
 - **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state.
 - **Public-group-join email**: Joining a public group inserts a `group_member_joined` notification for admins, but that type isn't in the email function's `EMAIL_TYPES` set yet.
 - **Account deletion retention**: `delete_own_account` RPC hard-deletes immediately; no 30-day soft-delete grace period or admin recovery yet, despite Privacy Policy / Terms language implying retention.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.
+- **Lumens analytics**: PostHog `lumens_earned` and `tier_reached` events are not yet instrumented; tier crossings only update DB state, no event fires.
+- **Gold avatar ring in feed**: Av currently renders the `luminary`-tier ring on profile pages and the sidebar widget only. Feed `PostCard` avatars do not pass the `tier` prop — would require recreating `posts_with_meta` to expose author lumens/tier.
 
 ---
 
@@ -215,6 +237,11 @@ _Last updated: 2026-04-25 (rev 12)_
 - **`migration_email_notifications.sql`** (Phase 7A): adds `email_notif_new_follower`, `email_notif_new_message`, `email_notif_group_request`, `welcome_email_sent` to profiles; backfills existing users.
 - **`migration_email_notifications_v2.sql`** (Phase 7B): adds `email_notif_new_comment`, `email_notif_invite_redeemed`; respects master toggle for backfill.
 - **`migration_admin_interventions.sql`**: Creates `admin_config` table + RLS; seeds `luminary_board`, `paper_of_week`, `milestone_post_template` rows; adds `get_admin_config`, `set_admin_config`, `send_admin_post` RPCs; adds `is_admin_post` + `target_user_id` columns to `posts`; DROP+CREATE `posts_with_meta` view to include new columns.
+- **`migration_gamification.sql`** (Phase 8): adds `lumens_current_period`, `lumens_lifetime`, `current_period_started`, `previous_period_lumens`, `is_founding_member` to profiles; creates `lumen_transactions` table + RLS; adds `award_lumens`, `get_lumen_history` RPCs and `compute_tier` helper; seeds `founding_member_cutoff` admin_config; installs `apply_founding_member_status` trigger. Requires `alter publication supabase_realtime add table profiles;` for cross-user sidebar sync.
+- **`migration_admin_lumens.sql`** (Phase 8 follow-up): replaces `get_admin_user_list()` to also return `lumens_current_period`, `lumens_lifetime`, `is_founding_member`.
+- **`migration_storage_tracking.sql`** (Phase 9): creates `user_storage_files` table + RLS, adds `file_deleted_at` to posts / group_posts / project_posts, installs `record_storage_file`, `delete_user_file`, `get_my_storage_usage`, `get_admin_storage_usage` RPCs, backfills from `storage.objects`, and DROP+CREATEs all three `*_with_meta` views to expose `file_deleted_at`.
+- **`migration_storage_enriched.sql`** (Phase 9.1): replaces `get_my_storage_usage` to enrich each file row with `context_label`, `context_group_slug`, and `already_deleted` so the dedicated `StorageScreen` can show paper titles / content excerpts and per-row deep links.
+- **`migration_admin_storage_files.sql`** (Phase 9.2): adds the admin-only `get_admin_user_storage_files(p_user_id)` RPC for the per-user drill-down in the admin Storage section.
 
 ---
 
