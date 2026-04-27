@@ -10,12 +10,21 @@ export default function LibraryItemCard({
   folders,
   onMoveToFolder,
   onSharePaper,
+  onRename,
   showInlineMove = false,
 }) {
-  const [menuOpen,      setMenuOpen]      = useState(false);
+  const [menuOpen,       setMenuOpen]       = useState(false);
   const [showMovePicker, setShowMovePicker] = useState(false);
+  const [renaming,       setRenaming]       = useState(false);
+  const [renameValue,    setRenameValue]    = useState(item.title || '');
 
-  const hasMenu = !showInlineMove && (onDelete || (folders?.length > 0 && onMoveToFolder));
+  const hasMenu = !showInlineMove && (onDelete || (folders?.length > 0 && onMoveToFolder) || onRename);
+
+  const commitRename = () => {
+    const next = renameValue.trim();
+    if (next && next !== item.title) onRename?.(item, next);
+    setRenaming(false);
+  };
 
   return (
     <div style={{
@@ -32,9 +41,30 @@ export default function LibraryItemCard({
         </div>
       )}
 
-      <div style={{fontSize:13.5, fontWeight:700, lineHeight:1.4, marginBottom:4}}>
-        {item.title}
-      </div>
+      {renaming ? (
+        <div style={{marginBottom:6}}>
+          <input
+            autoFocus
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter')  { e.preventDefault(); commitRename(); }
+              if (e.key === 'Escape') { setRenaming(false); setRenameValue(item.title || ''); }
+            }}
+            onBlur={commitRename}
+            style={{width:'100%', fontSize:13.5, fontWeight:700, lineHeight:1.4,
+              padding:'5px 8px', borderRadius:7, fontFamily:'inherit',
+              border:`1.5px solid ${T.v}`, outline:'none', color:T.text}}
+          />
+          <div style={{fontSize:11, color:T.mu, marginTop:3}}>
+            Enter to save · Esc to cancel
+          </div>
+        </div>
+      ) : (
+        <div style={{fontSize:13.5, fontWeight:700, lineHeight:1.4, marginBottom:4}}>
+          {item.title}
+        </div>
+      )}
 
       {item.authors && (
         <div style={{fontSize:11.5, color:T.mu, marginBottom:4}}>
@@ -163,6 +193,21 @@ export default function LibraryItemCard({
                   zIndex:10, minWidth:160, overflow:'hidden',
                 }}
               >
+                {onRename && (
+                  <button
+                    onClick={() => { setRenameValue(item.title || ''); setRenaming(true); setMenuOpen(false); }}
+                    style={{
+                      display:'block', width:'100%', textAlign:'left',
+                      padding:'9px 14px', fontSize:13, fontFamily:'inherit',
+                      border:'none', background:'transparent', cursor:'pointer',
+                      color:T.text,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = T.s2}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    Rename
+                  </button>
+                )}
                 {folders?.length > 0 && onMoveToFolder && (
                   <button
                     onClick={() => { setShowMovePicker(true); setMenuOpen(false); }}

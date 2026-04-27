@@ -87,7 +87,7 @@ src/
 
 **Groups:** `groups` (`groups_with_stats` view), `group_members`, `group_posts` (`group_posts_with_meta` view), `group_post_likes`, `group_post_comments`, `group_join_requests`, `group_invites`, `group_follows`
 
-**Library:** `library_folders`, `library_items`
+**Library:** `library_folders`, `library_items`, `bookmark_folders`
 
 **Projects:** `projects`, `project_members`, `project_folders`, `project_posts` (`project_posts_with_meta` view), `project_post_likes`, `project_post_comments`, `community_templates`, `community_template_ratings`
 
@@ -100,6 +100,8 @@ src/
 - `groups.is_public` is authoritative visibility (`is_private` is legacy — never use)
 - `group_members.role` is plain TEXT (`'admin'|'member'|'alumni'`), not a PostgreSQL enum; legacy `'owner'` was migrated → `'admin'`
 - `library_items.folder_id` NULL = Unsorted inbox; query with `.is('folder_id', null)` not `.eq`
+- `bookmark_folders` — user's bookmark tree. Self-FK `parent_id` (CASCADE delete) gives nested folders; frontend caps at 2 levels (top + one level of subfolders). RLS: own-only.
+- `saved_posts.folder_id` (uuid, nullable, FK `bookmark_folders` ON DELETE SET NULL) — NULL = "Unsorted" bookmark. Deleting a folder unsets bookmarks (they don't disappear).
 - `projects`: personal → `user_id = created_by, group_id = NULL`; group → `user_id = NULL, group_id = group`
 - `post_reports`: CHECK exactly one of `post_id`/`group_post_id` must be set; UNIQUE(post_id, reporter_id)
 - `invite_codes`: personal = single-use via `claimed_by`; event = `is_multi_use=true`, tracked in `invite_code_uses`
