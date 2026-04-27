@@ -47,16 +47,18 @@ T.te2   = #f0f9ff   (teal tint)
 ```
 src/
   App.jsx, supabase.js, index.js
-  lib/        — constants.js (T, EDGE_FN, EDGE_HEADERS, LUMINARY_TEAM_USER_ID), utils.js,
-                referenceUtils.js, projectTemplates.js, profileMilestones.js, useWindowSize.js,
-                htmlUtils.js, fileUtils.js, linkedInUtils.js, pubUtils.js, useSuggestedTopics.js
+  lib/        — constants.js (T, EDGE_FN, EDGE_HEADERS, LUMINARY_TEAM_USER_ID, LUMENS_ENABLED,
+                TIER_CONFIG, getTierFromLumens, getNextTier, getProgressToNextTier),
+                utils.js, referenceUtils.js, projectTemplates.js, profileMilestones.js,
+                useWindowSize.js, htmlUtils.js, fileUtils.js, linkedInUtils.js, pubUtils.js,
+                useSuggestedTopics.js, analytics.js
   components/ — Av, Btn, Bdg, Inp, Spinner, FollowBtn, PaperPreview, FilePreview, SafeHtml,
                 RichTextEditor, ConflictResolverModal, ReportModal, ExpandableBio, Linkify,
                 LinkPreview, ShareModal, BottomNav, TopicInterestsPicker,
                 ProfileCompletionMeter, FeedTipCard, Footer
   screens/    — LandingScreen, LegalPage, AuthScreen, OnboardingScreen, NewPostScreen,
                 ExploreScreen, NotifsScreen, NetworkScreen, MessagesScreen,
-                AccountSettingsScreen, SettingsScreen, ResetPasswordScreen
+                AccountSettingsScreen, SettingsScreen, ResetPasswordScreen, LumensScreen
   feed/       — FeedScreen, PostCard
   profile/    — ProfileScreen, PublicationsTab, UserProfileScreen, PublicProfilePage,
                 ShareProfilePanel, PubRow, SectionGroup, BusinessCardView, CardPage,
@@ -79,7 +81,7 @@ src/
 
 ## Database Tables
 
-**Core:** `profiles`, `posts` (`posts_with_meta` view), `likes`, `comments`, `reposts`, `follows`, `publications`, `notifications`, `conversations`, `messages`, `saved_posts`
+**Core:** `profiles`, `posts` (`posts_with_meta` view), `likes`, `comments`, `reposts`, `follows`, `publications`, `notifications`, `conversations`, `messages`, `saved_posts`, `lumen_transactions`, `user_storage_files`
 
 **Groups:** `groups` (`groups_with_stats` view), `group_members`, `group_posts` (`group_posts_with_meta` view), `group_post_likes`, `group_post_comments`, `group_join_requests`, `group_invites`, `group_follows`
 
@@ -107,13 +109,18 @@ src/
 - `posts.is_featured`, `posts.featured_until`, `posts.featured_at` — columns exist in DB but are unused; featured post feature was removed from the frontend
 - `profiles.email_notif_new_follower`, `email_notif_new_message`, `email_notif_group_request`, `email_notif_new_comment`, `email_notif_invite_redeemed` — granular email-pref booleans (default true), each gating one Resend email type. Master switch is `profiles.email_notifications`; an OFF master skips all transactional email regardless of granular state.
 - `profiles.welcome_email_sent` — bool, default false. The `send-welcome-email` Edge Function flips this to true after first send so subsequent profile UPDATEs don't re-send. Existing users were backfilled to true in `migration_email_notifications.sql`.
+- `profiles.lumens_current_period`, `lumens_lifetime`, `current_period_started`, `previous_period_lumens`, `is_founding_member` — added in `migration_gamification.sql`. `lumens_current_period` drives the sidebar widget and tier; `lumens_lifetime` is monotonic. Tier is computed (not stored) via `getTierFromLumens(lumens_current_period)` (frontend) / `compute_tier()` (SQL helper).
+- `lumen_transactions` — append-only log of every Lumen award. Columns: `user_id`, `kind` (e.g. `post_created`, `comment_received`, `discussion_threshold`), `value`, `meta` JSONB (e.g. `{ post_id, commenter_id }`), `created_at`. RLS allows users to SELECT own rows + admins to SELECT all; no client INSERT — only via `award_lumens` SECURITY DEFINER RPC.
+- `admin_config.founding_member_cutoff` — JSONB seeded by migration; `apply_founding_member_status` trigger sets `profiles.is_founding_member = true` for signups before cutoff.
+- `user_storage_files` — append-only-ish log of every uploaded blob. Columns: `user_id`, `bucket`, `path`, `size_bytes`, `mime_type`, `file_name`, `source_kind` (one of `'post'|'group_post'|'library'|'avatar'|'group_avatar'|'group_cover'|'unknown'`), `source_id`. UNIQUE on (bucket, path) so avatar replacements (`upsert: true`) overwrite the row instead of duplicating. RLS: own SELECT + admin SELECT; no client INSERT/UPDATE/DELETE — only via the SECURITY DEFINER RPCs.
+- `posts.file_deleted_at`, `group_posts.file_deleted_at`, `project_posts.file_deleted_at` — timestamptz, nullable. Set by `delete_user_file` when the user deletes an attachment; image_url/file_name/file_type are nulled out at the same time. PostCard / GroupPostCard / ProjectPostCard render a "📎 File removed by author" placeholder when this is set instead of the file preview.
 
 ## RPCs
 
 All are SECURITY DEFINER. Admin-only RPCs require `is_admin = true` on the caller's profile.
 
 **Admin-only:**
-- `get_admin_user_list()` — all users with activation_stage, ghost_segment, last_active; bot excluded
+- `get_admin_user_list()` — all users with activation_stage, ghost_segment, last_active, **lumens_current_period, lumens_lifetime, is_founding_member**; bot excluded (replaced via `migration_admin_lumens.sql`)
 - `get_user_activation_stages()` — funnel counts per activation stage
 - `get_ghost_users()` — users with ≤2 actions, inactive 5+ days
 - `send_admin_nudge(p_target_user_ids, p_message, p_bot_user_id)` — DM users as bot; creates conversation if needed
@@ -132,6 +139,14 @@ All are SECURITY DEFINER. Admin-only RPCs require `is_admin = true` on the calle
 **Authenticated users:**
 - `claim_invite_code(p_code)` — personal codes only; sets `claimed_by`/`claimed_at`
 - `get_paper_stats_public()` — paper aggregates for POTW algorithm; filters hidden/admin posts, requires non-empty DOI+title, min engagement (≥2 posts OR ≥1 comment); returns `{ paper_doi, paper_title, paper_journal, paper_year, discussions, participants, total_comments }`
+- `award_lumens(p_kind, p_value, p_meta)` — fire-and-forget; inserts a `lumen_transactions` row + bumps `profiles.lumens_current_period` and `lumens_lifetime`. Skips silently for the Luminary Team bot. Always wrapped in `try/catch` and gated on `LUMENS_ENABLED` at call sites — must never block the user-facing action.
+- `get_lumen_history(p_limit)` — own transaction history for `LumensScreen`
+- `record_storage_file(p_bucket, p_path, p_size_bytes, p_mime_type, p_file_name, p_source_kind, p_source_id)` — fire-and-forget; upserts a `user_storage_files` row keyed on (bucket, path). **Must be called after every successful `supabase.storage.upload()`** — see Storage tracking convention below.
+- `delete_user_file(p_id)` — own-only. Returns `{ bucket, path }` for the client to call `supabase.storage.from(bucket).remove([path])`. Side-effects by `source_kind`: `post`/`group_post` → set `file_deleted_at = now()` + null out image_url/file_name/file_type; `library` → DELETE the library_items row; `avatar`/`group_avatar`/`group_cover` → raises an error (must be replaced, not deleted).
+- `get_my_storage_usage()` — returns `{ total_bytes, total_files, buckets: [{bucket, bytes, files}], files: [...] }`. Powers the user Storage panel in Account Settings; future quota check reads `total_bytes` from here.
+
+**Admin storage:**
+- `get_admin_storage_usage()` — returns `{ total_bytes, total_files, per_user: [...], per_bucket: [...] }`. Admin only.
 
 ## Edge Functions
 
@@ -169,5 +184,9 @@ App-callable functions use the anon JWT from `EDGE_HEADERS` in constants.js. Web
 - **Notification dedup** — DM send (`MessagesScreen.sendMessage`) and comment publish (`PostCard.submitComment` / `submitQuickReply`) only insert a notification if no unread notification of the same type already exists for the same `target_id`. This prevents bell-spam and per-message email floods on active threads.
 - **Notification insert sites** (frontend, no DB triggers): follow → FollowBtn; DM → MessagesScreen; comment → PostCard; group join request → GroupScreen.JoinRequestPanel; approve/leave/alumni/public-join → GroupMembers + GroupScreen.PublicJoinPanel; invite redeemed → AuthScreen.handleInviteSignup
 - **Analytics**: PostHog consent-gated via `analytics_consent_at` on profiles. `capture(event, properties)` from `src/lib/analytics.js` — import and call after successful Supabase operations. Never call before the await or in an error branch.
-- **Gamification**: XP/level badge in sidebar is decorative — not wired to real activity yet
+- **Fire-and-forget supabase.rpc**: `supabase.rpc()` returns a `PostgrestBuilder` which is `PromiseLike` (implements `.then()` only). It does **not** have `.catch()` — calling `.catch(() => {})` throws `TypeError: ....catch is not a function` synchronously and aborts the surrounding async function. Use the two-arg form `.then(() => {}, () => {})` for fire-and-forget rpc calls (or `await` inside a try/catch). The same applies to `supabase.from(...).select/insert/update/delete()` chains.
+- **Storage tracking (mandatory pattern)**: Every `supabase.storage.from(bucket).upload(...)` call site MUST follow up with a fire-and-forget `supabase.rpc('record_storage_file', { p_bucket, p_path, p_size_bytes: file.size, p_mime_type: file.type, p_file_name: file.name, p_source_kind, p_source_id }).then(() => {}, () => {})` — otherwise the file is invisible to the user's Storage panel, the admin roll-up, and any future quota check. `source_kind` must be one of `'post'|'group_post'|'library'|'avatar'|'group_avatar'|'group_cover'`. `source_id` is the row id of the linked record (post.id, library_items.id, user.id for avatars, group.id for group_avatar/cover). Pattern reference: `src/screens/NewPostScreen.jsx` (look for `uploadFileToStorage` returning `{ url, path }`, then the `record_storage_file` rpc call after the post insert returns). Per-user UI uses `get_my_storage_usage()`; deletion goes through `delete_user_file(p_id)` which returns `{ bucket, path }` so the client can call `supabase.storage.from(bucket).remove([path])` afterwards. Component reference: `src/components/StoragePanel.jsx`.
+- **Lumens (gamification)**: Live system. `LUMENS_ENABLED` flag in constants.js gates every `award_lumens` call site — never call the RPC unconditionally. Earning sites (frontend, no DB triggers): `post_created` (NewPostScreen +5), `comment_posted` (PostCard +2), `comment_received` (PostCard +10, deduped to first comment per commenter via `lumen_transactions` lookup), `post_reposted` (PostCard +20, skip self), `discussion_threshold` (PostCard +50 when distinct commenter count just hits 3, deduped via `lumen_transactions`), `invited_user_active` (NewPostScreen +100, async IIFE on first post, looks up `invite_codes.created_by`). Every call site wraps the RPC in `try/catch` with `.catch()` so failures cannot block the user-facing action. After awarding, optimistic `setProfile(p => ({ ...p, lumens_current_period: p.lumens_current_period + N }))` keeps the sidebar widget in sync; cross-user updates flow through the realtime profile subscription. Tiers (`Catalyst` 0–499 / `Pioneer` 500–1999 / `Beacon` 2000–4999 / `Luminary` 5000+) come from `TIER_CONFIG`. Only `luminary` tier renders any visible decoration: a gold (`#C9A961`) ring on the avatar via the optional `tier` prop on `Av`. The legacy decorative XP badge has been removed; ProfileCompletionMeter remains separate (milestones, not Lumens).
+- **Realtime profile sync**: App.jsx subscribes to a `postgres_changes` UPDATE on the user's own `profiles` row (channel `profile-self-${userId}`) and merges payload.new into `profile` state. Required because `award_lumens` runs server-side; this is what keeps the sidebar Lumens count in sync after a fire-and-forget RPC. Requires `alter publication supabase_realtime add table profiles;` in Supabase.
+- **`Av` tier prop**: Optional. When `tier === 'luminary'`, wraps the avatar in a 2px gold (#C9A961) ring via an outer div. Zero visual change for callers that omit the prop. Feed `PostCard` avatars do **not** yet pass the tier — gold ring is currently visible on profile pages and the sidebar widget only.
 - **Responsive**: no media queries; `useWindowSize` hook returns `{ isMobile }` (< 768px)
