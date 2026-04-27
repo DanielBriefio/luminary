@@ -132,7 +132,7 @@ export default function CreateProjectModal({
             p_reason:   'project_created',
             p_category: 'creation',
             p_meta:     { project_id: project.id },
-          }).catch(() => {});
+          }).then(() => {}, () => {});
         } catch {}
       }
       onProjectCreated(project.id);

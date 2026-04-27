@@ -64,7 +64,7 @@ export default function TemplatesSection({ supabase }) {
           p_reason:   'template_approved',
           p_category: 'recognition',
           p_meta:     { template_id: id },
-        }).catch(() => {});
+        }).then(() => {}, () => {});
       } catch {}
     }
     setActing(null);

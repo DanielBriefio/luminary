@@ -28,7 +28,7 @@ async function awardLumensForComment(post, commenterId) {
       p_reason:   'comment_posted',
       p_category: 'creation',
       p_meta:     { post_id: post.id },
-    }).catch(() => {});
+    }).then(() => {}, () => {});
 
     if (post?.user_id && post.user_id !== commenterId) {
       const { count } = await supabase
@@ -45,7 +45,7 @@ async function awardLumensForComment(post, commenterId) {
           p_reason:   'comment_received',
           p_category: 'engagement',
           p_meta:     { post_id: post.id, actor_id: commenterId },
-        }).catch(() => {});
+        }).then(() => {}, () => {});
       }
 
       // Discussion threshold: when distinct commenter count just hits 3,
@@ -72,7 +72,7 @@ async function awardLumensForComment(post, commenterId) {
             p_reason:   'discussion_threshold',
             p_category: 'recognition',
             p_meta:     { post_id: post.id },
-          }).catch(() => {});
+          }).then(() => {}, () => {});
         }
       }
     }
@@ -290,7 +290,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             p_reason:   'post_reposted',
             p_category: 'recognition',
             p_meta:     { post_id: post.id, actor_id: currentUserId },
-          }).catch(() => {});
+          }).then(() => {}, () => {});
         } catch {}
       }
     } else {

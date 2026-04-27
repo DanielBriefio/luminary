@@ -63,7 +63,7 @@ export default function CreateGroupModal({ user, onGroupCreated, onClose }) {
             p_reason:   'group_created',
             p_category: 'creation',
             p_meta:     { group_id: group.id },
-          }).catch(() => {});
+          }).then(() => {}, () => {});
         } catch {}
       }
       onGroupCreated(group.id);

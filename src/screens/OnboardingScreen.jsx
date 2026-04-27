@@ -137,7 +137,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
           p_reason:   'onboarding_completed',
           p_category: 'creation',
           p_meta:     {},
-        }).catch(() => {});
+        }).then(() => {}, () => {});
         setProfile(p => p ? {
           ...p,
           lumens_current_period: (p.lumens_current_period || 0) + 25,

@@ -408,7 +408,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           p_reason:   'post_created',
           p_category: 'creation',
           p_meta:     { post_id: newPost.id, post_type: resolvedPostType },
-        }).catch(() => {});
+        }).then(() => {}, () => {});
         // Optimistic local update so the sidebar widget reflects the +5 right
         // away without waiting for a profile re-fetch.
         setProfile?.(p => p ? {
@@ -439,7 +439,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
                 p_reason:   'invited_user_active',
                 p_category: 'recognition',
                 p_meta:     { invited_user_id: user.id },
-              }).catch(() => {});
+              }).then(() => {}, () => {});
             }
           } catch {}
         })();
