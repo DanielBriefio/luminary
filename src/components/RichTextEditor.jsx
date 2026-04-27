@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
-import { sanitiseHtml, toEmbedUrl } from '../lib/htmlUtils';
+import { sanitiseHtml, normalisePastedHtml, toEmbedUrl } from '../lib/htmlUtils';
 import Btn from './Btn';
 
 function TBtn({ label, title, onClick, active=false }) {
@@ -302,9 +302,10 @@ export default function RichTextEditor({
     const html  = e.clipboardData.getData('text/html');
     const plain = e.clipboardData.getData('text/plain');
     if (html) {
-      const tmp = document.createElement('div');
-      tmp.innerHTML = sanitiseHtml(html);
-      document.execCommand('insertHTML', false, tmp.innerHTML);
+      // Two-step: normalise style-encoded formatting (Word/Docs/web)
+      // into semantic tags, then sanitise to the allow-list.
+      const cleaned = sanitiseHtml(normalisePastedHtml(html));
+      document.execCommand('insertHTML', false, cleaned);
     } else {
       const linked = linkifyPlain(plain);
       if (linked) document.execCommand('insertHTML', false, linked);

@@ -21,6 +21,12 @@ const READING = {
   metaSize:    13,
   authorSize:  15,
   sidepadding: 24,
+  // Softer reading colour than T.text (#1b1d36 → ~12.6:1 contrast on T.bg
+  // is high enough to feel aggressive). #2d2f48 lands at ~9.7:1 — still
+  // WCAG AAA but easier on the eye for long-form reading. Used for body
+  // copy and headings on the article view; hierarchy is carried by font
+  // size + serif, not by colour.
+  textColor:   '#2d2f48',
 };
 
 function calcReadMins(content) {
@@ -73,7 +79,7 @@ function ArticleHeader({ post, author, readMins }) {
         <h1 style={{
           fontFamily:"'DM Serif Display', serif",
           fontSize: READING.titleSize,
-          color: T.text,
+          color: READING.textColor,
           lineHeight: 1.2,
           margin:'0 0 20px',
           fontWeight: 400,
@@ -139,7 +145,7 @@ function ArticleBody({ post, isDeepDive }) {
       style={{
         fontSize: READING.fontSize,
         lineHeight: READING.lineHeight,
-        color: T.text,
+        color: READING.textColor,
         fontFamily: isDeepDive
           ? "'DM Serif Display', Georgia, serif"
           : "'DM Sans', Arial, sans-serif",
@@ -150,22 +156,22 @@ function ArticleBody({ post, isDeepDive }) {
         .article-body p { margin: 0 0 ${READING.paraSpacing}px; }
         .article-body h1 {
           font-family: 'DM Serif Display', serif;
-          font-size: 32px; color: ${T.text};
+          font-size: 32px; color: ${READING.textColor};
           margin: 40px 0 16px; font-weight: 400; line-height: 1.25;
         }
         .article-body h2 {
           font-family: 'DM Serif Display', serif;
-          font-size: 26px; color: ${T.text};
+          font-size: 26px; color: ${READING.textColor};
           margin: 36px 0 14px; font-weight: 400; line-height: 1.3;
         }
         .article-body h3 {
           font-family: 'DM Sans', sans-serif;
-          font-size: 20px; font-weight: 700; color: ${T.text};
+          font-size: 20px; font-weight: 700; color: ${READING.textColor};
           margin: 28px 0 10px;
         }
         .article-body h4 {
           font-family: 'DM Sans', sans-serif;
-          font-size: 17px; font-weight: 700; color: ${T.text};
+          font-size: 17px; font-weight: 700; color: ${READING.textColor};
           margin: 22px 0 8px;
         }
         .article-body ul, .article-body ol {
@@ -187,7 +193,7 @@ function ArticleBody({ post, isDeepDive }) {
           aspect-ratio: 16/9; height: auto;
           border-radius: 8px; margin: 20px 0; display: block; border: 0;
         }
-        .article-body strong { font-weight: 700; color: ${T.text}; }
+        .article-body strong { font-weight: 700; color: ${READING.textColor}; }
       `}</style>
     </div>
   );
