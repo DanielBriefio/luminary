@@ -343,10 +343,15 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   const toggleTier2 = (t2) =>
     setFilterTier2(prev => prev.includes(t2) ? prev.filter(x => x !== t2) : [...prev, t2]);
 
-  const activeFilters = filterTier1.length + filterTier2.length + (tab !== 'all' ? 1 : 0);
+  // Tier filters are applied client-side; the content-type tab is applied at
+  // the server query level (post_type = 'paper'), so the client-side filter
+  // must NOT gate on the tab — otherwise turning on Papers excludes every
+  // post when no tier filters are set.
+  const tierFilterCount = filterTier1.length + filterTier2.length;
+  const activeFilters   = tierFilterCount + (tab !== 'all' ? 1 : 0);
 
   const filteredPosts = posts.filter(p => {
-    if (!activeFilters) return true;
+    if (!tierFilterCount) return true;
     if (filterTier1.includes(p.tier1)) return true;
     if (filterTier2.length && p.tier2?.some(t => filterTier2.includes(t))) return true;
     return false;
