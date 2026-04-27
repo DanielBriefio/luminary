@@ -15,6 +15,10 @@ import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
 
+const TRUNCATE_CHAR_THRESHOLD = 400;
+const TRUNCATE_LINE_HEIGHT    = 6;
+const DEEPDIVE_MIN_WORDS      = 50;
+
 // Awards Lumens for a comment: 2 to the commenter (creation), and 5 to the
 // post owner the first time each commenter comments on this post (engagement).
 // Self-comments earn no engagement Lumens. Best-effort — failures swallowed.
@@ -144,6 +148,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   const [showComments,setShowComments]   = useState(false);
   const [showShare,setShowShare]         = useState(false);
   const [showReport,setShowReport]       = useState(false);
+  const [expanded,setExpanded]           = useState(false);
 
   const [comments,  setComments]   = useState([]);
   const [commLoaded,setCommLoaded] = useState(false);
@@ -576,20 +581,99 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
               <button onClick={saveEdit} disabled={editSaving||!editText.trim()} style={{padding:"6px 16px",borderRadius:20,border:"none",background:T.v,cursor:"pointer",fontSize:12,fontFamily:"inherit",fontWeight:700,color:"#fff",opacity:(editSaving||!editText.trim())?.6:1}}>{editSaving?"Saving...":"Save changes"}</button>
             </div>
           </div>
-        ) : (
-          <>
-            {post.content&&(
-              <div className={post.is_deep_dive ? 'deep-dive-content' : undefined}
-                style={{fontSize: post.is_deep_dive ? 15 : undefined, lineHeight: post.is_deep_dive ? 1.7 : undefined}}>
-                <SafeHtml html={post.content} tags={post.tags} onTagClick={onTagClick}/>
+        ) : (() => {
+          const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
+          const wordCount = plain ? plain.split(/\s+/).filter(Boolean).length : 0;
+          const isDeepDive = post.is_deep_dive === true && wordCount >= DEEPDIVE_MIN_WORDS;
+          const cardBg = post.bg_color || T.w;
+
+          // Deep dive — article card replaces the content render entirely.
+          if (isDeepDive) {
+            const lines = plain.split('\n').filter(l => l.trim());
+            const extractedTitle = lines[0] && lines[0].length < 120 ? lines[0] : null;
+            const previewStart = extractedTitle ? plain.indexOf('\n') + 1 : 0;
+            const remaining    = plain.slice(previewStart).trim();
+            const previewText  = remaining.slice(0, 150).trim();
+            const preview      = previewText.length < remaining.length ? previewText + '…' : previewText;
+            const readMins     = Math.max(1, Math.round(wordCount / 200));
+            return (
+              <div
+                onClick={() => { window.location.href = `/s/${post.id}`; }}
+                style={{
+                  background: T.s2, border: `1px solid ${T.bdr}`, borderRadius: 10,
+                  padding: '14px 16px', cursor: 'pointer', marginTop: 4,
+                }}
+              >
+                <div style={{
+                  display:'inline-flex', alignItems:'center', gap:5,
+                  fontSize:11, fontWeight:700, color:T.v,
+                  textTransform:'uppercase', letterSpacing:0.5, marginBottom:8,
+                }}>
+                  📝 Article
+                </div>
+                {extractedTitle && (
+                  <div style={{
+                    fontFamily:"'DM Serif Display', serif", fontSize:17,
+                    color:T.text, lineHeight:1.35, marginBottom:6, fontWeight:400,
+                  }}>
+                    {extractedTitle}
+                  </div>
+                )}
+                {preview && (
+                  <div style={{ fontSize:13.5, color:T.mu, lineHeight:1.6, marginBottom:10 }}>
+                    {preview}
+                  </div>
+                )}
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <span style={{ fontSize:12, color:T.mu }}>{readMins} min read</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:T.v }}>Continue reading →</span>
+                </div>
               </div>
-            )}
-            {post.post_type==='text'&&(()=>{
-              const url = extractFirstUrl(post.content||'');
-              return url ? <LinkPreview url={url}/> : null;
-            })()}
-          </>
-        )}
+            );
+          }
+
+          // Regular text post — truncate when long, but never for paper or admin posts.
+          const needsTruncation =
+            post.post_type === 'text' &&
+            !post.is_admin_post &&
+            plain.length > TRUNCATE_CHAR_THRESHOLD;
+          const url = post.post_type === 'text' ? extractFirstUrl(post.content || '') : null;
+
+          return (
+            <>
+              {post.content && (needsTruncation && !expanded ? (
+                <div style={{ position:'relative' }}>
+                  <div style={{
+                    maxHeight: `${TRUNCATE_LINE_HEIGHT * 1.6 * 15}px`,
+                    overflow:'hidden',
+                  }}>
+                    <SafeHtml html={post.content} tags={post.tags} onTagClick={onTagClick}/>
+                  </div>
+                  <div style={{
+                    position:'absolute', bottom:0, left:0, right:0, height:48,
+                    background:`linear-gradient(to bottom, transparent, ${cardBg})`,
+                    pointerEvents:'none',
+                  }}/>
+                </div>
+              ) : (
+                <SafeHtml html={post.content} tags={post.tags} onTagClick={onTagClick}/>
+              ))}
+              {needsTruncation && (
+                <button
+                  onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+                  style={{
+                    background:'none', border:'none', padding:'4px 0 0',
+                    cursor:'pointer', fontSize:13.5, fontWeight:600, color:T.v,
+                    fontFamily:'inherit', display:'block',
+                  }}
+                >
+                  {expanded ? 'Show less' : 'Read more'}
+                </button>
+              )}
+              {url && <LinkPreview url={url}/>}
+            </>
+          );
+        })()}
 
         {post.file_deleted_at ? (
           <div style={{

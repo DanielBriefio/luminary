@@ -7,7 +7,11 @@ import SafeHtml from '../components/SafeHtml';
 import PaperPreview from '../components/PaperPreview';
 import FilePreview from '../components/FilePreview';
 
+const TRUNCATE_CHAR_THRESHOLD = 400;
+const TRUNCATE_LINE_HEIGHT    = 6;
+
 export default function ProjectPostCard({ post, currentUserId, myRole, activeFolderId, onRefresh }) {
+  const [contentExpanded, setContentExpanded] = useState(false);
   const [liked,         setLiked]         = useState(post.user_liked || false);
   const [likeCount,     setLikeCount]     = useState(parseInt(post.like_count) || 0);
   const [sticky,        setSticky]        = useState(post.is_sticky || false);
@@ -210,11 +214,43 @@ export default function ProjectPostCard({ post, currentUserId, myRole, activeFol
         </div>
       ) : (
         <>
-          {post.post_type === 'text' && post.content && (
-            <div style={{ fontSize: 13.5, lineHeight: 1.65, color: T.text, marginBottom: 8 }}>
-              <SafeHtml html={post.content}/>
-            </div>
-          )}
+          {post.post_type === 'text' && post.content && (() => {
+            const plain = post.content.replace(/<[^>]+>/g, '').trim();
+            const needsTruncation = plain.length > TRUNCATE_CHAR_THRESHOLD;
+            return (
+              <div style={{ fontSize: 13.5, lineHeight: 1.65, color: T.text, marginBottom: 8 }}>
+                {needsTruncation && !contentExpanded ? (
+                  <div style={{ position:'relative' }}>
+                    <div style={{
+                      maxHeight: `${TRUNCATE_LINE_HEIGHT * 1.6 * 15}px`,
+                      overflow:'hidden',
+                    }}>
+                      <SafeHtml html={post.content}/>
+                    </div>
+                    <div style={{
+                      position:'absolute', bottom:0, left:0, right:0, height:48,
+                      background:`linear-gradient(to bottom, transparent, ${T.w})`,
+                      pointerEvents:'none',
+                    }}/>
+                  </div>
+                ) : (
+                  <SafeHtml html={post.content}/>
+                )}
+                {needsTruncation && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setContentExpanded(v => !v); }}
+                    style={{
+                      background:'none', border:'none', padding:'4px 0 0',
+                      cursor:'pointer', fontSize:13.5, fontWeight:600, color:T.v,
+                      fontFamily:'inherit', display:'block',
+                    }}
+                  >
+                    {contentExpanded ? 'Show less' : 'Read more'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
           {post.post_type === 'paper' && post.paper_title && (
             <PaperPreview post={post}/>
           )}

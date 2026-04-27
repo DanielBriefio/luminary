@@ -12,6 +12,9 @@ import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ReportModal from '../components/ReportModal';
 
+const TRUNCATE_CHAR_THRESHOLD = 400;
+const TRUNCATE_LINE_HEIGHT    = 6;
+
 function GranularTags({ tags }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? tags : tags.slice(0, 3);
@@ -51,6 +54,7 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
   const [reposting,     setReposting]     = useState(false);
   const [reposted,      setReposted]      = useState(post.is_reposted_public || false);
 
+  const [contentExpanded, setContentExpanded] = useState(false);
   const [showComments,  setShowComments]  = useState(false);
   const [comments,      setComments]      = useState([]);
   const [commLoaded,    setCommLoaded]    = useState(false);
@@ -353,15 +357,47 @@ export default function GroupPostCard({ post, currentUserId, currentProfile, gro
               </button>
             </div>
           </div>
-        ) : (
-          <>
-            {post.content && <SafeHtml html={post.content} tags={post.tags}/>}
-            {post.post_type === 'text' && (() => {
-              const url = extractFirstUrl(post.content || '');
-              return url ? <LinkPreview url={url}/> : null;
-            })()}
-          </>
-        )}
+        ) : (() => {
+          const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
+          const needsTruncation =
+            post.post_type === 'text' &&
+            plain.length > TRUNCATE_CHAR_THRESHOLD;
+          const url = post.post_type === 'text' ? extractFirstUrl(post.content || '') : null;
+          return (
+            <>
+              {post.content && (needsTruncation && !contentExpanded ? (
+                <div style={{ position:'relative' }}>
+                  <div style={{
+                    maxHeight: `${TRUNCATE_LINE_HEIGHT * 1.6 * 15}px`,
+                    overflow:'hidden',
+                  }}>
+                    <SafeHtml html={post.content} tags={post.tags}/>
+                  </div>
+                  <div style={{
+                    position:'absolute', bottom:0, left:0, right:0, height:48,
+                    background:`linear-gradient(to bottom, transparent, ${T.w})`,
+                    pointerEvents:'none',
+                  }}/>
+                </div>
+              ) : (
+                <SafeHtml html={post.content} tags={post.tags}/>
+              ))}
+              {needsTruncation && (
+                <button
+                  onClick={e => { e.stopPropagation(); setContentExpanded(v => !v); }}
+                  style={{
+                    background:'none', border:'none', padding:'4px 0 0',
+                    cursor:'pointer', fontSize:13.5, fontWeight:600, color:T.v,
+                    fontFamily:'inherit', display:'block',
+                  }}
+                >
+                  {contentExpanded ? 'Show less' : 'Read more'}
+                </button>
+              )}
+              {url && <LinkPreview url={url}/>}
+            </>
+          );
+        })()}
 
         {/* File / image */}
         {post.file_deleted_at ? (
