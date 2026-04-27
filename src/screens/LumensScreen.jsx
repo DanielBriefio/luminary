@@ -12,7 +12,6 @@ const REASON_LABELS = {
   project_created:      { label: 'You created a project',            icon: '🗂️' },
   onboarding_completed: { label: 'You completed onboarding',         icon: '✓'  },
   comment_received:     { label: 'Your post received a comment',     icon: '💬' },
-  library_saved:        { label: 'Your library item was saved',      icon: '🔖' },
   post_reposted:        { label: 'Your post was reposted',           icon: '↻'  },
   invited_user_active:  { label: 'A user you invited became active', icon: '🎟️' },
   template_approved:    { label: 'Your template was approved',       icon: '📋' },
@@ -37,7 +36,6 @@ const RULES = [
     description: 'Lumens earned when others engage with your contributions',
     items: [
       { label: 'A user comments on your post (first time per user)', amount: 10 },
-      { label: 'A user saves your library item',                    amount: 5  },
     ],
   },
   {
