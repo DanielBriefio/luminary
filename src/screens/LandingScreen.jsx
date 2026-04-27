@@ -464,6 +464,119 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         </div>
       </section>
 
+      {/* ── Privacy & trust ── */}
+      <section style={{
+        background: T.w,
+        borderTop: `1px solid ${T.bdr}`,
+        borderBottom: `1px solid ${T.bdr}`,
+        padding: isMobile ? '40px 20px' : '56px 32px',
+      }}>
+        <div style={{ maxWidth: 760, margin: '0 auto' }}>
+          <h2 style={{
+            fontFamily: "'DM Serif Display', serif",
+            fontSize: isMobile ? 24 : 30, color: T.text,
+            textAlign: 'center', margin: '0 0 10px',
+          }}>
+            Built for scientists, not advertisers
+          </h2>
+          <p style={{
+            fontSize: isMobile ? 14 : 15, color: T.mu, lineHeight: 1.7,
+            textAlign: 'center', maxWidth: 540,
+            margin: isMobile ? '0 auto 24px' : '0 auto 36px',
+          }}>
+            Your data never leaves Luminary. We built this platform
+            without the tracking infrastructure that funds most
+            social networks.
+          </p>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+            gap: 16, marginBottom: 28,
+          }}>
+            {[
+              { icon: '🚫', label: 'No third-party tracking', desc: 'No retargeting pixels, advertising networks, or cross-site tracking of any kind.' },
+              { icon: '📊', label: 'Analytics with your consent', desc: 'Usage analytics are anonymised and only collected after you explicitly say yes.' },
+              { icon: '🔒', label: 'Your data never sold', desc: 'We will never sell or share your personal data with third parties — ever.' },
+              { icon: '✉️', label: 'You control your inbox', desc: 'Granular notification controls. No marketing emails without your permission.' },
+            ].map(item => (
+              <div key={item.label} style={{
+                padding: '18px 20px', borderRadius: 12,
+                border: `1px solid ${T.bdr}`, background: T.bg,
+                display: 'flex', gap: 14, alignItems: 'flex-start',
+              }}>
+                <div style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{item.icon}</div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+                    {item.label}
+                  </div>
+                  <div style={{ fontSize: 13, color: T.mu, lineHeight: 1.6 }}>
+                    {item.desc}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{
+            fontSize: 12.5, color: T.mu, lineHeight: 1.6,
+            textAlign: 'center', maxWidth: 500, margin: '0 auto',
+          }}>
+            If we ever introduce sponsored content in the future, it will
+            always be clearly labelled, kept within Luminary, and never
+            require sharing your data with advertisers.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Free tier statement ── */}
+      <section style={{
+        background: T.v2,
+        borderTop: `1px solid ${T.v}30`,
+        borderBottom: `1px solid ${T.v}30`,
+        padding: isMobile ? '28px 20px' : '32px 32px',
+      }}>
+        <div style={{
+          maxWidth: 760, margin: '0 auto',
+          display: 'flex',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: 'space-between',
+          gap: isMobile ? 16 : 24,
+          flexWrap: 'wrap',
+        }}>
+          <div>
+            <div style={{
+              fontSize: isMobile ? 16 : 18, fontWeight: 700,
+              color: T.v3, marginBottom: 6,
+              fontFamily: "'DM Serif Display', serif",
+            }}>
+              ✦ Luminary is free
+            </div>
+            <div style={{
+              fontSize: 14, color: T.v,
+              lineHeight: 1.6, maxWidth: 480,
+            }}>
+              No credit card. No hidden fees. No premium tier blocking
+              core features. Science should be accessible — so Luminary
+              is free to use.
+            </div>
+          </div>
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+            gap: 6, flexShrink: 0,
+          }}>
+            {[
+              '✓  Full access to all features',
+              '✓  No credit card required',
+              '✓  No hidden fees or premium tiers',
+            ].map(item => (
+              <div key={item} style={{ fontSize: 13, color: T.v3, fontWeight: 500 }}>
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── Waitlist ── */}
       <section
         ref={waitlistRef}

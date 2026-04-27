@@ -603,6 +603,31 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
   // ── Shared consent block (used in both signup paths) ─────────────────────
   const ConsentBlock = ({ consentTerms, setConsentTerms, consentNotifications, setConsentNotifications, consentMarketing, setConsentMarketing, consentAnalytics, setConsentAnalytics }) => (
+    <>
+      {/* Privacy context box — sits above the consent toggles */}
+      <div style={{
+        marginTop: 16,
+        background: T.v2,
+        border: `1px solid ${T.v}30`,
+        borderRadius: 12,
+        padding: '16px 18px',
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.v3, marginBottom: 8 }}>
+          🔒 A note on privacy
+        </div>
+        <p style={{ fontSize: 13.5, color: T.text, lineHeight: 1.7, margin: '0 0 10px' }}>
+          Luminary doesn't share your data with third parties, run
+          retargeting pixels, or sell your information to advertisers.
+          The only analytics we collect are anonymised usage events —
+          and only with your consent below.
+        </p>
+        <p style={{ fontSize: 13, color: T.mu, lineHeight: 1.6, margin: 0 }}>
+          If we ever introduce sponsored content in the future, it will
+          always be clearly labelled and you'll always be able to opt out.
+          Your science, your connections, and your data stay yours.
+        </p>
+      </div>
+
     <div style={{ marginTop: 16, padding: '14px 16px', background: T.s2, borderRadius: 12, border: `1px solid ${T.bdr}` }}>
       <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
         <input type="checkbox" checked={consentTerms} onChange={e => setConsentTerms(e.target.checked)}
@@ -640,6 +665,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         </span>
       </label>
     </div>
+    </>
   );
 
   // ── Main render ───────────────────────────────────────────────────────────

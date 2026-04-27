@@ -104,6 +104,28 @@ function renderWelcomeHtml(name: string, profileUrl: string): string {
           <p style="margin:0 0 12px;">… and much more to explore.</p>
           <p style="margin:0 0 12px;">Your first step: <strong>complete your profile</strong> and share your first paper. See you inside.</p>
           <p style="margin:0 0 12px;">By the way — why did you join Luminary? Reply to this email, I will always answer!</p>
+
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+            <tr>
+              <td style="background:#f2f3fb;border:1px solid #e2e4f0;border-radius:10px;padding:16px 18px;">
+                <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#6c63ff;">
+                  🔒 Your data, your science
+                </p>
+                <p style="margin:0 0 8px;font-size:13.5px;color:#1a1b2e;line-height:1.7;">
+                  Luminary was built without third-party tracking, retargeting
+                  pixels, or data brokers. We will never sell your data.
+                  If we ever introduce sponsored content, it will always be
+                  clearly labelled — and you'll always be able to opt out.
+                </p>
+                <p style="margin:0;font-size:13px;color:#8b8fa8;line-height:1.6;">
+                  ✦ Luminary is free — no credit card, no hidden fees, no
+                  premium tier blocking core features. Science should be
+                  accessible.
+                </p>
+              </td>
+            </tr>
+          </table>
+
           <p style="margin:0 0 4px;">Warm regards,</p>
           <p style="margin:0 0 4px;"><strong>Daniel</strong></p>
           <p style="margin:0;">Science enthusiast and Creator of Luminary</p>
