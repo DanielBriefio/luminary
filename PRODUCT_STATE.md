@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-27 (rev 15)_
+_Last updated: 2026-04-28 (rev 16)_
 
 ## What exists and works
 
@@ -27,17 +27,18 @@ _Last updated: 2026-04-27 (rev 15)_
 - Like, comment (threaded, inline), edit, delete, repost
 - Quick-reply input on PostCard hides whenever the inline comment thread is open — no double-input UI
 - **Long-post truncation**: text posts > 400 chars clip to ~6 lines with a gradient fade and inline Read more / Show less. Paper posts and admin posts are never truncated. Same behaviour in `GroupPostCard` and `ProjectPostCard`.
-- **Deep-dive article card** (PostCard only): when `is_deep_dive` and content has ≥50 words, the body is replaced with a compact preview (extracted serif title, ~325-char preview, read-time, "Continue reading →") that links to `/s/:postId`.
+- **Deep-dive article card** (PostCard only): when `is_deep_dive` and content has ≥50 words, the body is replaced with a compact preview — optional cover image (full-width 200px, object-cover, rounded top corners), explicit `deep_dive_title` (or first-line extraction for old posts), ~325-char preview, read-time, and "Continue reading →" linking to `/s/:postId`.
 - AI auto-tagging via `auto-tag` edge function; manual hashtags; visibility (Everyone / Followers only)
 - Right sidebar: Paper of the Week (config-driven — `most_discussed` total posts, `most_commented` total comments, or admin manual DOI pick; uses `get_paper_stats_public()` RPC; min engagement filter ≥2 posts OR ≥1 comment) + Founding Fellows banner
 - `FeedTipCard` / Luminary Board: shows admin-configured board message (title, message, optional CTA) when `admin_config.luminary_board.enabled = true`; falls back to cycling `FEED_TIPS` from constants.js when board is off or unconfigured
 
 ### Rich-text editor (NewPostScreen, PostCard edit, ComposeTab, project + group composers)
 - Shared component `RichTextEditor`. Default mode: bold / italic / underline / lists / Style dropdown (Paragraph / Heading / Subheading) / link
-- **Deep-dive mode** (`isDeepDive=true`): WYSIWYG body matching the published `PublicPostPage` typography (serif 20px / 1.7, h1-h4 + blockquote + img + iframe), Style dropdown extended to H1-H4, plus ❝ blockquote, ─ divider, 📄 Cite, 🖼️ image, ▶ video. **Sticky toolbar** stays pinned to the top of the viewport while scrolling long articles
-- **Inline images** (deep-dive): file picker → uploads to `post-files` bucket → inserts `<img>`. Storage tracking handled per the convention: pass `postId` to record immediately, or `onPendingImage` to defer (NewPostScreen flushes via `pendingImagesRef` after the post insert)
+- **Deep-dive mode** (`isDeepDive=true`): WYSIWYG body matching the published `PublicPostPage` typography (Source Serif 4 20px / 1.7, h1-h4 + blockquote + img + iframe), Style dropdown extended to H1-H4, plus ❝ blockquote, ─ divider, 📄 Cite, 🖼️ image, ▶ video. **Sticky toolbar** stays pinned to the top of the viewport while scrolling long articles. NewPostScreen also surfaces a serif **Title input** + **Cover image uploader** above the editor when deep-dive is on (saved to `posts.deep_dive_title` / `posts.deep_dive_cover_url`).
+- **Inline images** (deep-dive): file picker → uploads to `post-files` bucket → inserts `<img>`. Storage tracking handled per the convention: pass `postId` to record immediately, or `onPendingImage` to defer (NewPostScreen flushes via `pendingImagesRef` after the post insert). Cover image follows the same deferred-record flow.
 - **Video embeds** (deep-dive): YouTube / Vimeo URL → normalised through `toEmbedUrl()` into the canonical `/embed/` form → inserted as a sandboxed `<iframe>` (sanitiser rejects any other iframe src)
 - **DOI cite** (deep-dive): inserts `<sup>(N)</sup>` at cursor + appends a Vancouver-style numbered reference at the bottom; deep-link to `https://doi.org/<doi>`
+- **Pasted HTML** (Word / Docs / web pages): runs through `normalisePastedHtml()` first — converts style-encoded `font-weight`/`font-style`/`text-decoration` spans into `<strong>` / `<em>` / `<u>`, strips `<xml>` blocks, conditional comments, and `o:`/`w:`/`m:`/`v:` namespaced Word elements — then through `sanitiseHtml()` to the allow-list. Bold / italic / headings / lists from Word and Docs survive cleanly.
 
 ### Explore
 - Tabs: Posts, Researchers, Papers, Groups
@@ -115,8 +116,8 @@ _Last updated: 2026-04-27 (rev 15)_
 
 ### Public Post (`/s/:postId`)
 - Substack-style article reading view: 680px column on `T.bg`, fixed scroll progress bar, conditional "← Back" link, top bar (Lumi/nary + "Join Luminary →" hidden when signed in)
-- `ArticleHeader`: 40px author avatar (with tier ring), author name + title + institution + formatted date + read time; large serif title (extracted from first line for deep dives < 120 chars)
-- `ArticleBody`: 20px / 1.7 reading typography. Serif body for deep dives, DM Sans for regular posts. Scoped CSS for h1 / h2 / h3 / h4 / blockquote / lists / images / iframes
+- `ArticleHeader`: optional cover image at the top (full-width, natural height, 8px radius) for deep dives with `deep_dive_cover_url` set; 40px author avatar (with tier ring); author name + title + institution + formatted date + read time; large serif title — prefers `deep_dive_title`, falls back to first-line extraction (< 120 chars) for older deep dives
+- `ArticleBody`: 20px / 1.7 reading typography. **Source Serif 4** for deep dives (regular + bold cuts so emphasis is visible — DM Serif Display only ships at weight 400), DM Sans for regular posts. Scoped CSS for h1 / h2 / h3 / h4 / blockquote / lists / images / iframes. Sanitised HTML is rendered directly (not via `<SafeHtml>`, whose outer wrapper would inject a 13px font-size). The first content line is only stripped from the body when the title was implicit — explicit-title deep dives keep their full body intact.
 - `ArticleFooter`: divider + author bio card (avatar + bio + Follow) + Share + 💬 Join the discussion (smooth-scrolls to comments)
 - `CommentsSection`: real comments table (joined to profiles), readable by everyone, signed-in users get a textarea (Enter to submit, own-comment delete). Unauth visitors see a violet "Sign in to join the discussion" CTA
 - Auth detected inside the page via `getSession` + `onAuthStateChange`
@@ -267,6 +268,7 @@ _Last updated: 2026-04-27 (rev 15)_
 - **`migration_admin_storage_files.sql`** (Phase 9.2): adds the admin-only `get_admin_user_storage_files(p_user_id)` RPC for the per-user drill-down in the admin Storage section.
 - **`migration_account_soft_delete.sql`** + **`migration_account_soft_delete_fix.sql`** (Phase 10): adds `profiles.deletion_scheduled_at`, rewrites `delete_own_account()` (returns timestamptz; inserts `account_deletion_scheduled` notification using `notif_type` column — fix migration patches the original which used wrong column name `type`), adds `cancel_account_deletion()` and `purge_deleted_accounts()`, DROP+CREATE `posts_with_meta` to filter deletion-pending authors. pg_cron schedule pinned in a comment block — run manually once.
 - **`migration_bookmark_folders.sql`** (Phase 11): creates `bookmark_folders` (self-FK `parent_id`) + RLS, adds `saved_posts.folder_id` (FK ON DELETE SET NULL so deleting a folder unsets bookmarks instead of dropping them).
+- **`migration_deepdive_title_cover.sql`** (Phase 12): adds `posts.deep_dive_title` + `posts.deep_dive_cover_url`, then DROP+CREATE `posts_with_meta` so the new columns flow through the view (preserves the deletion-pending filter from Phase 10).
 
 ---
 
