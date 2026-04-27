@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabase';
 import { initAnalytics, optInAndIdentify, optOutAndReset, capturePageview } from './lib/analytics';
-import { T, NAV, TIER_CONFIG, getTierFromLumens, getProgressToNextTier } from './lib/constants';
+import { T, NAV, TIER_CONFIG, getTierFromLumens } from './lib/constants';
 import Av from './components/Av';
 import Spinner from './components/Spinner';
 import BottomNav from './components/BottomNav';
@@ -631,9 +631,8 @@ export default function App() {
               )}
             </div>
             <div style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
-              {NAV.map(n=>(
+              {NAV.filter(n=>n.id!=='notifs').map(n=>(
                 <div key={n.id} onClick={()=>{
-                  if(n.id==='notifs') setUnreadNotifs(0);
                   if(n.id==='groups') setActiveGroupId(null);
                   setScreen(n.id);
                   capturePageview(n.id);
@@ -661,26 +660,13 @@ export default function App() {
               ))}
             </div>
             <div style={{padding:"12px 14px",borderTop:`1px solid ${T.bdr}`}}>
-              <LumensSidebarWidget profile={profile} onClick={()=>setScreen('lumens')}/>
-              <div style={{display:"flex",alignItems:"center",gap:9}}>
-                <div onClick={()=>setScreen('profile')}
-                  title="My Profile"
-                  style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,cursor:"pointer",borderRadius:8,padding:"3px 4px",margin:"-3px -4px",transition:"background .15s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.s2}
-                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <Av color={profile?.avatar_color||"me"} size={32} name={profile?.name} url={profile?.avatar_url||""} tier={getTierFromLumens(profile?.lumens_current_period)}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.name||user.email?.split('@')[0]}</div>
-                    <div style={{fontSize:10,color:T.mu,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.institution||user.email}</div>
-                  </div>
-                </div>
-                <button onClick={()=>setShowSettings(true)} title="Settings"
-                  style={{fontSize:13,cursor:"pointer",border:"none",background:"transparent",color:T.mu,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",width:22,height:22}}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                  </svg>
-                </button>
-              </div>
+              <ProfileLumensBox
+                profile={profile}
+                user={user}
+                onProfileClick={()=>setScreen('profile')}
+                onLumensClick={()=>setScreen('lumens')}
+                onSettingsClick={()=>setShowSettings(true)}
+              />
               {/* Invite colleagues button */}
               <button onClick={()=>setShowInvites(true)} style={{
                 display:'flex',alignItems:'center',gap:8,
@@ -847,6 +833,45 @@ export default function App() {
           paddingBottom: isMobile ? 60 : 0,
           paddingTop: isMobile ? 52 : 0,
         }}>
+          {/* Top bar with notification bell — desktop only */}
+          {!isMobile && (
+            <div style={{
+              height: 44, flexShrink: 0,
+              borderBottom: `1px solid ${T.bdr}`, background: T.w,
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+              padding: '0 20px', gap: 8,
+            }}>
+              <button
+                onClick={() => { setUnreadNotifs(0); setScreen('notifs'); capturePageview('notifs'); }}
+                title="Notifications"
+                style={{
+                  position: 'relative',
+                  width: 32, height: 32, borderRadius: 8,
+                  border: 'none', background: screen==='notifs' ? T.v2 : 'transparent',
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: screen==='notifs' ? T.v : T.mu,
+                }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                {unreadNotifs > 0 && (
+                  <span style={{
+                    position: 'absolute', top: -2, right: -2,
+                    minWidth: 16, height: 16, padding: '0 4px',
+                    borderRadius: 20, background: T.ro, color: '#fff',
+                    fontSize: 10, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: `2px solid ${T.w}`,
+                  }}>
+                    {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
           {screens[screen]||screens.feed}
         </div>
 
@@ -859,56 +884,62 @@ export default function App() {
   );
 }
 
-// Personal sidebar widget: shows tier name, current Lumens, progress to next
-// tier (not the top tier). Only visible to the user themselves — it lives in
-// the personal nav. Until migration_gamification.sql runs, profile.lumens_*
-// fields are undefined and the widget gracefully renders Catalyst / 0.
-function LumensSidebarWidget({ profile, onClick }) {
-  const lumens     = Number(profile?.lumens_current_period) || 0;
-  const tier       = getTierFromLumens(lumens);
-  const cfg        = TIER_CONFIG[tier];
-  const { progress, needed, nextTier } = getProgressToNextTier(lumens, tier);
-  const isTop = !nextTier;
+// Personal sidebar bottom row: avatar + name + tier · Lumens line + gear.
+// Replaces the previous standalone Lumens widget and the old name+institution
+// row. Click the name area → profile, click the tier line → Lumens screen,
+// click the gear → settings. Until migration_gamification.sql has been run,
+// profile.lumens_current_period is undefined and the widget gracefully
+// renders "✦ Catalyst · 0".
+function ProfileLumensBox({ profile, user, onProfileClick, onLumensClick, onSettingsClick }) {
+  const lumens = Number(profile?.lumens_current_period) || 0;
+  const tier   = getTierFromLumens(lumens);
+  const cfg    = TIER_CONFIG[tier];
+  const displayName = profile?.name || user?.email?.split('@')[0] || '';
 
   return (
-    <button
-      onClick={onClick}
-      title="View Lumens history"
-      style={{
-        width:'100%', textAlign:'left', cursor:'pointer',
-        background:cfg.bg, border:`1px solid ${cfg.color}33`, borderRadius:9,
-        padding:'8px 11px', marginBottom:10, fontFamily:'inherit',
-        transition:'transform .12s ease',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
-    >
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <span style={{fontSize:10, fontWeight:700, color:cfg.color, letterSpacing:0.4, textTransform:'uppercase'}}>
-          ✦ {cfg.name}
-        </span>
-        <span style={{fontSize:9.5, color:T.mu, fontWeight:600}}>
-          {lumens.toLocaleString()} Lumens
-        </span>
+    <div style={{display:'flex', alignItems:'center', gap:9}}>
+      <div onClick={onProfileClick} title="My profile"
+        style={{cursor:'pointer', flexShrink:0}}>
+        <Av
+          color={profile?.avatar_color||'me'} size={32}
+          name={profile?.name} url={profile?.avatar_url||''}
+          tier={tier}
+        />
       </div>
-      {!isTop ? (
-        <>
-          <div style={{height:4, background:T.s3, borderRadius:2, marginTop:5, overflow:'hidden'}}>
-            <div style={{
-              height:'100%', width:`${progress}%`,
-              background:cfg.color, borderRadius:2,
-              transition:'width 0.4s ease',
-            }}/>
-          </div>
-          <div style={{fontSize:9.5, color:T.mu, marginTop:4}}>
-            {needed.toLocaleString()} to {TIER_CONFIG[nextTier].name}
-          </div>
-        </>
-      ) : (
-        <div style={{fontSize:9.5, color:T.mu, marginTop:5}}>
-          You've reached the top tier.
+      <div style={{flex:1, minWidth:0}}>
+        <div onClick={onProfileClick}
+          style={{
+            fontSize:12, fontWeight:600,
+            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+            cursor:'pointer',
+          }}>
+          {displayName}
         </div>
-      )}
-    </button>
+        <div onClick={onLumensClick} title="View Lumens history"
+          style={{
+            fontSize:10, color:cfg.color, fontWeight:700,
+            cursor:'pointer', letterSpacing:0.3,
+            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+          }}>
+          ✦ {cfg.name.toUpperCase()}
+          <span style={{color:T.mu, fontWeight:600, marginLeft:5, letterSpacing:0}}>
+            · {lumens.toLocaleString()} Lumens
+          </span>
+        </div>
+      </div>
+      <button onClick={onSettingsClick} title="Settings"
+        style={{
+          fontSize:13, cursor:'pointer', border:'none',
+          background:'transparent', color:T.mu, flexShrink:0,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          width:22, height:22,
+        }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
   );
 }
