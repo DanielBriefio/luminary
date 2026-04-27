@@ -573,7 +573,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                   onMouseEnter={e => e.currentTarget.style.borderColor = T.v}
                   onMouseLeave={e => e.currentTarget.style.borderColor = T.bdr}
                 >
-                  ✏️ Share something with the scientific community…
+                  ✏️ Share a paper, insight, or deep dive…
                 </button>
               )}
               {fp==='sug'&&feedMode==='personalised'&&!profile?.topic_interests?.length&&(
