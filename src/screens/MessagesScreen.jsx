@@ -46,16 +46,18 @@ function ConversationRow({ conv, isActive, onClick }) {
     >
       <Av
         size={40}
-        color={conv.otherUser?.avatar_color || 'me'}
-        name={conv.otherUser?.name}
+        color={conv.otherUser?.avatar_color || T.bdr}
+        name={conv.otherUser?.name || '?'}
         url={conv.otherUser?.avatar_url || ''}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontSize: 13, fontWeight: 700,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          color: conv.otherUser ? T.text : T.mu,
+          fontStyle: conv.otherUser ? 'normal' : 'italic',
         }}>
-          {conv.otherUser?.name || 'Unknown'}
+          {conv.otherUser?.name || 'Deleted user'}
         </div>
         <div style={{
           fontSize: 12, color: T.mu, marginTop: 2,
@@ -97,14 +99,28 @@ function MessageThread({
             ←
           </button>
         )}
-        <Av size={36} color={otherUser?.avatar_color} name={otherUser?.name} url={otherUser?.avatar_url || ''} />
+        <Av
+          size={36}
+          color={otherUser?.avatar_color || T.bdr}
+          name={otherUser?.name || '?'}
+          url={otherUser?.avatar_url || ''}
+        />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>{otherUser?.name}</div>
+          <div style={{
+            fontSize: 13, fontWeight: 700,
+            color: otherUser ? T.text : T.mu,
+            fontStyle: otherUser ? 'normal' : 'italic',
+          }}>
+            {otherUser?.name || 'Deleted user'}
+          </div>
           {otherUser?.title && (
             <div style={{ fontSize: 11.5, color: T.mu }}>{otherUser.title}</div>
           )}
+          {!otherUser && (
+            <div style={{ fontSize: 11.5, color: T.mu }}>This person has left Luminary.</div>
+          )}
         </div>
-        {onViewProfile && (
+        {onViewProfile && otherUser && (
           <button
             onClick={onViewProfile}
             style={{
@@ -122,7 +138,8 @@ function MessageThread({
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px' }}>
         {messages.map(msg => {
-          const isMine = msg.sender_id === currentUserId;
+          const isMine        = msg.sender_id === currentUserId;
+          const senderRemoved = !isMine && (msg.sender_id === null || !otherUser);
           return (
             <div key={msg.id} style={{
               display: 'flex',
@@ -134,11 +151,13 @@ function MessageThread({
                 padding: '9px 13px',
                 borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                 background: isMine ? T.v : T.s2,
-                color: isMine ? '#fff' : T.text,
+                color: isMine ? '#fff' : (senderRemoved ? T.mu : T.text),
                 fontSize: 13,
                 lineHeight: 1.55,
                 wordBreak: 'break-word',
                 whiteSpace: 'pre-wrap',
+                opacity: senderRemoved ? 0.7 : 1,
+                fontStyle: senderRemoved && !msg.content ? 'italic' : 'normal',
               }}>
                 {msg.content}
               </div>
@@ -148,42 +167,52 @@ function MessageThread({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Compose */}
-      <div style={{
-        padding: '12px 16px', borderTop: `1px solid ${T.bdr}`,
-        display: 'flex', gap: 8, alignItems: 'flex-end',
-        background: T.w, flexShrink: 0,
-      }}>
-        <textarea
-          value={newMessage}
-          onChange={e => setNewMessage(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); }
-          }}
-          placeholder="Write a message… (Enter to send, Shift+Enter for new line)"
-          rows={1}
-          style={{
-            flex: 1, background: T.s2, border: `1.5px solid ${T.bdr}`,
-            borderRadius: 20, padding: '9px 14px', fontSize: 13,
-            fontFamily: 'inherit', outline: 'none', resize: 'none',
-            lineHeight: 1.5, maxHeight: 120, overflowY: 'auto',
-          }}
-        />
-        <button
-          onClick={onSend}
-          disabled={sending || !newMessage.trim()}
-          style={{
-            width: 38, height: 38, borderRadius: '50%', border: 'none',
-            background: newMessage.trim() ? T.v : T.bdr,
-            color: newMessage.trim() ? '#fff' : T.mu,
-            cursor: newMessage.trim() ? 'pointer' : 'default',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0, fontSize: 16, transition: 'all .15s',
-          }}
-        >
-          ↑
-        </button>
-      </div>
+      {/* Compose — disabled when the other party has been deleted */}
+      {otherUser ? (
+        <div style={{
+          padding: '12px 16px', borderTop: `1px solid ${T.bdr}`,
+          display: 'flex', gap: 8, alignItems: 'flex-end',
+          background: T.w, flexShrink: 0,
+        }}>
+          <textarea
+            value={newMessage}
+            onChange={e => setNewMessage(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); }
+            }}
+            placeholder="Write a message… (Enter to send, Shift+Enter for new line)"
+            rows={1}
+            style={{
+              flex: 1, background: T.s2, border: `1.5px solid ${T.bdr}`,
+              borderRadius: 20, padding: '9px 14px', fontSize: 13,
+              fontFamily: 'inherit', outline: 'none', resize: 'none',
+              lineHeight: 1.5, maxHeight: 120, overflowY: 'auto',
+            }}
+          />
+          <button
+            onClick={onSend}
+            disabled={sending || !newMessage.trim()}
+            style={{
+              width: 38, height: 38, borderRadius: '50%', border: 'none',
+              background: newMessage.trim() ? T.v : T.bdr,
+              color: newMessage.trim() ? '#fff' : T.mu,
+              cursor: newMessage.trim() ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, fontSize: 16, transition: 'all .15s',
+            }}
+          >
+            ↑
+          </button>
+        </div>
+      ) : (
+        <div style={{
+          padding: '14px 16px', borderTop: `1px solid ${T.bdr}`,
+          background: T.w, flexShrink: 0,
+          fontSize: 12.5, color: T.mu, textAlign: 'center', fontStyle: 'italic',
+        }}>
+          This person has deleted their Luminary account — replies aren't possible.
+        </div>
+      )}
     </div>
   );
 }
@@ -498,6 +527,8 @@ export default function MessagesScreen({ user, onViewUser }) {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeConvId || sending) return;
+    // Other party has deleted their account — block silently.
+    if (!activeOtherUser) return;
     setSending(true);
     const content = newMessage.trim();
     setNewMessage('');
