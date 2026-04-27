@@ -71,10 +71,21 @@ function ArticleHeader({ post, author, readMins }) {
   const isDeepDive = post.is_deep_dive === true;
   const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
   const lines = plain.split('\n').filter(l => l.trim());
-  const title = isDeepDive && lines[0] && lines[0].length < 120 ? lines[0] : null;
+  const explicitTitle = (post.deep_dive_title || '').trim();
+  const title = isDeepDive
+    ? (explicitTitle || (lines[0] && lines[0].length < 120 ? lines[0] : null))
+    : null;
+  const coverUrl = (isDeepDive && post.deep_dive_cover_url) || '';
 
   return (
     <header style={{ marginBottom: 32 }}>
+      {coverUrl && (
+        <img src={coverUrl} alt=""
+          style={{
+            display:'block', width:'100%', maxWidth:'100%',
+            height:'auto', borderRadius:8, marginBottom:28,
+          }}/>
+      )}
       {title && (
         <h1 style={{
           fontFamily:"'DM Serif Display', serif",
@@ -129,7 +140,10 @@ function ArticleHeader({ post, author, readMins }) {
 function ArticleBody({ post, isDeepDive }) {
   const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
   const lines = plain.split('\n').filter(l => l.trim());
-  const hasExtractedTitle = isDeepDive && lines[0] && lines[0].length < 120;
+  const explicitTitle = (post.deep_dive_title || '').trim();
+  // Only strip the first content line when the title was implicit.
+  // With an explicit deep_dive_title the body content stays untouched.
+  const hasExtractedTitle = isDeepDive && !explicitTitle && lines[0] && lines[0].length < 120;
 
   let bodyHtml = post.content || '';
   if (hasExtractedTitle) {

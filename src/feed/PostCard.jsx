@@ -589,37 +589,53 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
           // Deep dive — article card replaces the content render entirely.
           if (isDeepDive) {
+            // Prefer the explicit deep_dive_title; fall back to first-line
+            // extraction for posts written before the title field existed.
+            const explicitTitle = (post.deep_dive_title || '').trim();
             const lines = plain.split('\n').filter(l => l.trim());
-            const extractedTitle = lines[0] && lines[0].length < 120 ? lines[0] : null;
+            const extractedTitle = !explicitTitle && lines[0] && lines[0].length < 120 ? lines[0] : null;
+            const title = explicitTitle || extractedTitle || null;
+            // Strip the first line from the preview only when it was the
+            // implicit title source.
             const previewStart = extractedTitle ? plain.indexOf('\n') + 1 : 0;
             const remaining    = plain.slice(previewStart).trim();
             const previewText  = remaining.slice(0, 325).trim();
             const preview      = previewText.length < remaining.length ? previewText + '…' : previewText;
             const readMins     = Math.max(1, Math.round(wordCount / 200));
+            const coverUrl     = post.deep_dive_cover_url || '';
             return (
               <div
                 onClick={() => { window.location.href = `/s/${post.id}`; }}
                 style={{
                   background: T.s2, border: `1px solid ${T.bdr}`, borderRadius: 10,
-                  padding: '14px 16px', cursor: 'pointer', marginTop: 4,
+                  cursor: 'pointer', marginTop: 4, overflow: 'hidden',
                 }}
               >
-                {extractedTitle && (
-                  <div style={{
-                    fontFamily:"'DM Serif Display', serif", fontSize:17,
-                    color:T.text, lineHeight:1.35, marginBottom:6, fontWeight:400,
-                  }}>
-                    {extractedTitle}
-                  </div>
+                {coverUrl && (
+                  <img src={coverUrl} alt=""
+                    style={{
+                      display:'block', width:'100%', height:200,
+                      objectFit:'cover',
+                    }}/>
                 )}
-                {preview && (
-                  <div style={{ fontSize:13.5, color:T.mu, lineHeight:1.6, marginBottom:10 }}>
-                    {preview}
+                <div style={{ padding:'14px 16px' }}>
+                  {title && (
+                    <div style={{
+                      fontFamily:"'DM Serif Display', serif", fontSize:17,
+                      color:T.text, lineHeight:1.35, marginBottom:6, fontWeight:400,
+                    }}>
+                      {title}
+                    </div>
+                  )}
+                  {preview && (
+                    <div style={{ fontSize:13.5, color:T.mu, lineHeight:1.6, marginBottom:10 }}>
+                      {preview}
+                    </div>
+                  )}
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span style={{ fontSize:12, color:T.mu }}>{readMins} min read</span>
+                    <span style={{ fontSize:13, fontWeight:600, color:T.v }}>Continue reading →</span>
                   </div>
-                )}
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                  <span style={{ fontSize:12, color:T.mu }}>{readMins} min read</span>
-                  <span style={{ fontSize:13, fontWeight:600, color:T.v }}>Continue reading →</span>
                 </div>
               </div>
             );

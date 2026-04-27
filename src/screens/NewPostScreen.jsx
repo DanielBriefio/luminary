@@ -145,6 +145,15 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
   const [uploading,setUploading]         = useState(false);
 
   const [isDeepDive, setIsDeepDive]       = useState(false);
+  // Deep-dive optional title + cover image. Cover uploads immediately; we
+  // record the storage row after the post insert returns (same pattern as
+  // pendingImagesRef for inline editor images).
+  const [deepDiveTitle,    setDeepDiveTitle]    = useState('');
+  const [coverUrl,         setCoverUrl]         = useState('');
+  const [coverPath,        setCoverPath]        = useState('');
+  const [coverFileMeta,    setCoverFileMeta]    = useState(null); // { size, type, name }
+  const [coverUploading,   setCoverUploading]   = useState(false);
+  const coverInputRef = useRef(null);
   const [tags,setTags]                   = useState('');
   const [visibility,setVisibility]       = useState('everyone');
   const [loading,setLoading]             = useState(false);
@@ -387,6 +396,8 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       tier2:          [],
       visibility,
       is_deep_dive:   isDeepDive,
+      deep_dive_title:     isDeepDive ? deepDiveTitle.trim() : '',
+      deep_dive_cover_url: isDeepDive ? coverUrl : '',
     }).select('id').single();
     setLoading(false);
     if(error) { setError(error.message); return; }
@@ -399,6 +410,20 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
         p_size_bytes:  uploadFile.size,
         p_mime_type:   uploadFile.type || '',
         p_file_name:   uploadFile.name,
+        p_source_kind: 'post',
+        p_source_id:   newPost.id,
+      }).then(() => {}, () => {});
+    }
+
+    // Record the deep-dive cover image (uploaded earlier, before we had
+    // the post id) against the post.
+    if (newPost?.id && coverPath && coverFileMeta) {
+      supabase.rpc('record_storage_file', {
+        p_bucket:      'post-files',
+        p_path:        coverPath,
+        p_size_bytes:  coverFileMeta.size,
+        p_mime_type:   coverFileMeta.type,
+        p_file_name:   coverFileMeta.name,
         p_source_kind: 'post',
         p_source_id:   newPost.id,
       }).then(() => {}, () => {});
@@ -728,6 +753,86 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           </div>
         )}
 
+        {/* Deep-dive: title + cover image (above the editor) */}
+        {isDeepDive && postType === 'text' && (
+          <div style={{marginBottom: 10, display:'flex', flexDirection:'column', gap: 8}}>
+            <input
+              value={deepDiveTitle}
+              onChange={e => setDeepDiveTitle(e.target.value)}
+              placeholder="Article title…"
+              maxLength={140}
+              style={{
+                width:'100%', padding:'10px 14px', borderRadius:10,
+                border:`1.5px solid ${T.bdr}`, outline:'none',
+                fontFamily:"'DM Serif Display', Georgia, serif",
+                fontSize:22, color:T.text, background:T.w,
+              }}
+            />
+
+            {coverUrl ? (
+              <div style={{position:'relative'}}>
+                <img src={coverUrl} alt=""
+                  style={{
+                    width:'100%', height:160, objectFit:'cover',
+                    borderRadius:10, display:'block',
+                    border:`1px solid ${T.bdr}`,
+                  }}/>
+                <button
+                  onClick={() => { setCoverUrl(''); setCoverPath(''); setCoverFileMeta(null); }}
+                  style={{
+                    position:'absolute', top:8, right:8,
+                    background:'rgba(0,0,0,.55)', color:'#fff',
+                    border:'none', borderRadius:20, padding:'4px 10px',
+                    fontSize:11.5, fontWeight:600, cursor:'pointer',
+                    fontFamily:'inherit',
+                  }}
+                  title="Remove cover image"
+                >
+                  ✕ Remove
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => coverInputRef.current?.click()}
+                disabled={coverUploading}
+                style={{
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                  width:'100%', padding:'14px 16px',
+                  background:T.s2, border:`1.5px dashed ${T.bdr}`, borderRadius:10,
+                  cursor: coverUploading ? 'wait' : 'pointer',
+                  fontFamily:'inherit', color:T.mu, fontSize:13,
+                }}
+              >
+                {coverUploading ? '⏳ Uploading cover…' : '🖼️ Add cover image (optional)'}
+              </button>
+            )}
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              style={{display:'none'}}
+              onChange={async e => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (!f) return;
+                if (!f.type.startsWith('image/')) { setError('Please choose an image file.'); return; }
+                if (f.size > 10 * 1024 * 1024)   { setError('Cover image is too large (max 10 MB).'); return; }
+                setCoverUploading(true);
+                setError('');
+                try {
+                  const r = await uploadFileToStorage(f);
+                  setCoverUrl(r.url);
+                  setCoverPath(r.path);
+                  setCoverFileMeta({ size: f.size, type: f.type || 'image/jpeg', name: f.name });
+                } catch (err) {
+                  setError(`Cover upload failed: ${err.message || 'unknown error'}`);
+                }
+                setCoverUploading(false);
+              }}
+            />
+          </div>
+        )}
+
         {/* Text editor */}
         <div style={{marginBottom:0}}>
           <RichTextEditor
@@ -739,7 +844,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
             minHeight={isMobile ? (uploadFile ? 120 : 200) : (uploadFile ? 70 : 110)}
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
-              isDeepDive ? "Start with a title on the first line, then use Heading 2 for sections, ❝ for pull quotes, 📄 Cite to add paper references…" :
+              isDeepDive ? "Write your article here. Use Heading 2 / 3 for sections, ❝ for pull quotes, 📄 Cite to add paper references…" :
               composerPrompt
             }/>
         </div>
