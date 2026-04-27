@@ -157,7 +157,7 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
         p_file_name:   file.name,
         p_source_kind: 'library',
         p_source_id:   item.id,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
     }
     fetchItems(activeFolderID);
   };

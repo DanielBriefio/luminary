@@ -205,7 +205,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
           p_file_name:   file.name,
           p_source_kind: 'library',
           p_source_id:   item.id,
-        }).catch(() => {});
+        }).then(() => {}, () => {});
       }
     }
     fetchItems(activeFolderID);

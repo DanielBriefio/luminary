@@ -340,7 +340,7 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
         p_file_name:   uploadFile.name,
         p_source_kind: 'group_post',
         p_source_id:   post.id,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
     }
 
     if (AUTO_TAG_ENABLED && post?.id) {

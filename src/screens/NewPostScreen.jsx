@@ -388,6 +388,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     if(error) { setError(error.message); return; }
 
     if (uploadFile && uploadedPath && newPost?.id) {
+      // supabase.rpc returns a PromiseLike (no .catch); use the two-arg .then form.
       supabase.rpc('record_storage_file', {
         p_bucket:      'post-files',
         p_path:        uploadedPath,
@@ -396,7 +397,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
         p_file_name:   uploadFile.name,
         p_source_kind: 'post',
         p_source_id:   newPost.id,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
     }
 
     if (LUMENS_ENABLED && newPost?.id) {

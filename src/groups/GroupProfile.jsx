@@ -245,7 +245,7 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       p_file_name:   file.name,
       p_source_kind: 'group_avatar',
       p_source_id:   groupId,
-    }).catch(() => {});
+    }).then(() => {}, () => {});
     setAvatarUploading(false);
     onGroupUpdate?.();
   };
@@ -273,7 +273,7 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       p_file_name:   file.name,
       p_source_kind: 'group_cover',
       p_source_id:   groupId,
-    }).catch(() => {});
+    }).then(() => {}, () => {});
     setCoverUploading(false);
     onGroupUpdate?.();
   };

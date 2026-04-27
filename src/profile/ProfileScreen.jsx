@@ -441,7 +441,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       p_file_name:   file.name,
       p_source_kind: 'avatar',
       p_source_id:   user.id,
-    }).catch(() => {});
+    }).then(() => {}, () => {});
     setAvatarUploading(false);
   };
 
