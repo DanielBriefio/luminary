@@ -52,7 +52,7 @@ begin
     -- (send-email-notification) picks it up and sends the
     -- "your account is scheduled for deletion" email with the
     -- recovery link in meta.
-    insert into notifications (user_id, actor_id, type, target_id, meta)
+    insert into notifications (user_id, actor_id, notif_type, target_id, meta)
     values (
       v_user_id, v_user_id,
       'account_deletion_scheduled',

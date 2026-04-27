@@ -111,12 +111,15 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
     setDeleting(true);
     setDeleteError('');
     try {
-      const { error } = await supabase.rpc('delete_own_account');
+      const { data, error } = await supabase.rpc('delete_own_account');
       if (error) throw error;
-      // Soft-delete: account is now scheduled for deletion in 30 days.
-      // Sign out so the user lands on the unauth landing; signing back in
-      // will surface the recovery modal.
-      await supabase.auth.signOut();
+      // Stay signed in: bumping deletion_scheduled_at on the profile causes
+      // App.jsx to render the recovery modal (which covers the whole app),
+      // so the user sees the schedule + cancel option immediately.
+      setProfile(p => ({ ...(p || {}), deletion_scheduled_at: data }));
+      setDeleteText('');
+      setConfirmDelete(false);
+      setDeleting(false);
     } catch (e) {
       setDeleteError(e.message || 'Deletion failed. Please contact hello@luminary.to to delete your account.');
       setDeleting(false);
@@ -495,9 +498,9 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
                 Schedule account deletion?
               </div>
               <div style={{ fontSize: 12.5, color: T.text, marginBottom: 12, lineHeight: 1.6 }}>
-                You'll be signed out and your account will be hidden immediately.
-                We'll permanently delete everything in 30 days unless you sign back in
-                and cancel. Type <strong>DELETE</strong> to confirm.
+                Your profile and posts are hidden from other Luminary users immediately.
+                We'll permanently delete everything in 30 days unless you cancel during
+                the grace period. Type <strong>DELETE</strong> to confirm.
               </div>
               <input
                 value={deleteText}
