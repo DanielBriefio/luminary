@@ -22,6 +22,10 @@ create index if not exists idx_profiles_deletion_pending
   on profiles(deletion_scheduled_at) where deletion_scheduled_at is not null;
 
 -- ─── delete_own_account (replaces the legacy hard-delete) ───────────────────
+-- The legacy version returned void; the new one returns timestamptz so the
+-- caller can show the scheduled date. PostgreSQL doesn't allow changing
+-- the return type via CREATE OR REPLACE — drop the existing function first.
+drop function if exists delete_own_account();
 
 create or replace function delete_own_account()
 returns timestamptz
