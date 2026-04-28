@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-28 (rev 19)_
+_Last updated: 2026-04-28 (rev 20)_
 
 ## What exists and works
 
@@ -145,7 +145,7 @@ _Last updated: 2026-04-28 (rev 19)_
 - Respects `profile_visibility` JSONB; clinical block shown for `clinician` only; `clinician_scientist` shows researcher stats; discipline format matches auth views
 
 ### Library
-- **Sidebar (220px)**: unified left rail with two sections — **Bookmarks** at the top (All bookmarks / Unsorted / nested folders, capped at 2 levels via `bookmark_folders.parent_id`) and **Library Folders** below. Selecting any bookmark folder takes over the main panel; the right-side Bookmarks card was removed.
+- **Sidebar (220px)**: unified left rail with three sections — **Bookmarks** at the top (All bookmarks / Unsorted / nested folders, capped at 2 levels via `bookmark_folders.parent_id`), **Files** in the middle (single "📎 All files" row that opens the universal file manager — see Storage management), and **Library Folders** at the bottom. Selecting any one takes over the main panel; the right-side Bookmarks card was removed.
 - **Personal library**: Unsorted virtual folder (folder_id IS NULL)
 - **Add options per folder**: Search PMC, Enter DOI, Upload file, Import .ris/.bib, Search ClinicalTrials.gov
 - **ClinicalTrials.gov search** (`LibraryClinicalTrialSearch`): ClinicalTrials.gov API v2, returns study cards for import
@@ -233,10 +233,11 @@ _Last updated: 2026-04-28 (rev 19)_
 - Email is wired through the existing `send-email-notification` edge function. `account_deletion_scheduled` is a critical type — it bypasses the master `email_notifications` toggle so the user always sees the recovery option.
 
 ### Storage management
-- Every upload (post / group post / library / avatar / group avatar+cover) writes a row to `user_storage_files` via the `record_storage_file` RPC at the call site — see CLAUDE.md "Storage tracking (mandatory pattern)".
-- **Account Settings → Storage**: violet total card with bytes + per-bucket chips and a `Manage storage →` button. Lightweight overview for the drawer; no file list inside the drawer.
-- **`StorageScreen`** (`screen === 'storage'`): full-width manager grouped by source kind (Post attachments / Group post attachments / Library files / Profile photo / Group avatars / Group covers / Other). Each row shows the linked context (paper title or content excerpt / library title / group name), size, date, a `View ↗` deep link (`/s/:postId` for posts, `/g/:slug` for group items), and a Delete button where deletable.
-- **Soft-delete attachments**: deleting a post / group post attachment sets `file_deleted_at = now()` on the row + nulls `image_url` / `file_name` / `file_type`. PostCard / GroupPostCard / ProjectPostCard render `📎 File removed by author` placeholder; the post body stays. Library deletions remove the `library_items` row entirely. Avatars and group images cannot be deleted — only replaced via the regular upload flow.
+- Every upload (post / group post / library / avatar / profile cover / group avatar+cover) writes a row to `user_storage_files` via the `record_storage_file` RPC at the call site — see CLAUDE.md "Storage tracking (mandatory pattern)".
+- **Library → Files** (`LibraryFilesView`, surfaced as the third sidebar section in LibraryScreen alongside Bookmarks and Library Folders): full-width manager grouped by source kind (Post attachments / Group post attachments / Library files / Profile photo / Profile cover / Group avatars / Group covers / Other). Totals strip + per-bucket chips at the top. Each row shows the linked context (paper title or content excerpt / library title / group name), size, date, a `View ↗` deep link (`/s/:postId` for posts, `/g/:slug` for group items), and a Delete button where deletable. Mobile collapses the four-column row into two — name+meta+size on the left, View+Delete on the right.
+- **Account Settings → Storage**: violet total card with bytes + per-bucket chips and an `Open Library → Files` button that navigates to LibraryScreen with `defaultView='files'`. Lightweight summary inside the drawer; the actual manager lives in Library.
+- **Settings → Library navigation glue** (App.jsx): a `libraryView` state ('library' | 'bookmarks' | 'files') feeds LibraryScreen's `defaultView` prop. The Settings button sets it to 'files' before `setScreen('library')`. A `useEffect` resets it to 'library' whenever the user navigates away, so the next non-Settings entry into Library lands on the default Library Folders view. The LibraryScreen instance carries a `key={lib-${libraryView}}` to remount cleanly when the view changes via deep link.
+- **Soft-delete attachments**: deleting a post / group post attachment sets `file_deleted_at = now()` on the row + nulls `image_url` / `file_name` / `file_type`. PostCard / GroupPostCard / ProjectPostCard render `📎 File removed by author` placeholder; the post body stays. Library deletions remove the `library_items` row entirely. Avatars, profile covers, and group images cannot be deleted — only replaced via the regular upload flow.
 - **Admin Storage section** (`/admin → Storage`): global total, per-bucket totals, sortable per-user roll-up. Click any user row to expand; lazy-fetches that user's enriched file list via `get_admin_user_storage_files(p_user_id)` and renders inline. Read-only — admins moderate via existing tools (hide / delete post).
 - Quotas not enforced yet. `total_bytes` from `get_my_storage_usage()` is the future hook for a per-user quota check.
 
@@ -262,7 +263,7 @@ _Last updated: 2026-04-28 (rev 19)_
 
 ## Known gaps / not yet built
 
-- **Mobile layout (in-app)**: Tier-1 screens have been adapted (Feed, NewPostScreen, PublicPostPage, ProfileScreen, UserProfileScreen, MessagesScreen, GroupScreen, ProjectScreen, GroupsScreen, LibraryScreen). Still desktop-only: NetworkScreen detail views, the Admin Panel (deferred — admin-on-phone is rare), Lumens / Storage screens.
+- **Mobile layout (in-app)**: Tier-1 screens have been adapted (Feed, NewPostScreen, PublicPostPage, ProfileScreen, UserProfileScreen, MessagesScreen, GroupScreen, ProjectScreen, GroupsScreen, LibraryScreen — including the new Files view). Still desktop-only: NetworkScreen detail views, the Admin Panel (deferred — admin-on-phone is rare), LumensScreen.
 - **Push notifications / email digests**: Transactional emails ship (Resend, six event types + welcome). No push, no weekly digest.
 - **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state.
 - **PWA / offline**: Not configured.
@@ -283,7 +284,7 @@ _Last updated: 2026-04-28 (rev 19)_
 - **`migration_gamification.sql`** (Phase 8): adds `lumens_current_period`, `lumens_lifetime`, `current_period_started`, `previous_period_lumens`, `is_founding_member` to profiles; creates `lumen_transactions` table + RLS; adds `award_lumens`, `get_lumen_history` RPCs and `compute_tier` helper; seeds `founding_member_cutoff` admin_config; installs `apply_founding_member_status` trigger. Requires `alter publication supabase_realtime add table profiles;` for cross-user sidebar sync.
 - **`migration_admin_lumens.sql`** (Phase 8 follow-up): replaces `get_admin_user_list()` to also return `lumens_current_period`, `lumens_lifetime`, `is_founding_member`.
 - **`migration_storage_tracking.sql`** (Phase 9): creates `user_storage_files` table + RLS, adds `file_deleted_at` to posts / group_posts / project_posts, installs `record_storage_file`, `delete_user_file`, `get_my_storage_usage`, `get_admin_storage_usage` RPCs, backfills from `storage.objects`, and DROP+CREATEs all three `*_with_meta` views to expose `file_deleted_at`.
-- **`migration_storage_enriched.sql`** (Phase 9.1): replaces `get_my_storage_usage` to enrich each file row with `context_label`, `context_group_slug`, and `already_deleted` so the dedicated `StorageScreen` can show paper titles / content excerpts and per-row deep links.
+- **`migration_storage_enriched.sql`** (Phase 9.1): replaces `get_my_storage_usage` to enrich each file row with `context_label`, `context_group_slug`, and `already_deleted` so the Library → Files view (`LibraryFilesView`, formerly the standalone `StorageScreen` retired in Phase 10) can show paper titles / content excerpts and per-row deep links.
 - **`migration_admin_storage_files.sql`** (Phase 9.2): adds the admin-only `get_admin_user_storage_files(p_user_id)` RPC for the per-user drill-down in the admin Storage section.
 - **`migration_account_soft_delete.sql`** + **`migration_account_soft_delete_fix.sql`** (Phase 10): adds `profiles.deletion_scheduled_at`, rewrites `delete_own_account()` (returns timestamptz; inserts `account_deletion_scheduled` notification using `notif_type` column — fix migration patches the original which used wrong column name `type`), adds `cancel_account_deletion()` and `purge_deleted_accounts()`, DROP+CREATE `posts_with_meta` to filter deletion-pending authors. pg_cron schedule pinned in a comment block — run manually once.
 - **`migration_bookmark_folders.sql`** (Phase 11): creates `bookmark_folders` (self-FK `parent_id`) + RLS, adds `saved_posts.folder_id` (FK ON DELETE SET NULL so deleting a folder unsets bookmarks instead of dropping them).

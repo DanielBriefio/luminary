@@ -12,8 +12,9 @@ import LibraryPaperSearch             from './LibraryPaperSearch';
 import LibraryItemCard                from './LibraryItemCard';
 import LibraryRisImporter             from './LibraryRisImporter';
 import LibraryClinicalTrialSearch     from './LibraryClinicalTrialSearch';
+import LibraryFilesView               from './LibraryFilesView';
 
-export default function LibraryScreen({ user, profile, onSaveToggled, onViewGroup, onNavigateToPost }) {
+export default function LibraryScreen({ user, profile, onSaveToggled, onViewGroup, onNavigateToPost, defaultView = 'library' }) {
   const { isMobile } = useWindowSize();
   const [sidebarOpen,    setSidebarOpen]    = useState(false);
   const [folders,        setFolders]        = useState([]);
@@ -22,7 +23,9 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
   const [inboxItems,     setInboxItems]     = useState([]);
   const [savedPosts,     setSavedPosts]     = useState([]);
   const [bookmarkFolders, setBookmarkFolders] = useState([]);
-  const [bookmarksActive, setBookmarksActive] = useState(false);
+  const [bookmarksActive, setBookmarksActive] = useState(defaultView === 'bookmarks');
+  const [filesActive,    setFilesActive]    = useState(defaultView === 'files');
+  const [filesCount,     setFilesCount]     = useState(0);
   const [activeBmFolderId, setActiveBmFolderId] = useState('all'); // 'all' | '__unsorted__' | uuid
   const [searchSource,   setSearchSource]   = useState('epmc');
   const [showSearch,     setShowSearch]     = useState(false);
@@ -33,7 +36,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
   const [loading,        setLoading]        = useState(true);
 
   useEffect(() => {
-    fetchFolders(); fetchBookmarks(); fetchInboxItems(); fetchBookmarkFolders();
+    fetchFolders(); fetchBookmarks(); fetchInboxItems(); fetchBookmarkFolders(); fetchFilesCount();
   }, []); // eslint-disable-line
   useEffect(() => {
     if (activeFolderID && activeFolderID !== '__inbox__') fetchItems(activeFolderID);
@@ -79,6 +82,14 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
       .eq('added_by', user.id)
       .order('added_at', { ascending: false });
     setInboxItems(data || []);
+  };
+
+  const fetchFilesCount = async () => {
+    const { count } = await supabase
+      .from('user_storage_files')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    setFilesCount(count || 0);
   };
 
   const fetchBookmarkFolders = async () => {
@@ -286,13 +297,21 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
 
   const onSelectBookmarksView = (id) => {
     setBookmarksActive(true);
+    setFilesActive(false);
     setActiveBmFolderId(id);
     if (isMobile) setSidebarOpen(false);
   };
 
   const onSelectLibraryFolder = (id) => {
     setBookmarksActive(false);
+    setFilesActive(false);
     setActiveFolderID(id);
+    if (isMobile) setSidebarOpen(false);
+  };
+
+  const onSelectFilesView = () => {
+    setFilesActive(true);
+    setBookmarksActive(false);
     if (isMobile) setSidebarOpen(false);
   };
 
@@ -333,13 +352,15 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
 
   // Mobile drawer button label — what's currently selected.
   const libraryFolderName = (id) => folders.find(f => f.id === id)?.name || '';
-  const activeLabel = bookmarksActive
-    ? `🔖 ${bookmarksHeader || 'Bookmarks'}`
-    : activeFolderID === '__inbox__'
-      ? '📥 Unsorted'
-      : libraryFolderName(activeFolderID)
-        ? `📁 ${libraryFolderName(activeFolderID)}`
-        : 'Folders';
+  const activeLabel = filesActive
+    ? '📎 All files'
+    : bookmarksActive
+      ? `🔖 ${bookmarksHeader || 'Bookmarks'}`
+      : activeFolderID === '__inbox__'
+        ? '📥 Unsorted'
+        : libraryFolderName(activeFolderID)
+          ? `📁 ${libraryFolderName(activeFolderID)}`
+          : 'Folders';
 
   const sidebarProps = {
     folders, activeFolderId: activeFolderID,
@@ -352,6 +373,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
     onSelectBookmarksView, onCreateBookmarkFolder: createBookmarkFolder,
     onDeleteBookmarkFolder: deleteBookmarkFolder,
     bookmarkCount, unsortedBookmarkCount,
+    filesActive, onSelectFilesView, filesCount,
   };
 
   return (
@@ -427,8 +449,11 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
 
         <div style={{flex:1, overflowY:'auto', padding: isMobile ? 12 : 16}}>
 
+          {/* ─── Files main view ─────────────────────────────────── */}
+          {filesActive && <LibraryFilesView isMobile={isMobile} />}
+
           {/* ─── Bookmarks main view ─────────────────────────────── */}
-          {bookmarksActive && (
+          {!filesActive && bookmarksActive && (
             <>
               <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:14}}>
                 <svg width="16" height="16" viewBox="0 0 24 24"
@@ -545,7 +570,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
           )}
 
           {/* ─── Library main view ─────────────────────────────── */}
-          {!bookmarksActive && (
+          {!filesActive && !bookmarksActive && (
             <>
               <div style={{fontSize:11, fontWeight:700, color:T.mu, textTransform:'uppercase',
                 letterSpacing:'.07em', marginBottom:14}}>

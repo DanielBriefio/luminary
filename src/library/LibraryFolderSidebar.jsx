@@ -22,6 +22,10 @@ export default function LibraryFolderSidebar({
   onDeleteBookmarkFolder,          // (folder) => void
   bookmarkCount = 0,
   unsortedBookmarkCount = 0,
+  // Files (optional — only LibraryScreen passes these)
+  filesActive = false,
+  onSelectFilesView,
+  filesCount = 0,
 }) {
   const [creating,         setCreating]         = useState(false);          // library folder
   const [newFolderName,    setNewFolderName]    = useState('');
@@ -200,6 +204,42 @@ export default function LibraryFolderSidebar({
             </div>
 
             <div style={{height:1, background:T.bdr, margin:'0 14px 8px'}} />
+          </>
+        )}
+
+        {/* ─── Files section ───────────────────────────────────────── */}
+        {onSelectFilesView && (
+          <>
+            <div style={{padding:'4px 14px 6px', fontSize:11, fontWeight:700,
+              color:T.mu, textTransform:'uppercase', letterSpacing:'.07em'}}>
+              Files
+            </div>
+            <div
+              onClick={() => onSelectFilesView()}
+              style={{
+                display:'flex', alignItems:'center', gap:8,
+                padding:'9px 14px', cursor:'pointer',
+                background: filesActive ? T.v2 : 'transparent',
+                color:      filesActive ? T.v  : T.text,
+                fontWeight: filesActive ? 700  : 400,
+                fontSize:13,
+              }}
+              onMouseEnter={e => { if (!filesActive) e.currentTarget.style.background = T.s2; }}
+              onMouseLeave={e => { if (!filesActive) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span style={{fontSize:14, flexShrink:0}}>📎</span>
+              <span style={{flex:1}}>All files</span>
+              {filesCount > 0 && (
+                <span style={{
+                  fontSize:10, fontWeight:700, color:filesActive ? '#fff' : T.mu,
+                  background: filesActive ? T.v : T.s3,
+                  padding:'1px 6px', borderRadius:20, flexShrink:0,
+                }}>
+                  {filesCount}
+                </span>
+              )}
+            </div>
+            <div style={{height:1, background:T.bdr, margin:'8px 14px 8px'}} />
           </>
         )}
 

@@ -71,7 +71,7 @@ export default function StoragePanel({ onOpenStorage }) {
 
         {onOpenStorage && (
           <div style={{ marginTop: 12 }}>
-            <Btn variant="v" onClick={onOpenStorage}>Manage storage →</Btn>
+            <Btn variant="v" onClick={onOpenStorage}>Open Library → Files</Btn>
           </div>
         )}
       </div>

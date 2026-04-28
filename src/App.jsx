@@ -27,7 +27,6 @@ import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
 import LumensScreen from './screens/LumensScreen';
-import StorageScreen from './screens/StorageScreen';
 import LegalPage from './screens/LegalPage';
 import PublicGroupProfileScreen from './groups/PublicGroupProfileScreen';
 import LibraryScreen from './library/LibraryScreen';
@@ -118,6 +117,7 @@ export default function App() {
   const [invitesRemaining,setInvitesRemaining]=useState(0);
   const [copiedCode,setCopiedCode]=useState(null);
   const [showSettings,setShowSettings]=useState(false);
+  const [libraryView, setLibraryView] = useState('library'); // 'library' | 'bookmarks' | 'files'
   const [activeGroupId,setActiveGroupId]=useState(null);
   const [groupUnreadCount,setGroupUnreadCount]=useState(0);
   const [showOrcidImport,setShowOrcidImport]=useState(false);
@@ -141,6 +141,10 @@ export default function App() {
     if(convId){ sessionStorage.setItem('open_conversation', convId); }
     setScreen('messages');
   };
+
+  useEffect(() => {
+    if (screen !== 'library' && libraryView !== 'library') setLibraryView('library');
+  }, [screen, libraryView]);
 
   useEffect(()=>{
     if(publicSlug || publicPostId || publicPaperDoi || publicCardSlug || publicGroupSlug || legalDoc) return; // no auth needed for public pages
@@ -575,7 +579,7 @@ export default function App() {
     explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
-    library:      <LibraryScreen user={user} profile={profile} onSaveToggled={fetchSavedIds} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} onNavigateToPost={()=>setScreen('post')}/>,
+    library:      <LibraryScreen key={`lib-${libraryView}`} user={user} profile={profile} onSaveToggled={fetchSavedIds} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} onNavigateToPost={()=>setScreen('post')} defaultView={libraryView}/>,
     groups: activeGroupId
       ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedGroupPostIds={savedGroupPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
@@ -586,7 +590,6 @@ export default function App() {
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     lumens:       <LumensScreen supabase={supabase} user={user} profile={profile} onBack={()=>setScreen('feed')}/>,
-    storage:      <StorageScreen onBack={()=>setScreen('feed')}/>,
   };
 
   return (
@@ -615,7 +618,7 @@ export default function App() {
           setProfile={setProfile}
           onClose={() => setShowSettings(false)}
           onSignOut={() => { setShowSettings(false); signOut(); }}
-          onOpenStorage={() => { setShowSettings(false); setScreen('storage'); }}
+          onOpenStorage={() => { setShowSettings(false); setLibraryView('files'); setScreen('library'); }}
         />
       )}
       {/* ORCID import offer modal */}

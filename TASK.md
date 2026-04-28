@@ -1,153 +1,72 @@
-# Task: Gamification System (Phase 8)
+# Task: Library Restructure — Universal Files Tab (Phase 10)
 
 ## Context
 
 Read CLAUDE.md, PRODUCT_STATE.md, SCHEMA.md, and TASK.md.
 
-This task introduces the Luminary gamification system: a Lumens points
-system, four-tier progression (Catalyst → Pioneer → Beacon → Luminary),
-visual differentiation per tier, a transparency page, and Founding
-Member designation.
+This task restructures the Library to add a universal Files tab that
+shows all uploaded files regardless of source (post attachments,
+library uploads, group uploads). It also updates the Settings storage
+panel to link to the Library Files tab instead of managing files
+inline.
 
-**Design principles:**
-- Subtle, not gamified-feeling — this is a scientific platform
-- Quality over volume — recognition rewards weighted higher than creation
-- Annual reset like airline miles — keeps tier earned, not given
-- Transparent — users can see exactly how Lumens are earned
-- Visual differentiation through tier-coloured avatar borders everywhere
+The Library becomes three clear sections:
+- **Papers** — DOI/EPMC bookmarks organised in folders (unchanged)
+- **Saved Posts** — bookmarked feed posts (unchanged)
+- **Files** — ALL uploaded files: library uploads + post attachments
 
 Scope:
 
-1. SQL migration — `lumen_transactions` table, profile columns,
-   Founding Member config, tier computation function
-2. Lumens earning — wired into existing actions (posts, comments, etc.)
-3. `useTier` hook + `TierBadge` + `Av` (avatar) component updates
-4. Profile page — tier badge, Lumens count, progress to next tier
-5. Lumens transparency page — earning history, rules, tier description
-6. Admin config for Founding Member cutoff date
-7. Sidebar XP badge → wire to real Lumens data (currently decorative)
-8. PostHog events for Lumens earning
+1. Read and understand current LibraryScreen structure
+2. Add Files tab to LibraryScreen
+3. File list with filter bar (All / From posts / From library)
+4. Delete behaviour per source type
+5. Update Settings storage panel — link to Library Files tab
+6. Update AdminShell Storage section link (if applicable)
 
-> ⚠️ The `Av` (avatar) component is used everywhere on the platform.
-> Read it carefully before modifying. The tier border addition must
-> not break existing usage — make `tierBorderColor` an optional prop
-> that defaults to no border.
+> ⚠️ LibraryScreen.jsx is a complex file. Read it carefully before
+> modifying. The existing Papers and Saved Posts tabs must be
+> completely unchanged. Only add the new Files tab.
+>
+> ⚠️ Deleting a post attachment is different from deleting a library
+> file — post attachments use soft-delete (`file_deleted_at`) to
+> show the "📎 File removed by author" placeholder. Library files
+> can be hard-deleted. Handle each case correctly.
 
 ---
 
-## Step 1 — SQL migration
+## Step 1 — Understand current structure
 
-Create `migration_gamification.sql`:
+Read the following before making any changes:
+
+1. `src/screens/LibraryScreen.jsx` — current tab structure, how
+   Papers and Saved Posts are implemented, existing state management
+2. `src/screens/AccountScreen.jsx` or wherever StoragePanel lives —
+   how storage is currently shown in Settings
+3. The `user_storage_files` table in SCHEMA.md — columns available
+   (especially `source`, `context`, `file_url`, `file_name`,
+   `file_size`, `post_id`, `group_post_id`, `created_at`)
+
+Confirm:
+- What tabs currently exist in LibraryScreen?
+- Does `user_storage_files` have a `source` or context column that
+  distinguishes library uploads from post attachments?
+- Does `user_storage_files` have the `post_id` and `group_post_id`
+  foreign keys needed for soft-delete cascade?
+
+Report findings before proceeding. If `user_storage_files` lacks
+the columns needed, add them via migration first.
+
+---
+
+## Step 2 — SQL: get_user_files RPC
+
+Create a new RPC to fetch all files for the current user:
 
 ```sql
--- ─── Lumens columns on profiles ──────────────────────────────────────────────
-
-alter table profiles
-  add column if not exists lumens_current_period   integer default 0,
-  add column if not exists lumens_lifetime         integer default 0,
-  add column if not exists current_period_started  timestamptz default now(),
-  add column if not exists previous_period_lumens  integer default 0,
-  add column if not exists is_founding_member      boolean default false;
-
--- The xp and level columns already exist on profiles but are unused.
--- Leave them in place but do NOT use them — Lumens is the new system.
-
--- ─── Lumen transactions table (audit trail) ──────────────────────────────────
-
-create table if not exists lumen_transactions (
-  id           uuid primary key default gen_random_uuid(),
-  user_id      uuid references profiles(id) on delete cascade not null,
-  amount       integer not null,
-  reason       text not null,
-  -- Examples: 'post_created', 'comment_received', 'post_reposted',
-  -- 'invited_user_active', 'post_featured', 'discussion_threshold'
-  category     text not null check (category in ('creation', 'engagement', 'recognition')),
-  meta         jsonb default '{}',
-  -- Optional context: { post_id, actor_id, etc. }
-  created_at   timestamptz default now()
-);
-
-alter table lumen_transactions enable row level security;
-
--- Users can read their own transactions
-create policy "lt_select_own" on lumen_transactions for select
-  using (auth.uid() = user_id);
-
--- Admins can read all
-create policy "lt_select_admin" on lumen_transactions for select
-  using ((select is_admin from profiles where id = auth.uid()));
-
--- Only the system (via SECURITY DEFINER functions) can insert.
--- No direct INSERT policy — only via award_lumens() RPC.
-
-create index if not exists idx_lt_user_created
-  on lumen_transactions(user_id, created_at desc);
-
-create index if not exists idx_lt_reason
-  on lumen_transactions(reason);
-
--- ─── Founding Member config ──────────────────────────────────────────────────
-
--- Stored in admin_config under key 'founding_member_cutoff'
--- Format: { "cutoff_date": "2026-08-01T00:00:00Z" }
-insert into admin_config (key, value) values (
-  'founding_member_cutoff',
-  jsonb_build_object('cutoff_date', (now() + interval '90 days')::text)
-) on conflict (key) do nothing;
-
--- ─── award_lumens RPC (the only way to insert transactions) ──────────────────
-
-create or replace function award_lumens(
-  p_user_id uuid,
-  p_amount  integer,
-  p_reason  text,
-  p_category text,
-  p_meta    jsonb default '{}'
+create or replace function get_user_files(
+  p_source text default null  -- null = all, 'post' | 'library' | 'group_post'
 )
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  -- Skip if user is the Luminary Team bot (no Lumens for the bot)
-  if p_user_id = (select id from profiles where name = 'Luminary Team' limit 1) then
-    return;
-  end if;
-
-  -- Insert transaction
-  insert into lumen_transactions (user_id, amount, reason, category, meta)
-  values (p_user_id, p_amount, p_reason, p_category, p_meta);
-
-  -- Update profile totals
-  update profiles
-  set
-    lumens_current_period = lumens_current_period + p_amount,
-    lumens_lifetime       = lumens_lifetime + p_amount
-  where id = p_user_id;
-end;
-$$;
-
-grant execute on function award_lumens(uuid, integer, text, text, jsonb) to authenticated;
-
--- ─── compute_tier helper function ────────────────────────────────────────────
-
-create or replace function compute_tier(p_lumens integer)
-returns text
-language sql
-immutable
-as $$
-  select case
-    when p_lumens >= 5000 then 'luminary'
-    when p_lumens >= 2000 then 'beacon'
-    when p_lumens >= 500  then 'pioneer'
-    else 'catalyst'
-  end;
-$$;
-
--- ─── get_lumen_history RPC (transparency page) ───────────────────────────────
-
-create or replace function get_lumen_history(p_limit integer default 30)
 returns jsonb
 language plpgsql
 security definer
@@ -158,1107 +77,610 @@ begin
     raise exception 'not authenticated';
   end if;
 
-  return jsonb_build_object(
-    'current_period_lumens', (
-      select lumens_current_period from profiles where id = auth.uid()
-    ),
-    'lifetime_lumens', (
-      select lumens_lifetime from profiles where id = auth.uid()
-    ),
-    'current_period_started', (
-      select current_period_started from profiles where id = auth.uid()
-    ),
-    'previous_period_lumens', (
-      select previous_period_lumens from profiles where id = auth.uid()
-    ),
-    'tier', (
-      select compute_tier(lumens_current_period) from profiles where id = auth.uid()
-    ),
-    'is_founding_member', (
-      select is_founding_member from profiles where id = auth.uid()
-    ),
-    'transactions', coalesce(
-      (
-        select jsonb_agg(jsonb_build_object(
-          'id', id,
-          'amount', amount,
-          'reason', reason,
-          'category', category,
-          'meta', meta,
-          'created_at', created_at
-        ) order by created_at desc)
-        from (
-          select * from lumen_transactions
-          where user_id = auth.uid()
-          order by created_at desc
-          limit p_limit
-        ) t
-      ),
-      '[]'::jsonb
-    )
+  return (
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'id',           f.id,
+      'file_name',    f.file_name,
+      'file_url',     f.file_url,
+      'file_size',    f.file_size,
+      'file_type',    f.file_type,
+      'source',       f.source,
+      'post_id',      f.post_id,
+      'group_post_id', f.group_post_id,
+      'storage_path', f.storage_path,
+      'created_at',   f.created_at,
+      -- Post context for post attachments
+      'post_snippet', case
+        when f.post_id is not null then (
+          select left(replace(content, '<[^>]+>', ''), 60)
+          from posts where id = f.post_id
+        )
+        else null
+      end,
+      'post_deleted_at', case
+        when f.post_id is not null then (
+          select file_deleted_at from posts where id = f.post_id
+        )
+        else null
+      end
+    ) order by f.created_at desc), '[]'::jsonb)
+    from user_storage_files f
+    where f.user_id = auth.uid()
+      and (p_source is null or f.source = p_source)
+      -- Exclude profile avatars from the file manager
+      and f.source != 'avatar'
   );
 end;
 $$;
 
-grant execute on function get_lumen_history(integer) to authenticated;
+grant execute on function get_user_files(text) to authenticated;
+```
 
--- ─── apply_founding_member_status trigger ────────────────────────────────────
+Also create the delete RPC that handles source-specific deletion:
 
--- When a new profile is created (onboarding completed), check if it's
--- before the Founding Member cutoff date and mark accordingly.
-create or replace function apply_founding_member_status()
-returns trigger
+```sql
+create or replace function delete_user_file(
+  p_file_id uuid
+)
+returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_cutoff timestamptz;
+  v_file user_storage_files%rowtype;
+  v_storage_path text;
 begin
-  -- Only check on the transition to onboarding_completed = true
-  if new.onboarding_completed = true and
-     (old.onboarding_completed is null or old.onboarding_completed = false) then
-
-    select (value->>'cutoff_date')::timestamptz
-    into v_cutoff
-    from admin_config
-    where key = 'founding_member_cutoff';
-
-    if v_cutoff is not null and now() <= v_cutoff then
-      new.is_founding_member := true;
-    end if;
+  if auth.uid() is null then
+    raise exception 'not authenticated';
   end if;
 
-  return new;
+  -- Fetch the file record
+  select * into v_file
+  from user_storage_files
+  where id = p_file_id and user_id = auth.uid();
+
+  if not found then
+    raise exception 'file not found or not owned by you';
+  end if;
+
+  -- Source-specific delete behaviour:
+
+  if v_file.source = 'post' and v_file.post_id is not null then
+    -- Soft delete: mark the post as having its file removed
+    -- PostCard will show "📎 File removed by author" placeholder
+    update posts
+    set
+      file_deleted_at = now(),
+      image_url       = null,
+      file_name       = null,
+      file_type       = null
+    where id = v_file.post_id
+      and user_id = auth.uid();
+
+  elsif v_file.source = 'group_post' and v_file.group_post_id is not null then
+    -- Soft delete on group post
+    update group_posts
+    set
+      file_deleted_at = now(),
+      image_url       = null,
+      file_name       = null,
+      file_type       = null
+    where id = v_file.group_post_id
+      and user_id = auth.uid();
+
+  end if;
+
+  -- Delete from storage (returns path for client-side storage.remove call)
+  v_storage_path := v_file.storage_path;
+
+  -- Delete tracking row
+  delete from user_storage_files where id = p_file_id;
+
+  -- Update profile storage total
+  update profiles
+  set storage_used_bytes = greatest(0,
+    coalesce(storage_used_bytes, 0) - coalesce(v_file.file_size, 0)
+  )
+  where id = auth.uid();
+
+  return jsonb_build_object(
+    'storage_path', v_storage_path,
+    'bucket',       v_file.bucket_name,
+    'source',       v_file.source
+  );
 end;
 $$;
 
-drop trigger if exists trg_apply_founding_member on profiles;
-create trigger trg_apply_founding_member
-  before update on profiles
-  for each row
-  execute function apply_founding_member_status();
-
--- ─── Backfill: any existing users who completed onboarding ───────────────────
--- (after database reset this should be 0, but the migration is idempotent)
-
-update profiles
-set is_founding_member = true
-where onboarding_completed = true
-  and created_at <= (
-    select (value->>'cutoff_date')::timestamptz
-    from admin_config
-    where key = 'founding_member_cutoff'
-  );
+grant execute on function delete_user_file(uuid) to authenticated;
 ```
 
-Tell the user to run this in Supabase SQL Editor.
+Note: The client must also call `supabase.storage.from(bucket).remove([path])`
+after the RPC succeeds to actually delete the file from storage.
+The RPC returns the path and bucket name for this purpose.
+
+Tell the user to run this migration in Supabase SQL Editor.
 
 ---
 
-## Step 2 — Lumens earning rules
+## Step 3 — Add Files tab to LibraryScreen
 
-Add `award_lumens()` calls at the success point of each action listed
-below. Match the existing pattern used by `capture()` (PostHog) calls
-— add right after the successful Supabase insert/update, before any
-state updates.
-
-### Earning rules
-
-**Creation (low value):**
-| Action | Amount | Reason | File |
-|---|---|---|---|
-| Post created | 5 | `post_created` | `NewPostScreen.jsx` |
-| Comment posted | 2 | `comment_posted` | `PostCard.jsx` |
-| Library item added | 1 | `library_item_added` | `LibraryScreen.jsx` |
-| Group created | 25 | `group_created` | `CreateGroupModal.jsx` |
-| Project created | 10 | `project_created` | `CreateProjectModal.jsx` |
-| Onboarding completed | 25 | `onboarding_completed` | `OnboardingScreen.jsx` |
-
-**Engagement (mid value):**
-| Action | Amount | Reason | Recipient | File |
-|---|---|---|---|---|
-| Your post receives a comment (per commenter, deduped) | 5 | `comment_received` | post owner | `PostCard.jsx` |
-| Your library item saved by another user | 5 | `library_saved` | original adder | `LibraryScreen.jsx` |
-
-**Recognition (high value):**
-| Action | Amount | Reason | Recipient | File |
-|---|---|---|---|---|
-| Your post is reposted | 10 | `post_reposted` | post owner | `PostCard.jsx` |
-| User you invited becomes active (creates first post) | 100 | `invited_user_active` | inviter | `NewPostScreen.jsx` |
-| Your post featured by admin | 100 | `post_featured` | post owner | `ContentSection.jsx` (PostsTab) |
-| Your community template approved | 50 | `template_approved` | submitter | `TemplatesSection.jsx` |
-| Your post starts a discussion (3+ distinct commenters) | 50 | `discussion_threshold` | post owner | `PostCard.jsx` |
-
-### Implementation pattern
-
-For self-rewarding actions (creation):
-```javascript
-// After successful post insert:
-const { data: newPost, error } = await supabase
-  .from('posts')
-  .insert({ ... })
-  .select()
-  .single();
-
-if (!error && newPost) {
-  await supabase.rpc('award_lumens', {
-    p_user_id:  user.id,
-    p_amount:   5,
-    p_reason:   'post_created',
-    p_category: 'creation',
-    p_meta:     { post_id: newPost.id, post_type: postType }
-  });
-  capture('post_created', { post_type: postType });
-}
-```
-
-For others-rewarding actions (engagement, recognition):
-```javascript
-// After successful comment insert:
-const { data: newComment, error } = await supabase
-  .from('comments')
-  .insert({ ... })
-  .select()
-  .single();
-
-if (!error && newComment) {
-  // Award commenter for creation
-  await supabase.rpc('award_lumens', {
-    p_user_id:  user.id,
-    p_amount:   2,
-    p_reason:   'comment_posted',
-    p_category: 'creation',
-    p_meta:     { post_id: post.id }
-  });
-
-  // Award post owner for engagement (if not self-comment)
-  if (post.user_id !== user.id) {
-    // Check if this user has already commented on this post (dedupe)
-    const { count } = await supabase
-      .from('comments')
-      .select('*', { count: 'exact', head: true })
-      .eq('post_id', post.id)
-      .eq('user_id', user.id);
-
-    // count includes the just-inserted comment, so > 1 means duplicate
-    if (count === 1) {
-      await supabase.rpc('award_lumens', {
-        p_user_id:  post.user_id,
-        p_amount:   5,
-        p_reason:   'comment_received',
-        p_category: 'engagement',
-        p_meta:     { post_id: post.id, actor_id: user.id }
-      });
-    }
-
-    // Check discussion threshold (3+ distinct commenters)
-    const { data: distinctCommenters } = await supabase
-      .from('comments')
-      .select('user_id')
-      .eq('post_id', post.id);
-    const uniqueCount = new Set(distinctCommenters?.map(c => c.user_id) || []).size;
-
-    if (uniqueCount === 3) {
-      // Just hit the threshold — award one-time bonus
-      // Check if already awarded for this post
-      const { data: existing } = await supabase
-        .from('lumen_transactions')
-        .select('id')
-        .eq('user_id', post.user_id)
-        .eq('reason', 'discussion_threshold')
-        .filter('meta->>post_id', 'eq', post.id)
-        .limit(1);
-
-      if (!existing?.length) {
-        await supabase.rpc('award_lumens', {
-          p_user_id:  post.user_id,
-          p_amount:   50,
-          p_reason:   'discussion_threshold',
-          p_category: 'recognition',
-          p_meta:     { post_id: post.id }
-        });
-      }
-    }
-  }
-}
-```
-
-For "invited user active" (high-value, deferred trigger):
-This fires when an invited user creates their FIRST post. Add to
-`NewPostScreen.jsx` after successful post insert:
+Read LibraryScreen.jsx carefully. Find where existing tabs are defined
+(Papers / Saved Posts or equivalent). Add 'Files' as a new tab.
 
 ```javascript
-// Check if this is the user's first post
-const { count: postCount } = await supabase
-  .from('posts')
-  .select('*', { count: 'exact', head: true })
-  .eq('user_id', user.id);
-
-if (postCount === 1) {
-  // First post — find the inviter and award them
-  const { data: inviteCode } = await supabase
-    .from('invite_codes')
-    .select('created_by')
-    .eq('claimed_by', user.id)
-    .single();
-
-  if (inviteCode?.created_by && inviteCode.created_by !== user.id) {
-    await supabase.rpc('award_lumens', {
-      p_user_id:  inviteCode.created_by,
-      p_amount:   100,
-      p_reason:   'invited_user_active',
-      p_category: 'recognition',
-      p_meta:     { invited_user_id: user.id }
-    });
-  }
-}
+// Add to tabs array — match existing tab definition pattern:
+{ id: 'files', label: '📎 Files', icon: ... }
 ```
 
----
-
-## Step 3 — TIER_CONFIG constant + useTier hook
-
-Add to `src/lib/constants.js`:
-
-```javascript
-export const TIER_CONFIG = {
-  catalyst: {
-    name:        'Catalyst',
-    min:         0,
-    max:         499,
-    color:       T.v,         // platform violet — consistent with Luminary brand
-    bg:          T.v2,
-    ringColor:   null,        // no avatar ring at this tier
-    description: 'You\'re igniting the conversation. Every post, comment, and connection you make sparks new thinking on Luminary. Keep contributing — you\'re shaping what this community becomes.',
-  },
-  pioneer: {
-    name:        'Pioneer',
-    min:         500,
-    max:         1999,
-    color:       T.v,
-    bg:          T.v2,
-    ringColor:   null,        // no avatar ring at this tier
-    description: 'You\'re going where others haven\'t yet. Your contributions are establishing your voice in the community, and others are starting to take notice. You\'re charting the path forward.',
-  },
-  beacon: {
-    name:        'Beacon',
-    min:         2000,
-    max:         4999,
-    color:       T.v,
-    bg:          T.v2,
-    ringColor:   null,        // no avatar ring at this tier
-    description: 'You\'re a reference point others navigate by. Your insights guide discussions, your library curates evidence others rely on, and your voice carries weight. The community is stronger because of you.',
-  },
-  luminary: {
-    name:        'Luminary',
-    min:         5000,
-    max:         null,
-    color:       '#C9A961',   // muted gold — reserved, premium, not garish
-    bg:          '#C9A96115',
-    ringColor:   '#C9A961',   // gold ring — Luminary tier only
-    description: 'You embody what this platform stands for. Your influence reaches across the community, and your contributions inspire the next generation of scientists. Welcome to the highest tier — and to The Luminarians, where peers at your level gather.',
-  },
-};
-
-export const TIER_ORDER = ['catalyst', 'pioneer', 'beacon', 'luminary'];
-
-export function getTierFromLumens(lumens) {
-  if (lumens >= 5000) return 'luminary';
-  if (lumens >= 2000) return 'beacon';
-  if (lumens >= 500)  return 'pioneer';
-  return 'catalyst';
-}
-
-export function getNextTier(currentTier) {
-  const idx = TIER_ORDER.indexOf(currentTier);
-  if (idx < 0 || idx === TIER_ORDER.length - 1) return null;
-  return TIER_ORDER[idx + 1];
-}
-
-export function getProgressToNextTier(lumens, currentTier) {
-  const next = getNextTier(currentTier);
-  if (!next) return { progress: 100, needed: 0 }; // already top tier
-  const nextMin = TIER_CONFIG[next].min;
-  const currentMin = TIER_CONFIG[currentTier].min;
-  const range = nextMin - currentMin;
-  const earned = lumens - currentMin;
-  return {
-    progress: Math.min(100, Math.round((earned / range) * 100)),
-    needed:   nextMin - lumens,
-    nextTier: next,
-  };
-}
-```
-
----
-
-## Step 4 — Update Av (avatar) component to support Luminary gold ring
-
-Read `src/components/Av.jsx` carefully before modifying.
-
-Add an optional `tier` prop. When `tier === 'luminary'`, render a
-subtle gold ring around the avatar. All other tiers render identically
-to the current default — no ring, no change.
-
+Add the tab panel conditional:
 ```jsx
-import { TIER_CONFIG } from '../lib/constants';
-
-export default function Av({
-  size = 36,
-  name = '',
-  color,
-  url = '',
-  tier = null,  // only 'luminary' produces a visual change
-  // ... existing props
-}) {
-  const isLuminary = tier === 'luminary';
-  const ringColor  = '#C9A961'; // muted gold
-  const ringWidth  = 2;
-
-  // If Luminary tier, wrap in a thin gold ring
-  if (isLuminary) {
-    return (
-      <div style={{
-        width:        size + ringWidth * 2,
-        height:       size + ringWidth * 2,
-        borderRadius: '50%',
-        padding:      ringWidth,
-        background:   ringColor,
-        flexShrink:   0,
-      }}>
-        {/* Existing avatar rendered at original size */}
-        <AvInner size={size} name={name} color={color} url={url} />
-      </div>
-    );
-  }
-
-  // All other tiers — render exactly as before, no changes
-  return <AvInner size={size} name={name} color={color} url={url} />;
-}
-```
-
-Extract the existing avatar rendering logic into a local `AvInner`
-component (same file) that accepts the same props as before. This
-keeps the Luminary ring wrapper clean and ensures zero visual change
-for non-Luminary users.
-
-The `tier` prop is optional — all existing callers that don't pass
-`tier` render identically to before. This is a purely additive change.
-
-### Pass tier to Av — only where it matters
-
-Unlike the original plan, we do NOT need to update every Av call
-across the app. Only update avatar calls where:
-
-1. **The profile page header** — always has access to profile data
-2. **PostCard.jsx** — `posts_with_meta` will include `author_tier`
-3. **NotifsScreen.jsx** — actor profiles are already batch-fetched
-
-For all other locations (comments, group members, library, etc.),
-omit the `tier` prop for now. The gold ring will appear in the most
-visible places (feed, profile) without requiring changes to every
-component.
-
-### Add author_tier to posts_with_meta view
-
-```sql
--- Add to the SELECT in posts_with_meta (read existing definition first):
-case
-  when pa.lumens_current_period >= 5000 then 'luminary'
-  else null  -- only Luminary tier triggers a visual change
-end as author_tier
-```
-
-Returning null for non-Luminary tiers means the Av component receives
-no tier prop and renders normally — clean and efficient.
-
-Apply the same to `group_posts_with_meta`.
-
----
-
-## Step 5 — Profile page tier badge
-
-In `ProfileScreen.jsx`, find the profile header area. Add a tier badge.
-For Catalyst, Pioneer, and Beacon tiers use the platform's standard
-violet (`T.v` / `T.v2`). Only Luminary gets the gold treatment:
-
-```jsx
-import { TIER_CONFIG, getTierFromLumens } from '../lib/constants';
-
-const tier = getTierFromLumens(profile.lumens_current_period || 0);
-const tierConfig = TIER_CONFIG[tier];
-
-// Tier badge — violet for all, gold accent for Luminary only
-<div style={{
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '4px 12px',
-  borderRadius: 20,
-  background: tierConfig.bg,
-  color: tierConfig.color,
-  fontSize: 12,
-  fontWeight: 700,
-  letterSpacing: 0.4,
-  textTransform: 'uppercase',
-  marginLeft: 8,
-}}>
-  ✦ {tierConfig.name}
-</div>
-
-{profile.is_founding_member && (
-  <div style={{
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '4px 12px',
-    borderRadius: 20,
-    background: '#1A1B2E10',
-    color: '#1A1B2E',
-    fontSize: 12,
-    fontWeight: 700,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginLeft: 6,
-  }}>
-    ★ Founding Member
-  </div>
+{activeTab === 'files' && (
+  <FilesTab supabase={supabase} user={user} profile={profile} />
 )}
 ```
 
-The avatar in the profile header should also receive the `tier` prop.
+Do not change any existing tab — Papers and Saved Posts remain
+exactly as they are.
 
-For the **own** profile only (when `profile.id === user.id`), show
-the Lumens count + progress to next tier below the badge:
+---
+
+## Step 4 — FilesTab component
+
+Add as a local component within LibraryScreen.jsx (same file):
 
 ```jsx
-{profile.id === user.id && (
-  <div style={{ marginTop: 12 }}>
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      fontSize: 13,
-      color: T.mu,
-    }}>
-      <span style={{ fontWeight: 700, color: T.text }}>
-        {(profile.lumens_current_period || 0).toLocaleString()} Lumens
-      </span>
-      <span>this period</span>
-      <button
-        onClick={() => onNavigate('lumens')}
-        style={{
-          marginLeft: 'auto',
-          padding: '4px 10px',
-          borderRadius: 6,
-          border: `1px solid ${T.bdr}`,
-          background: T.w,
-          fontSize: 12,
-          color: T.v,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-        }}
-      >
-        View history →
-      </button>
-    </div>
+function FilesTab({ supabase, user, profile }) {
+  const [files, setFiles]         = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [sortBy, setSortBy]       = useState('date');
+  const [deleting, setDeleting]   = useState(null);
+  const [error, setError]         = useState('');
 
-    {/* Progress bar to next tier */}
-    {tier !== 'luminary' && (
-      <div style={{ marginTop: 8 }}>
-        <div style={{
-          fontSize: 11,
-          color: T.mu,
-          marginBottom: 4,
-        }}>
-          {progress.needed} Lumens to {TIER_CONFIG[progress.nextTier].name}
+  const SOURCE_FILTERS = [
+    { id: 'all',      label: 'All files'      },
+    { id: 'post',     label: 'From posts'     },
+    { id: 'library',  label: 'From library'   },
+  ];
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.rpc('get_user_files', {
+      p_source: sourceFilter === 'all' ? null : sourceFilter,
+    });
+    setFiles(data || []);
+    setLoading(false);
+  }, [supabase, sourceFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const sorted = [...files].sort((a, b) => {
+    if (sortBy === 'date') {
+      return new Date(b.created_at) - new Date(a.created_at);
+    }
+    if (sortBy === 'size') {
+      return (b.file_size || 0) - (a.file_size || 0);
+    }
+    if (sortBy === 'name') {
+      return (a.file_name || '').localeCompare(b.file_name || '');
+    }
+    return 0;
+  });
+
+  // Total storage used
+  const totalBytes = files.reduce((sum, f) => sum + (f.file_size || 0), 0);
+
+  const handleDelete = async (file) => {
+    if (!window.confirm(
+      file.source === 'post'
+        ? 'Delete this file? The post will remain but show "File removed by author".'
+        : 'Delete this file? This cannot be undone.'
+    )) return;
+
+    setDeleting(file.id);
+    setError('');
+
+    // Call RPC — gets storage path back
+    const { data: result, error: rpcErr } = await supabase.rpc(
+      'delete_user_file', { p_file_id: file.id }
+    );
+
+    if (rpcErr) {
+      setError('Failed to delete file. Please try again.');
+      setDeleting(null);
+      return;
+    }
+
+    // Delete from Supabase Storage
+    if (result?.storage_path && result?.bucket) {
+      await supabase.storage
+        .from(result.bucket)
+        .remove([result.storage_path]);
+    }
+
+    setDeleting(null);
+    load(); // refresh list
+  };
+
+  const handleDownload = (file) => {
+    const a = document.createElement('a');
+    a.href = file.file_url;
+    a.download = file.file_name || 'download';
+    a.target = '_blank';
+    a.click();
+  };
+
+  return (
+    <div>
+      {/* Storage summary */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+        padding: '10px 14px',
+        background: T.s2,
+        borderRadius: 10,
+        border: `1px solid ${T.bdr}`,
+      }}>
+        <div style={{ fontSize: 13, color: T.mu }}>
+          <span style={{ fontWeight: 700, color: T.text }}>
+            {formatBytes(totalBytes)}
+          </span>
+          {' used across '}
+          <span style={{ fontWeight: 700, color: T.text }}>
+            {files.length}
+          </span>
+          {' file'}{files.length !== 1 ? 's' : ''}
         </div>
+        <div style={{ fontSize: 12, color: T.mu }}>
+          Full storage usage in{' '}
+          <button
+            onClick={() => {/* navigate to settings */}}
+            style={{
+              background: 'none', border: 'none',
+              color: T.v, fontSize: 12, cursor: 'pointer',
+              fontFamily: 'inherit', padding: 0,
+              textDecoration: 'underline',
+            }}
+          >
+            Settings
+          </button>
+        </div>
+      </div>
+
+      {/* Filter + sort bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 14,
+        gap: 8,
+        flexWrap: 'wrap',
+      }}>
+        {/* Source filter */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {SOURCE_FILTERS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setSourceFilter(f.id)}
+              style={{
+                padding: '5px 12px', borderRadius: 20,
+                border: `1px solid ${sourceFilter === f.id ? T.v : T.bdr}`,
+                background: sourceFilter === f.id ? T.v2 : T.w,
+                color: sourceFilter === f.id ? T.v3 : T.mu,
+                fontSize: 12,
+                fontWeight: sourceFilter === f.id ? 700 : 500,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Sort */}
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+          style={{
+            padding: '5px 10px', borderRadius: 8,
+            border: `1px solid ${T.bdr}`, background: T.w,
+            fontSize: 12, color: T.text,
+            fontFamily: 'inherit', cursor: 'pointer',
+            outline: 'none',
+          }}
+        >
+          <option value="date">Sort: Newest first</option>
+          <option value="size">Sort: Largest first</option>
+          <option value="name">Sort: Name A–Z</option>
+        </select>
+      </div>
+
+      {error && (
         <div style={{
-          height: 4,
-          background: T.bdr,
-          borderRadius: 2,
+          padding: '8px 12px', borderRadius: 8,
+          background: T.ro2, color: T.ro,
+          fontSize: 13, marginBottom: 12,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* File list */}
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <Spinner />
+        </div>
+      ) : sorted.length === 0 ? (
+        <div style={{
+          padding: '60px 20px', textAlign: 'center',
+          color: T.mu, fontSize: 14,
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>📎</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            No files yet
+          </div>
+          <div style={{ fontSize: 13 }}>
+            Files you attach to posts or upload to your library
+            will appear here.
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          background: T.w,
+          border: `1px solid ${T.bdr}`,
+          borderRadius: 12,
           overflow: 'hidden',
         }}>
+          {/* Table header */}
           <div style={{
-            height: '100%',
-            width: `${progress.progress}%`,
-            background: tierConfig.color,
-            transition: 'width 0.3s ease',
-          }} />
+            display: 'grid',
+            gridTemplateColumns: '1fr 80px 100px 90px 80px',
+            padding: '9px 16px',
+            borderBottom: `1px solid ${T.bdr}`,
+            fontSize: 11, fontWeight: 600, color: T.mu,
+            textTransform: 'uppercase', letterSpacing: 0.4,
+          }}>
+            <div>File</div>
+            <div>Size</div>
+            <div>Source</div>
+            <div>Date</div>
+            <div>Actions</div>
+          </div>
+
+          {sorted.map((file, i) => (
+            <FileRow
+              key={file.id}
+              file={file}
+              isLast={i === sorted.length - 1}
+              deleting={deleting === file.id}
+              onDelete={() => handleDelete(file)}
+              onDownload={() => handleDownload(file)}
+            />
+          ))}
         </div>
-      </div>
-    )}
-  </div>
-)}
-```
+      )}
+    </div>
+  );
+}
 
----
-
-## Step 6 — Lumens transparency page
-
-Create `src/screens/LumensScreen.jsx`:
-
-```jsx
-import React, { useState, useEffect } from 'react';
-import { T, TIER_CONFIG, TIER_ORDER, getTierFromLumens, getNextTier } from '../lib/constants';
-import Spinner from '../components/Spinner';
-
-const REASON_LABELS = {
-  post_created:           { label: 'You created a post',                icon: '✏️' },
-  comment_posted:         { label: 'You commented on a post',           icon: '💬' },
-  library_item_added:     { label: 'You added to your library',         icon: '📚' },
-  group_created:          { label: 'You created a group',               icon: '👥' },
-  project_created:        { label: 'You created a project',             icon: '🗂️' },
-  onboarding_completed:   { label: 'You completed onboarding',          icon: '✓'  },
-  comment_received:       { label: 'Your post received a comment',      icon: '💬' },
-  library_saved:          { label: 'Your library item was saved',       icon: '🔖' },
-  post_reposted:          { label: 'Your post was reposted',            icon: '↻'  },
-  invited_user_active:    { label: 'A user you invited became active',  icon: '🎟️' },
-  post_featured:          { label: 'Your post was featured',            icon: '✦'  },
-  template_approved:      { label: 'Your template was approved',        icon: '📋' },
-  discussion_threshold:   { label: 'Your post sparked a discussion',    icon: '🔥' },
-};
-
-const RULES = [
-  {
-    category: 'Creation',
-    description: 'Lumens for adding content to the platform',
-    items: [
-      { label: 'Create a post',         amount: 5  },
-      { label: 'Comment on a post',     amount: 2  },
-      { label: 'Add to your library',   amount: 1  },
-      { label: 'Create a group',        amount: 25 },
-      { label: 'Create a project',      amount: 10 },
-      { label: 'Complete onboarding',   amount: 25, oneTime: true },
-    ],
-  },
-  {
-    category: 'Engagement',
-    description: 'Lumens earned when others engage with your contributions',
-    items: [
-      { label: 'A user comments on your post (first time per user)',  amount: 5 },
-      { label: 'A user saves your library item',                       amount: 5 },
-    ],
-  },
-  {
-    category: 'Recognition',
-    description: 'Lumens for influence and quality contributions',
-    items: [
-      { label: 'Your post is reposted',                                amount: 10  },
-      { label: 'A user you invited becomes active',                    amount: 100 },
-      { label: 'Your post is featured by Luminary',                    amount: 100 },
-      { label: 'Your community template is approved',                  amount: 50  },
-      { label: 'Your post sparks a discussion (3+ commenters)',        amount: 50  },
-    ],
-  },
-];
-
-export default function LumensScreen({ supabase, user, profile }) {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const load = async () => {
-      const { data: result } = await supabase.rpc('get_lumen_history', {
-        p_limit: 50,
-      });
-      setData(result);
-      setLoading(false);
-    };
-    load();
-  }, [supabase]);
-
-  if (loading) {
-    return <div style={{ padding: 60, textAlign: 'center' }}><Spinner /></div>;
-  }
-
-  const tier = data?.tier || 'catalyst';
-  const tierConfig = TIER_CONFIG[tier];
-  const lumens = data?.current_period_lumens || 0;
-  const next   = getNextTier(tier);
-  const nextConfig = next ? TIER_CONFIG[next] : null;
-  const periodStart = new Date(data?.current_period_started || Date.now());
-  const periodEnd = new Date(periodStart);
-  periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+function FileRow({ file, isLast, deleting, onDelete, onDownload }) {
+  const icon = getFileIcon(file.file_type, file.file_name);
+  const isPostFile = file.source === 'post' || file.source === 'group_post';
 
   return (
     <div style={{
-      maxWidth: 760,
-      margin: '0 auto',
-      padding: '24px 32px 60px',
+      display: 'grid',
+      gridTemplateColumns: '1fr 80px 100px 90px 80px',
+      padding: '11px 16px',
+      borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`,
+      alignItems: 'center',
     }}>
-      {/* Tier hero card */}
-      <div style={{
-        background: `linear-gradient(135deg, ${tierConfig.color}15 0%, ${tierConfig.color}05 100%)`,
-        border: `2px solid ${tierConfig.color}`,
-        borderRadius: 16,
-        padding: '28px 32px',
-        marginBottom: 24,
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        {/* Decorative accent */}
+      {/* File name + context */}
+      <div style={{ minWidth: 0 }}>
         <div style={{
-          position: 'absolute',
-          top: -20,
-          right: -20,
-          width: 120,
-          height: 120,
-          borderRadius: '50%',
-          background: tierConfig.color,
-          opacity: 0.08,
-        }} />
-
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 12px',
-          borderRadius: 20,
-          background: tierConfig.bg,
-          color: tierConfig.color,
-          fontSize: 12,
-          fontWeight: 700,
-          letterSpacing: 0.5,
-          textTransform: 'uppercase',
-          marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          ✦ {tierConfig.name}
-        </div>
-
-        {data?.is_founding_member && (
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px 12px',
-            borderRadius: 20,
-            background: '#1A1B2E10',
-            color: '#1A1B2E',
-            fontSize: 12,
-            fontWeight: 700,
-            letterSpacing: 0.5,
-            textTransform: 'uppercase',
-            marginBottom: 12,
-            marginLeft: 6,
-          }}>
-            ★ Founding Member
-          </div>
-        )}
-
-        <h1 style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 36,
-          color: T.text,
-          margin: '0 0 4px',
-        }}>
-          {lumens.toLocaleString()} Lumens
-        </h1>
-
-        <p style={{
-          fontSize: 14,
-          color: T.mu,
-          margin: '0 0 18px',
-        }}>
-          This period · ends {periodEnd.toLocaleDateString('en-US', {
-            month: 'short', day: 'numeric', year: 'numeric',
-          })}
-        </p>
-
-        <p style={{
-          fontSize: 15,
-          color: T.text,
-          lineHeight: 1.6,
-          margin: '0 0 18px',
-          maxWidth: 560,
-        }}>
-          {tierConfig.description}
-        </p>
-
-        {/* Progress bar to next tier */}
-        {next && (
-          <div>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>{icon}</span>
+          <div style={{ minWidth: 0 }}>
             <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: 12,
-              color: T.mu,
-              marginBottom: 6,
+              fontSize: 13.5, color: T.text, fontWeight: 500,
+              overflow: 'hidden', textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}>
-              <span>{tierConfig.name}</span>
-              <span style={{ fontWeight: 700 }}>
-                {(nextConfig.min - lumens).toLocaleString()} to {nextConfig.name}
-              </span>
-              <span>{nextConfig.name}</span>
+              {file.file_name || 'Unnamed file'}
             </div>
-            <div style={{
-              height: 8,
-              background: T.bdr,
-              borderRadius: 4,
-              overflow: 'hidden',
-            }}>
+            {isPostFile && file.post_snippet && (
               <div style={{
-                height: '100%',
-                width: `${Math.min(100, ((lumens - tierConfig.min) / (nextConfig.min - tierConfig.min)) * 100)}%`,
-                background: `linear-gradient(90deg, ${tierConfig.color}, ${nextConfig.color})`,
-                transition: 'width 0.5s ease',
-              }} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Tier ladder */}
-      <div style={{
-        background: T.w,
-        border: `1px solid ${T.bdr}`,
-        borderRadius: 12,
-        padding: '20px 24px',
-        marginBottom: 24,
-      }}>
-        <h2 style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 20,
-          color: T.text,
-          margin: '0 0 16px',
-        }}>
-          The four tiers
-        </h2>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 12,
-        }}>
-          {TIER_ORDER.map(t => {
-            const config = TIER_CONFIG[t];
-            const isCurrent = t === tier;
-            return (
-              <div key={t} style={{
-                padding: '14px 16px',
-                borderRadius: 10,
-                border: `2px solid ${isCurrent ? config.color : T.bdr}`,
-                background: isCurrent ? config.bg : T.w,
+                fontSize: 11.5, color: T.mu, marginTop: 2,
+                overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}>
-                <div style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: 0.5,
-                  textTransform: 'uppercase',
-                  color: config.color,
-                  marginBottom: 4,
-                }}>
-                  ✦ {config.name}
-                </div>
-                <div style={{
-                  fontSize: 13,
-                  color: T.text,
-                  fontWeight: 600,
-                }}>
-                  {config.min.toLocaleString()}
-                  {config.max !== null
-                    ? ` – ${config.max.toLocaleString()}`
-                    : '+'}
-                </div>
-                <div style={{
-                  fontSize: 11,
-                  color: T.mu,
-                }}>
-                  Lumens
-                </div>
+                Post: "{file.post_snippet}…"
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Earning rules */}
-      <div style={{
-        background: T.w,
-        border: `1px solid ${T.bdr}`,
-        borderRadius: 12,
-        padding: '20px 24px',
-        marginBottom: 24,
-      }}>
-        <h2 style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 20,
-          color: T.text,
-          margin: '0 0 6px',
-        }}>
-          How Lumens are earned
-        </h2>
-        <p style={{
-          fontSize: 13,
-          color: T.mu,
-          margin: '0 0 18px',
-        }}>
-          Three ways: by creating, by being engaged with, and by being recognised.
-          Recognition counts more than creation.
-        </p>
-
-        {RULES.map(category => (
-          <div key={category.category} style={{ marginBottom: 18 }}>
-            <div style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: T.text,
-              marginBottom: 4,
-            }}>
-              {category.category}
-            </div>
-            <div style={{
-              fontSize: 12,
-              color: T.mu,
-              marginBottom: 10,
-            }}>
-              {category.description}
-            </div>
-            {category.items.map((item, i) => (
-              <div key={i} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '8px 0',
-                borderBottom: i < category.items.length - 1
-                  ? `1px solid ${T.bdr}` : 'none',
-              }}>
-                <div style={{ fontSize: 13.5, color: T.text }}>
-                  {item.label}
-                  {item.oneTime && (
-                    <span style={{
-                      marginLeft: 8,
-                      fontSize: 11,
-                      color: T.mu,
-                      fontStyle: 'italic',
-                    }}>
-                      one-time
-                    </span>
-                  )}
-                </div>
-                <div style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: tierConfig.color,
-                }}>
-                  +{item.amount}
-                </div>
-              </div>
-            ))}
-          </div>
-        ))}
+      {/* Size */}
+      <div style={{ fontSize: 12, color: T.mu }}>
+        {formatBytes(file.file_size || 0)}
       </div>
 
-      {/* Recent earnings history */}
-      <div style={{
-        background: T.w,
-        border: `1px solid ${T.bdr}`,
-        borderRadius: 12,
-        padding: '20px 24px',
-      }}>
-        <h2 style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 20,
-          color: T.text,
-          margin: '0 0 16px',
+      {/* Source badge */}
+      <div>
+        <span style={{
+          fontSize: 11, fontWeight: 600,
+          padding: '2px 8px', borderRadius: 20,
+          background: isPostFile ? T.am2 : T.v2,
+          color: isPostFile ? T.am : T.v,
         }}>
-          Recent earnings
-        </h2>
+          {file.source === 'post'       ? 'Post'
+         : file.source === 'group_post' ? 'Group post'
+         : 'Library'}
+        </span>
+      </div>
 
-        {(data?.transactions || []).length === 0 ? (
-          <div style={{
-            padding: '40px 20px',
-            textAlign: 'center',
-            color: T.mu,
-            fontSize: 14,
-          }}>
-            No Lumens earned yet. Start by creating your first post or
-            joining a discussion.
-          </div>
-        ) : (
-          <div>
-            {data.transactions.map(tx => {
-              const reasonInfo = REASON_LABELS[tx.reason] || {
-                label: tx.reason,
-                icon: '•',
-              };
-              return (
-                <div key={tx.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '10px 0',
-                  borderBottom: `1px solid ${T.bdr}`,
-                }}>
-                  <div style={{
-                    fontSize: 20,
-                    flexShrink: 0,
-                    width: 28,
-                    textAlign: 'center',
-                  }}>
-                    {reasonInfo.icon}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: 13.5,
-                      color: T.text,
-                      fontWeight: 500,
-                    }}>
-                      {reasonInfo.label}
-                    </div>
-                    <div style={{
-                      fontSize: 11,
-                      color: T.mu,
-                      textTransform: 'capitalize',
-                    }}>
-                      {tx.category} · {new Date(tx.created_at).toLocaleDateString('en-US', {
-                        month: 'short', day: 'numeric',
-                      })}
-                    </div>
-                  </div>
-                  <div style={{
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: tierConfig.color,
-                  }}>
-                    +{tx.amount}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      {/* Date */}
+      <div style={{ fontSize: 12, color: T.mu }}>
+        {new Date(file.created_at).toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric',
+        })}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 5 }}>
+        <button
+          onClick={onDownload}
+          title="Download"
+          style={{
+            padding: '4px 8px', borderRadius: 6,
+            border: `1px solid ${T.bdr}`, background: T.w,
+            fontSize: 13, cursor: 'pointer', color: T.mu,
+          }}
+        >
+          ↓
+        </button>
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          title={isPostFile
+            ? 'Remove from post'
+            : 'Delete file'}
+          style={{
+            padding: '4px 8px', borderRadius: 6,
+            border: `1px solid ${T.bdr}`,
+            background: T.w, color: T.ro,
+            fontSize: 13,
+            cursor: deleting ? 'default' : 'pointer',
+            opacity: deleting ? 0.5 : 1,
+          }}
+        >
+          {deleting ? '…' : '🗑'}
+        </button>
       </div>
     </div>
   );
 }
-```
 
-### Wire LumensScreen into navigation
+// File type icon helper
+function getFileIcon(fileType, fileName) {
+  const ext = (fileName || '').split('.').pop()?.toLowerCase();
+  if (fileType?.startsWith('image/') || ['jpg','jpeg','png','gif','webp'].includes(ext))
+    return '🖼';
+  if (fileType === 'application/pdf' || ext === 'pdf') return '📄';
+  if (['xls','xlsx','csv'].includes(ext)) return '📊';
+  if (['ppt','pptx'].includes(ext)) return '📑';
+  if (['doc','docx'].includes(ext)) return '📝';
+  if (['zip','rar','gz'].includes(ext)) return '🗜';
+  return '📎';
+}
 
-Find the main App.jsx routing logic. Add:
-
-```javascript
-import LumensScreen from './screens/LumensScreen';
-
-// In the screen conditional:
-{screen === 'lumens' && <LumensScreen supabase={supabase} user={user} profile={profile} />}
-```
-
-Add a "Lumens" link in the sidebar nav (where Profile, Library, etc.
-are listed) — or alternatively only accessible via "View history →"
-button on the profile page. Recommendation: accessible via profile
-button only for now (keeps the sidebar uncluttered) — power users will
-discover it through the profile page.
-
----
-
-## Step 7 — Sidebar XP badge → wire to Lumens
-
-The sidebar currently shows a decorative XP badge that's unwired.
-Find this in the sidebar component (likely in `Sidebar.jsx` or
-`AppShell.jsx`).
-
-Replace decorative XP/level display with real Lumens + tier:
-
-```jsx
-import { TIER_CONFIG, getTierFromLumens } from '../lib/constants';
-
-const tier = getTierFromLumens(profile.lumens_current_period || 0);
-const tierConfig = TIER_CONFIG[tier];
-
-<button
-  onClick={() => onNavigate('lumens')}
-  style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '8px 12px',
-    borderRadius: 9,
-    border: `1px solid ${tierConfig.color}40`,
-    background: tierConfig.bg,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    width: '100%',
-  }}
->
-  <span style={{
-    fontSize: 14,
-    color: tierConfig.color,
-  }}>
-    ✦
-  </span>
-  <div style={{ flex: 1, textAlign: 'left' }}>
-    <div style={{
-      fontSize: 11,
-      color: T.mu,
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
-      fontWeight: 600,
-    }}>
-      {tierConfig.name}
-    </div>
-    <div style={{
-      fontSize: 13,
-      color: T.text,
-      fontWeight: 700,
-    }}>
-      {(profile.lumens_current_period || 0).toLocaleString()} Lumens
-    </div>
-  </div>
-</button>
-```
-
-Clicking the badge navigates to the Lumens transparency page.
-
----
-
-## Step 8 — PostHog events
-
-Add new event capture in analytics.js for Lumens-related actions.
-These complement the existing capture() calls — fire them alongside
-the award_lumens RPC:
-
-```javascript
-capture('lumens_earned', {
-  amount:   p_amount,
-  reason:   p_reason,
-  category: p_category,
-});
-```
-
-Add this to each award_lumens call site so PostHog tracks Lumens
-earning patterns.
-
-Also add:
-```javascript
-capture('tier_reached', { tier: 'pioneer' });
-```
-This requires detecting tier transitions — when a user's
-`lumens_current_period` crosses a tier threshold. Implement this in
-a SECURITY DEFINER function that runs after award_lumens, OR
-client-side after each Lumens earn by comparing previous tier to new
-tier.
-
-Client-side approach (simpler):
-```javascript
-const before = getTierFromLumens(profile.lumens_current_period - amount);
-const after  = getTierFromLumens(profile.lumens_current_period);
-if (before !== after) {
-  capture('tier_reached', { tier: after });
+// Format bytes helper
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 ```
+
+---
+
+## Step 5 — Update Settings storage panel
+
+Read the current StoragePanel in AccountScreen (or wherever it lives).
+
+Find where individual file management currently lives (delete buttons
+per file). Replace the file list section with a link to Library → Files:
+
+```jsx
+{/* Replace individual file management with Library link */}
+<div style={{
+  marginTop: 16,
+  padding: '12px 14px',
+  background: T.s2,
+  borderRadius: 10,
+  border: `1px solid ${T.bdr}`,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+}}>
+  <div>
+    <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>
+      Manage your files
+    </div>
+    <div style={{ fontSize: 12, color: T.mu, marginTop: 2 }}>
+      View, download, and delete files from your Library
+    </div>
+  </div>
+  <button
+    onClick={() => onNavigate('library', { tab: 'files' })}
+    style={{
+      padding: '7px 14px', borderRadius: 8,
+      border: `1px solid ${T.bdr}`, background: T.w,
+      fontSize: 13, fontWeight: 600,
+      color: T.v, cursor: 'pointer',
+      fontFamily: 'inherit',
+    }}
+  >
+    Open Library →
+  </button>
+</div>
+```
+
+The "Open Library →" button should navigate to LibraryScreen with
+the Files tab pre-selected. Check how navigation works in the app
+(likely `onNavigate('library')` or similar) and pass the tab
+parameter so the Files tab opens directly.
+
+If LibraryScreen doesn't currently accept a default tab prop, add one:
+
+```jsx
+// In LibraryScreen:
+export default function LibraryScreen({
+  supabase, user, profile,
+  defaultTab = 'papers',  // ← add this prop
+  onNavigate,
+}) {
+  const [activeTab, setActiveTab] = useState(defaultTab);
+  // ...
+}
+```
+
+Keep the storage usage summary (total bytes, breakdown by category)
+in Settings — only remove the individual file list and delete buttons.
+
+---
+
+## Step 6 — Group library Files tab (if applicable)
+
+Check whether the group library (within GroupScreen or a group detail
+view) has its own library section. If it does, apply the same Files
+tab pattern scoped to group files:
+
+- Filter: `p_source = 'group_post'` AND `group_id = current_group_id`
+- Delete: soft-delete on group_post, remove from storage
+- Group admins can delete any group member's file
+- Regular members can only delete their own files
+
+If group library is not yet implemented or is out of scope, skip
+this step and note it as a follow-up.
 
 ---
 
 ## What NOT to change
 
 - `src/screens/GroupsScreen.jsx` — legacy file, do not touch
-- The unused `xp` and `level` columns on profiles — leave in place,
-  don't use, don't remove
-- The Luminary Team bot account — it's excluded from Lumens entirely
-- Existing tier descriptions text — match the TASK.md text exactly,
-  these are user-facing copy
+- Existing Papers tab in LibraryScreen — completely unchanged
+- Existing Saved Posts tab in LibraryScreen — completely unchanged
+- The storage usage summary in Settings (total + category breakdown)
+  — keep this, only remove the file list below it
+- Post card "📎 File removed by author" placeholder — already built,
+  should trigger correctly when post attachment is deleted via Files tab
 - Run `npm run build` when done
 
 ---
@@ -1266,153 +688,96 @@ if (before !== after) {
 ## Deployment
 
 ```bash
-# 1. Run migration_gamification.sql in Supabase SQL Editor
+# 1. Run migration in Supabase SQL Editor:
+#    - get_user_files RPC
+#    - delete_user_file RPC
 
-# 2. Recreate posts_with_meta and group_posts_with_meta views to
-#    include author_tier — Claude Code generates the SQL based on
-#    current view definitions.
+# 2. Verify:
+#    select get_user_files(null);  -- should return [] if no files yet
 
-# 3. Verify:
-#    select count(*) from lumen_transactions;  -- should be 0 (new)
-#    select award_lumens(auth.uid(), 5, 'test', 'creation', '{}');
-#    select * from lumen_transactions;  -- should show 1 row
-
-# 4. Deploy app changes:
-git add . && git commit -m "Phase 8: Gamification — Lumens, tiers (Catalyst→Pioneer→Beacon→Luminary), transparency page, Founding Member" && git push
+# 3. Deploy:
+git add . && git commit -m "Phase 10: Library Files tab — universal file manager for library uploads and post attachments" && git push
 ```
 
 ---
 
 ## Remind the user
 
-**Before testing — admin task:**
-Set the Founding Member cutoff date in admin_config:
-```sql
-update admin_config
-set value = jsonb_build_object('cutoff_date', '2026-08-01T00:00:00Z')
-where key = 'founding_member_cutoff';
-```
-Edit the date based on your launch plan. Users who complete onboarding
-before this date are marked as Founding Members.
+**Testing the delete flow for post attachments:**
+1. Create a post with an image or PDF attached
+2. Go to Library → Files
+3. Find the file, click 🗑
+4. Confirm the warning about "File removed by author"
+5. Go back to the feed — the post should show "📎 File removed by author"
+6. The file should no longer exist in Supabase Storage
 
-**Testing the gamification system:**
+**Testing the delete flow for library files:**
+1. Upload a PDF directly to your library
+2. Go to Library → Files
+3. Delete it
+4. Verify it's gone from the list and from Supabase Storage
 
-1. **Earn Lumens by creating content:**
-   - Create a post → check Lumens count increases by 5
-   - Add a comment → check Lumens count increases by 2
-   - Look at profile page → tier badge should show
-
-2. **Earn Lumens through engagement:**
-   - User B comments on User A's post → User A earns 5 Lumens
-   - Check User A's transparency page → see "Your post received a comment +5"
-
-3. **Discussion threshold:**
-   - Three different users comment on User A's post → User A earns 50 Lumens
-   - Check transaction history shows "Your post sparked a discussion +50"
-
-4. **Tier progression:**
-   - Manually award test Lumens via SQL:
-     ```sql
-     select award_lumens(
-       'user-uuid'::uuid, 500, 'test', 'creation', '{}'::jsonb
-     );
-     ```
-   - User should now show as Pioneer with teal accent
-
-5. **Founding Member:**
-   - Verify is_founding_member = true on early users
-   - Check profile shows "★ Founding Member" badge
-
-6. **Avatar tier rings:**
-   - Look at posts in the feed — avatars of Pioneer+ users should
-     have coloured rings
-   - Top tier (Luminary) should have gold ring
-
-**Tuning thresholds:**
-The starting thresholds (500 / 2,000 / 5,000) are estimates. After
-20+ users, review the distribution and adjust if needed:
-```sql
-select tier, count(*)
-from (select compute_tier(lumens_current_period) as tier from profiles) t
-group by tier;
-```
-Healthy distribution: most users at Catalyst, some at Pioneer,
-few at Beacon, very rare Luminary. If too many users reach Luminary
-quickly, raise the threshold.
+**Navigating from Settings:**
+1. Go to Settings → Account → Storage
+2. The storage summary (total bytes, breakdown) should still be there
+3. "Open Library →" button should navigate directly to Library → Files tab
 
 ---
 
 ## Testing checklist
 
 **Migration:**
-- [ ] `lumen_transactions` table exists with correct RLS
-- [ ] `profiles` has 5 new columns (lumens_current_period, lumens_lifetime,
-      current_period_started, previous_period_lumens, is_founding_member)
-- [ ] `admin_config` has 'founding_member_cutoff' key
-- [ ] `award_lumens()` function exists and rejects bot account
-- [ ] `compute_tier()` function returns correct tier for various inputs
-- [ ] `get_lumen_history()` RPC returns correct structure
-- [ ] `apply_founding_member_status` trigger fires on onboarding completion
+- [ ] `get_user_files` RPC exists and returns correct structure
+- [ ] `delete_user_file` RPC exists
+- [ ] Both RPCs require authentication (return error for anon)
+- [ ] Avatar files excluded from results
 
-**Lumens earning:**
-- [ ] Post created → 5 Lumens to author
-- [ ] Comment posted → 2 Lumens to commenter
-- [ ] Comment received (first time per user) → 5 Lumens to post owner
-- [ ] Self-comments don't award engagement Lumens
-- [ ] Duplicate comments don't double-award engagement Lumens
-- [ ] Library item added → 1 Lumen to adder
-- [ ] Group created → 25 Lumens
-- [ ] Project created → 10 Lumens
-- [ ] Onboarding completed → 25 Lumens
-- [ ] Post reposted → 10 Lumens to original author
-- [ ] Discussion threshold (3+ distinct commenters) → 50 Lumens, one-time
-- [ ] Invited user creates first post → 100 Lumens to inviter
-- [ ] Post featured by admin → 100 Lumens to author
-- [ ] Template approved → 50 Lumens to submitter
-- [ ] Bot account (Luminary Team) earns no Lumens
+**Files tab in Library:**
+- [ ] Files tab appears alongside existing tabs
+- [ ] Existing Papers and Saved Posts tabs completely unchanged
+- [ ] Files tab loads without error (empty state when no files)
+- [ ] Empty state shows helpful message about where files come from
 
-**Tier visualisation:**
-- [ ] Luminary tier avatar shows subtle gold ring in PostCard feed
-- [ ] Luminary tier avatar shows gold ring on profile page header
-- [ ] Luminary tier avatar shows gold ring in NotifsScreen
-- [ ] Catalyst / Pioneer / Beacon avatars show NO ring — identical to before
-- [ ] Existing avatar callers that don't pass `tier` prop render identically
-- [ ] posts_with_meta view includes author_tier (null for non-Luminary)
-- [ ] group_posts_with_meta view includes author_tier
+**File list:**
+- [ ] All files shown when "All files" filter selected
+- [ ] "From posts" filter shows only post attachments
+- [ ] "From library" filter shows only library uploads
+- [ ] Sort by Date works (newest first)
+- [ ] Sort by Size works (largest first)
+- [ ] Sort by Name works (A-Z)
+- [ ] File icon matches file type (PDF, image, Excel, etc.)
+- [ ] Post snippet shown for post attachment files
+- [ ] Source badge shows correctly (Post / Library)
+- [ ] File size formatted correctly (KB / MB)
+- [ ] Date formatted correctly
 
-**Profile page:**
-- [ ] Tier badge displays on profile header
-- [ ] Founding Member badge displays for qualifying users
-- [ ] Own profile shows Lumens count + progress to next tier
-- [ ] "View history →" button navigates to Lumens transparency page
+**Storage summary in Files tab:**
+- [ ] Total bytes and file count shown at top of Files tab
+- [ ] "Settings" link in summary navigates to Settings storage section
 
-**Lumens transparency page:**
-- [ ] Hero card shows current tier with tier-coloured background
-- [ ] Tier description text matches TIER_CONFIG description
-- [ ] Lumens count displays correctly
-- [ ] Progress bar shows accurate progress to next tier
-- [ ] Luminary tier shows no progress bar (already at top)
-- [ ] Four tier cards displayed with current tier highlighted
-- [ ] Earning rules table shows all categories with amounts
-- [ ] Recent earnings list shows last 50 transactions
-- [ ] Each transaction shows correct icon, label, category, date
-- [ ] Empty state shows when user has no transactions
+**Delete — library file:**
+- [ ] Confirmation dialog appears
+- [ ] File deleted from user_storage_files table
+- [ ] File deleted from Supabase Storage
+- [ ] Profile storage_used_bytes updated
+- [ ] File disappears from list after deletion
 
-**Sidebar:**
-- [ ] Old XP/level badge replaced with tier + Lumens display
-- [ ] Sidebar badge shows correct tier name and Lumens count
-- [ ] Clicking sidebar badge navigates to Lumens screen
+**Delete — post attachment:**
+- [ ] Confirmation dialog warns about "File removed by author"
+- [ ] Post soft-deleted: image_url cleared, file_deleted_at set
+- [ ] File deleted from Supabase Storage
+- [ ] Post in feed shows "📎 File removed by author" placeholder
+- [ ] File disappears from Files tab list
 
-**Founding Member:**
-- [ ] Trigger fires when user completes onboarding
-- [ ] Cutoff date check works correctly
-- [ ] Users who complete onboarding after cutoff are NOT marked
-- [ ] Admin can update cutoff_date in admin_config
-- [ ] Founding Member badge persists after period reset
+**Download:**
+- [ ] Download button triggers file download
+- [ ] Correct filename used for download
 
-**PostHog:**
-- [ ] `lumens_earned` event fires for every Lumens award
-- [ ] `tier_reached` event fires only on actual tier transitions
+**Settings storage panel:**
+- [ ] Storage summary (total + breakdown) still visible
+- [ ] Individual file list removed from Settings
+- [ ] "Open Library →" button present
+- [ ] Clicking button navigates to Library with Files tab pre-selected
 
 **Build:**
 - [ ] `npm run build` succeeds with no new warnings
