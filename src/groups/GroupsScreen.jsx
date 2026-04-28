@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
+import { useWindowSize } from '../lib/useWindowSize';
 import Spinner from '../components/Spinner';
 import CreateGroupModal from './CreateGroupModal';
 
@@ -125,7 +126,89 @@ function GroupBadgeCard({ group, role, memberCount, unreadCount, onSelect, actio
   );
 }
 
+// Compact mobile card: tighter, no avatar, no chips. Just the gradient
+// stripe + name + topic (2-line clamp) + a footer with member count and
+// visibility/role/unread indicators. Optional Join action overlays the
+// footer on Discover.
+function CompactGroupCard({ group, role, memberCount, unreadCount, onSelect, joining, onJoin }) {
+  const isAdmin  = role === 'admin';
+  const isAlumni = role === 'alumni';
+  const hasUnread = (unreadCount || 0) > 0;
+
+  return (
+    <div
+      onClick={() => onSelect(group.id)}
+      style={{
+        position: 'relative', background: T.w, cursor: 'pointer',
+        border: `1.5px solid ${hasUnread ? T.v : T.bdr}`,
+        borderRadius: 12, overflow: 'hidden',
+        boxShadow: hasUnread ? '0 2px 10px rgba(108,99,255,.12)' : 'none',
+        display: 'flex', flexDirection: 'column',
+      }}
+    >
+      <div style={{ height: 4, background: 'linear-gradient(90deg,#667eea,#764ba2,#f093fb)' }}/>
+      <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1.25,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
+          }}>
+            {group.name}
+          </span>
+          <span style={{ fontSize: 10.5, color: T.mu, flexShrink: 0 }}>
+            {group.is_public ? '🌐' : '🔒'}
+          </span>
+        </div>
+        {group.research_topic && (
+          <div style={{
+            fontSize: 11.5, color: T.mu, lineHeight: 1.45,
+            overflow: 'hidden', display: '-webkit-box',
+            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+          }}>
+            {group.research_topic}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 'auto', paddingTop: 4 }}>
+          <span style={{ fontSize: 11, color: T.mu }}>
+            <strong style={{ color: T.text, fontWeight: 700 }}>{memberCount || 0}</strong> members
+          </span>
+          {isAdmin && (
+            <span style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: T.v, color: '#fff', textTransform: 'uppercase', letterSpacing: '.05em' }}>Admin</span>
+          )}
+          {isAlumni && (
+            <span style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: T.am2, color: T.am }}>Alumni</span>
+          )}
+          {hasUnread && (
+            <span style={{
+              marginLeft: 'auto',
+              fontSize: 10, fontWeight: 700, background: T.v, color: '#fff',
+              padding: '2px 7px', borderRadius: 20, minWidth: 20, textAlign: 'center',
+            }}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </div>
+        {onJoin && (
+          <button
+            onClick={e => { e.stopPropagation(); onJoin(group); }}
+            disabled={joining}
+            style={{
+              padding: '6px', borderRadius: 8, fontSize: 11.5, fontWeight: 700,
+              fontFamily: 'inherit', cursor: 'pointer',
+              border: `1.5px solid ${T.v}`,
+              background: group.is_public ? T.v : T.v2,
+              color: group.is_public ? '#fff' : T.v,
+            }}>
+            {joining ? '…' : group.is_public ? '+ Join' : '🔒 Request'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function GroupsScreen({ user, profile, onGroupSelect }) {
+  const { isMobile } = useWindowSize();
   const [myGroups,      setMyGroups]      = useState([]);
   const [discover,      setDiscover]      = useState([]);
   const [loadingMine,   setLoadingMine]   = useState(true);
@@ -134,6 +217,7 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
   const [discoverQuery, setDiscoverQuery] = useState('');
   const [joining,       setJoining]       = useState(null);
   const [unreadCounts,  setUnreadCounts]  = useState({});
+  const [mobileTab,     setMobileTab]     = useState('mine'); // mobile only
 
   const fetchMyGroups = useCallback(async () => {
     setLoadingMine(true);
@@ -219,6 +303,110 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
     const q = discoverQuery.toLowerCase();
     return g.name.toLowerCase().includes(q) || (g.research_topic || '').toLowerCase().includes(q) || (g.tier1 || '').toLowerCase().includes(q);
   });
+
+  // ── Mobile: tabs + 2-col grid of compact cards ─────────────────────────
+  if (isMobile) {
+    return (
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', background: T.bg }}>
+        {showCreate && (
+          <CreateGroupModal user={user} onGroupCreated={id => { setShowCreate(false); onGroupSelect(id); }} onClose={() => setShowCreate(false)}/>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, color: T.text }}>Groups</div>
+          <button onClick={() => setShowCreate(true)} style={{
+            padding: '7px 14px', borderRadius: 9, border: 'none',
+            background: T.v, color: '#fff', cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700,
+          }}>+ Create</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{
+          display: 'flex', gap: 6, marginBottom: 14,
+          borderBottom: `1px solid ${T.bdr}`,
+        }}>
+          {[
+            { id: 'mine',     label: 'My Groups', count: myGroups.length },
+            { id: 'discover', label: 'Discover',  count: null },
+          ].map(t => (
+            <button key={t.id} onClick={() => setMobileTab(t.id)} style={{
+              padding: '8px 4px', marginRight: 14,
+              border: 'none', background: 'transparent',
+              cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 13, fontWeight: mobileTab === t.id ? 700 : 500,
+              color: mobileTab === t.id ? T.v : T.mu,
+              borderBottom: `2px solid ${mobileTab === t.id ? T.v : 'transparent'}`,
+              marginBottom: -1,
+            }}>
+              {t.label}{t.count != null ? ` (${t.count})` : ''}
+            </button>
+          ))}
+        </div>
+
+        {mobileTab === 'mine' ? (
+          loadingMine ? <Spinner/> : myGroups.length === 0 ? (
+            <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12, padding: '28px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>🔬</div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 15, marginBottom: 4 }}>No groups yet</div>
+              <div style={{ fontSize: 12, color: T.mu, marginBottom: 14 }}>Create one for your lab or research team.</div>
+              <button onClick={() => setShowCreate(true)} style={{
+                padding: '7px 16px', borderRadius: 9, border: 'none',
+                background: T.v, color: '#fff', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700,
+              }}>Create your first group →</button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {myGroups.map(m => m.groups && (
+                <CompactGroupCard
+                  key={m.groups.id}
+                  group={m.groups}
+                  role={m.role}
+                  memberCount={m.memberCount}
+                  unreadCount={unreadCounts[m.groups.id] || 0}
+                  onSelect={onGroupSelect}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          <>
+            <input
+              value={discoverQuery}
+              onChange={e => setDiscoverQuery(e.target.value)}
+              placeholder="Search by name, topic, or discipline…"
+              style={{
+                width: '100%', background: T.w, border: `1.5px solid ${T.bdr}`,
+                borderRadius: 9, padding: '8px 12px', fontSize: 13,
+                fontFamily: 'inherit', outline: 'none', color: T.text,
+                boxSizing: 'border-box', marginBottom: 12,
+              }}
+            />
+            {loadingDisc ? <Spinner/> : filteredDiscover.length === 0 ? (
+              <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12, padding: '20px 16px', textAlign: 'center', fontSize: 13, color: T.mu }}>
+                {discoverQuery ? 'No groups match your search.' : 'No groups to discover yet.'}
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {filteredDiscover.map(g => (
+                  <CompactGroupCard
+                    key={g.id}
+                    group={g}
+                    role={null}
+                    memberCount={g.memberCount}
+                    onSelect={() => joinGroup(g)}
+                    onJoin={joinGroup}
+                    joining={joining === g.id}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px', background: T.bg }}>
