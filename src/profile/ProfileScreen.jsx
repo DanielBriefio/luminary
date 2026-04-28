@@ -869,9 +869,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       )}
       <div style={{padding:'16px 18px'}}>
 
-        <div style={{position:'relative',marginBottom:46}}>
-          <div style={{height:148,borderRadius:'14px 14px 0 0',overflow:'hidden'}}>
-            <svg width="100%" height="148" viewBox="0 0 760 148" preserveAspectRatio="xMidYMid slice">
+        <div style={{position:'relative',marginBottom: isMobile ? 38 : 46}}>
+          <div style={{height: isMobile ? 96 : 148, borderRadius:'14px 14px 0 0', overflow:'hidden'}}>
+            <svg width="100%" height="100%" viewBox="0 0 760 148" preserveAspectRatio="xMidYMid slice">
               <defs><linearGradient id="cov" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#667eea"/><stop offset="45%" stopColor="#764ba2"/><stop offset="100%" stopColor="#f093fb"/></linearGradient></defs>
               <rect width="760" height="148" fill="url(#cov)"/>
               <circle cx="95" cy="74" r="85" fill="white" opacity=".04"/><circle cx="665" cy="30" r="65" fill="white" opacity=".06"/>
@@ -1158,7 +1158,13 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   [pubStats.hIndex>0?`h${pubStats.hIndex}`:'—', 'h-index', null, false],
                 ];
                 return (
-                  <div style={{display:'grid',gridTemplateColumns:`repeat(${statsRow.length},1fr)`,gap:9,margin:'14px 0'}}>
+                  <div style={{
+                    display:'grid',
+                    gridTemplateColumns: isMobile && statsRow.length > 2
+                      ? 'repeat(2, 1fr)'
+                      : `repeat(${statsRow.length},1fr)`,
+                    gap:9, margin:'14px 0',
+                  }}>
                     {statsRow.map(([v,l,networkKey,isText])=>{
                       const isActive = networkOpen && networkTab===networkKey;
                       const clickable = !!networkKey;
