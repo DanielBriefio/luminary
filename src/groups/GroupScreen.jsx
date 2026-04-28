@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
+import { useWindowSize } from '../lib/useWindowSize';
 import Spinner from '../components/Spinner';
 import GroupFeed from './GroupFeed';
 import GroupMembers from './GroupMembers';
@@ -155,6 +156,7 @@ function GroupAvatar({ group, size = 48 }) {
 }
 
 export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup, onMarkRead, savedGroupPostIds = new Set(), onSaveToggled, onNavigateToPost }) {
+  const { isMobile } = useWindowSize();
   const [group,           setGroup]           = useState(null);
   const [myRole,          setMyRole]          = useState(null);
   const [activeTab,       setActiveTab]       = useState('feed');
@@ -236,6 +238,127 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
         onBackToGroup={() => { setActiveProjectId(null); setActiveTab('feed'); }}
         onBack={() => setActiveProjectId(null)}
       />
+    );
+  }
+
+  // Tab body — shared between desktop sidebar layout and mobile pills layout.
+  const renderActiveTab = () => (
+    <>
+      {activeTab === 'feed' && !isAlumni && (
+        <GroupFeed
+          groupId={groupId}
+          groupName={group.name}
+          user={user}
+          profile={profile}
+          myRole={myRole}
+          onViewPaper={onViewPaper}
+          onMarkRead={onMarkRead}
+          savedGroupPostIds={savedGroupPostIds}
+          onSaveToggled={onSaveToggled}
+        />
+      )}
+      {activeTab === 'members' && (
+        <GroupMembers
+          groupId={groupId}
+          group={group}
+          user={user}
+          myRole={myRole}
+          onLeft={onBack}
+        />
+      )}
+      {activeTab === 'profile' && (
+        <GroupProfile
+          groupId={groupId}
+          group={group}
+          user={user}
+          myRole={myRole}
+          onGroupUpdate={fetchGroup}
+          onViewGroup={onViewGroup}
+          onSwitchTab={setActiveTab}
+        />
+      )}
+      {activeTab === 'library' && (
+        <GroupLibrary
+          groupId={groupId}
+          user={user}
+          myRole={myRole}
+          onStatsChanged={fetchGroup}
+          onNavigateToPost={onNavigateToPost}
+        />
+      )}
+      {activeTab === 'projects' && (
+        <GroupProjects
+          groupId={groupId}
+          user={user}
+          myRole={myRole}
+          onSelectProject={id => setActiveProjectId(id)}
+        />
+      )}
+    </>
+  );
+
+  // ── Mobile shell: horizontal scrolling pills above the content, no
+  // sidebar. The user already has BottomNav for top-level navigation; the
+  // pills give them the group's own tab navigation. Leave / Delete moved
+  // into the Profile tab on mobile (admin can manage from inside the
+  // group's profile editor).
+  if (isMobile) {
+    return (
+      <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden', background: T.bg }}>
+        {/* Header: back + group name + tabs */}
+        <div style={{
+          background: T.w, borderBottom: `1px solid ${T.bdr}`, flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px' }}>
+            <button onClick={onBack} style={{
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              fontSize: 14, color: T.mu, fontFamily: 'inherit', padding: '4px 6px',
+            }}>←</button>
+            <GroupAvatar group={group} size={28}/>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {group.name}
+              </div>
+              <div style={{ fontSize: 10.5, color: T.mu, display: 'flex', gap: 6 }}>
+                <span>{activeMemberCount} active</span>
+                <span style={{
+                  fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 20,
+                  background: myRole === 'admin' ? T.v : isAlumni ? T.am2 : T.s3,
+                  color: myRole === 'admin' ? '#fff' : isAlumni ? T.am : T.mu,
+                }}>
+                  {myRole === 'admin' ? 'Admin' : isAlumni ? 'Alumni' : 'Member'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div style={{
+            display: 'flex', gap: 6, padding: '0 14px 8px',
+            overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+          }}>
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+                flexShrink: 0,
+                padding: '6px 12px', borderRadius: 20,
+                border: `1.5px solid ${activeTab === t.id ? T.v : T.bdr}`,
+                background: activeTab === t.id ? T.v2 : T.w,
+                cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 12.5, fontWeight: activeTab === t.id ? 700 : 500,
+                color: activeTab === t.id ? T.v : T.mu,
+                whiteSpace: 'nowrap',
+              }}>
+                <span style={{ marginRight: 4 }}>{t.icon}</span>{t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {renderActiveTab()}
+        </div>
+      </div>
     );
   }
 
@@ -332,56 +455,7 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
           {!group.is_public && <span style={{ marginLeft: 8, fontSize: 11, color: T.mu }}>🔒 Closed group</span>}
         </div>
 
-        {activeTab === 'feed' && !isAlumni && (
-          <GroupFeed
-            groupId={groupId}
-            groupName={group.name}
-            user={user}
-            profile={profile}
-            myRole={myRole}
-            onViewPaper={onViewPaper}
-            onMarkRead={onMarkRead}
-            savedGroupPostIds={savedGroupPostIds}
-            onSaveToggled={onSaveToggled}
-          />
-        )}
-        {activeTab === 'members' && (
-          <GroupMembers
-            groupId={groupId}
-            group={group}
-            user={user}
-            myRole={myRole}
-            onLeft={onBack}
-          />
-        )}
-        {activeTab === 'profile' && (
-          <GroupProfile
-            groupId={groupId}
-            group={group}
-            user={user}
-            myRole={myRole}
-            onGroupUpdate={fetchGroup}
-            onViewGroup={onViewGroup}
-            onSwitchTab={setActiveTab}
-          />
-        )}
-        {activeTab === 'library' && (
-          <GroupLibrary
-            groupId={groupId}
-            user={user}
-            myRole={myRole}
-            onStatsChanged={fetchGroup}
-            onNavigateToPost={onNavigateToPost}
-          />
-        )}
-        {activeTab === 'projects' && (
-          <GroupProjects
-            groupId={groupId}
-            user={user}
-            myRole={myRole}
-            onSelectProject={id => setActiveProjectId(id)}
-          />
-        )}
+        {renderActiveTab()}
       </div>
     </div>
   );

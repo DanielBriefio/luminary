@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
+import { useWindowSize } from '../lib/useWindowSize';
 import Spinner from '../components/Spinner';
 import ProjectFeed from './ProjectFeed';
 import ProjectMembers from './ProjectMembers';
@@ -28,6 +29,7 @@ function SidebarItem({ label, active, onClick, onDelete }) {
 }
 
 export default function ProjectScreen({ projectId, user, onBack, group, onBackToGroup }) {
+  const { isMobile } = useWindowSize();
   const [project,        setProject]        = useState(null);
   const [folders,        setFolders]        = useState([]);
   const [myRole,         setMyRole]         = useState(null);
@@ -103,6 +105,129 @@ export default function ProjectScreen({ projectId, user, onBack, group, onBackTo
 
   if (loading) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner/></div>;
   if (!project) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.mu }}>Project not found.</div>;
+
+  // Body — shared between desktop sidebar layout and mobile pills layout.
+  const renderContent = () => (
+    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: T.bg }}>
+      {project.status === 'archived' && (
+        <div style={{
+          padding: '10px 16px', background: T.am2,
+          borderBottom: `1px solid rgba(245,158,11,.2)`,
+          fontSize: 12.5, color: '#92400e',
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 12, flexShrink: 0,
+        }}>
+          <span>📦 This project is archived — read only.</span>
+          {isOwner && (
+            <button onClick={unarchiveProject} style={{
+              fontSize: 11.5, fontWeight: 700, color: T.am,
+              border: `1px solid ${T.am}`, background: 'white',
+              borderRadius: 20, padding: '2px 10px',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+              Unarchive
+            </button>
+          )}
+        </div>
+      )}
+      {activeSection === 'feed' && (
+        <ProjectFeed
+          project={project}
+          user={user}
+          myRole={myRole}
+          activeFolderId={activeFolderId}
+          folders={folders}
+        />
+      )}
+      {activeSection === 'members' && (
+        <ProjectMembers
+          project={project}
+          user={user}
+          myRole={myRole}
+        />
+      )}
+    </div>
+  );
+
+  // ── Mobile shell: pills row instead of left sidebar.
+  if (isMobile) {
+    return (
+      <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden', background: T.bg }}>
+        <div style={{ background: T.w, borderBottom: `1px solid ${T.bdr}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px' }}>
+            <button onClick={group && onBackToGroup ? onBackToGroup : onBack} style={{
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              fontSize: 14, color: T.mu, fontFamily: 'inherit', padding: '4px 6px',
+            }}>←</button>
+            <div style={{ width: 4, height: 28, borderRadius: 2, background: project.cover_color || T.v, flexShrink: 0 }}/>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>{project.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {project.name}
+              </div>
+              {group && (
+                <div style={{ fontSize: 10.5, color: T.mu,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  in {group.name}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{
+            display: 'flex', gap: 6, padding: '0 14px 8px',
+            overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+          }}>
+            <Pill active={activeSection === 'feed' && activeFolderId === null}
+              onClick={() => { setActiveSection('feed'); setActiveFolderId(null); }}>
+              📋 All posts
+            </Pill>
+            {folders.map(f => (
+              <Pill key={f.id}
+                active={activeSection === 'feed' && activeFolderId === f.id}
+                onClick={() => { setActiveSection('feed'); setActiveFolderId(f.id); }}>
+                📁 {f.name}
+              </Pill>
+            ))}
+            <Pill active={activeSection === 'members'}
+              onClick={() => setActiveSection('members')}>
+              👥 Members
+            </Pill>
+            {isOwner && !addingFolder && (
+              <Pill onClick={() => setAddingFolder(true)} muted>+ Folder</Pill>
+            )}
+          </div>
+
+          {addingFolder && (
+            <div style={{ padding: '0 14px 10px', display: 'flex', gap: 6 }}>
+              <input
+                autoFocus
+                value={newFolderName}
+                onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') addFolder();
+                  if (e.key === 'Escape') { setAddingFolder(false); setNewFolderName(''); }
+                }}
+                placeholder="Folder name…"
+                style={{
+                  flex: 1, fontSize: 13, padding: '6px 10px',
+                  border: `1.5px solid ${T.v}`, borderRadius: 7,
+                  fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+              <button onClick={() => { setAddingFolder(false); setNewFolderName(''); }} style={{
+                fontSize: 12, color: T.mu, border: 'none', background: 'transparent',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>Cancel</button>
+            </div>
+          )}
+        </div>
+
+        {renderContent()}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -247,46 +372,24 @@ export default function ProjectScreen({ projectId, user, onBack, group, onBackTo
         </div>
       </div>
 
-      {/* Content area */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: T.bg }}>
-        {project.status === 'archived' && (
-          <div style={{
-            padding: '10px 16px', background: T.am2,
-            borderBottom: `1px solid rgba(245,158,11,.2)`,
-            fontSize: 12.5, color: '#92400e',
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', gap: 12, flexShrink: 0,
-          }}>
-            <span>📦 This project is archived — read only.</span>
-            {isOwner && (
-              <button onClick={unarchiveProject} style={{
-                fontSize: 11.5, fontWeight: 700, color: T.am,
-                border: `1px solid ${T.am}`, background: 'white',
-                borderRadius: 20, padding: '2px 10px',
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}>
-                Unarchive
-              </button>
-            )}
-          </div>
-        )}
-        {activeSection === 'feed' && (
-          <ProjectFeed
-            project={project}
-            user={user}
-            myRole={myRole}
-            activeFolderId={activeFolderId}
-            folders={folders}
-          />
-        )}
-        {activeSection === 'members' && (
-          <ProjectMembers
-            project={project}
-            user={user}
-            myRole={myRole}
-          />
-        )}
-      </div>
+      {renderContent()}
     </div>
+  );
+}
+
+function Pill({ children, active, muted, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      flexShrink: 0,
+      padding: '6px 12px', borderRadius: 20,
+      border: `1.5px solid ${active ? T.v : T.bdr}`,
+      background: active ? T.v2 : T.w,
+      cursor: 'pointer', fontFamily: 'inherit',
+      fontSize: 12.5, fontWeight: active ? 700 : 500,
+      color: active ? T.v : muted ? T.mu : T.text,
+      whiteSpace: 'nowrap',
+    }}>
+      {children}
+    </button>
   );
 }
