@@ -74,8 +74,12 @@ src/
                 CreateProjectModal, TemplateGallery, SaveAsTemplateModal
   admin/      — AdminShell, InvitesSection, CreateCodeModal, UsersSection, UserDetailPanel,
                 BulkNudgeModal, TemplatesSection, ContentSection, InboxSection, InterventionsSection,
-                StorageSection
+                StorageSection, AnalyticsSection
   admin/interventions/ — ComposeTab, BoardTab, PaperOfWeekTab, MilestoneTab
+  admin/analytics/     — HealthTab, GrowthTab, ProductTab, BehaviourTab
+  admin/analytics/components/ — StatCard, SectionCard, PreferenceRow, UserRow, TierBar,
+                                SimpleBarChart, SimpleLineChart, PostHogLinks, EmptyState,
+                                TimeRangePicker
 ```
 
 > `src/screens/GroupsScreen.jsx` is legacy — do not edit; active groups screen is `src/groups/GroupsScreen.jsx`.
@@ -139,6 +143,23 @@ All are SECURITY DEFINER. Admin-only RPCs require `is_admin = true` on the calle
 - `get_admin_posts(p_limit, p_offset, p_search, p_type, p_featured, p_hidden)` — paginated posts + report_count; returns `{ total, posts }`
 - `get_content_health()` — returns `{ groups, projects }` each with posts_this_week + health (active/quiet/dead)
 - `get_moderation_queue(p_status)` — reported posts aggregated with reports array (reporter/reason/note)
+- `get_retention_cohorts()` — D7 (7-14 day cohort active in last 7d) + D30 (30-60 day cohort active in last 30d) with cohort_size, retained, pct
+- `get_weekly_signups()` — last 12 weeks: `[{ week_start, count, cumulative }]`
+- `get_daily_active_users()` — last 30 days: `[{ day, count }]` where active = posted/commented/liked that day
+- `get_signup_method_breakdown(p_days)` — ORCID vs invite-code cohort comparison: avg posts/comments/lumens, % activated
+- `get_work_mode_stats(p_days)` — per-segment users + avg posts/comments/lumens/groups + % w/ publication
+- `get_tier_distribution()` — count + pct at each Lumen tier (catalyst/pioneer/beacon/luminary)
+- `get_top_inviters(p_limit)` — top inviters: codes_created/claimed, active_invitees (≥1 post), conversion_pct
+- `get_feature_adoption()` — % of users who ever posted/commented/joined group/added library item/created project/added publication/sent DM/followed
+- `get_content_performance(p_days)` — per post-type (paper/text/deep_dive): posts, avg_likes, avg_comments, pct_with_3plus_commenters
+- `get_lumens_histogram()` — 9 buckets across `lumens_lifetime` (0 / 1-25 / 26-100 / 101-250 / 251-500 / 501-1000 / 1001-2000 / 2001-5000 / 5000+)
+- `get_profile_completeness()` — % of users with bio / avatar / publication / orcid / field_tags / work_history
+- `get_consent_rates()` — counts + pct for email_notifications, email_marketing, analytics_consent
+- `get_hot_papers(p_limit)` — papers with ≥2 distinct discussers (admin view, no min-engagement gate); same shape as `get_paper_stats_public` plus `total_comments`
+- `get_power_posters(p_days, p_limit)` — top posters in window: name, work_mode, lumens, tier, post_count
+- `get_power_commenters(p_days, p_limit)` — top substantive (>50 char) commenters in window
+- `get_at_risk_users(p_limit)` — ≥3 actions, silent 7+ days, signed up 14+ days ago: `{ user_id, name, work_mode, lumens, tier, days_silent, total_posts }`
+- `get_quiet_champions(p_limit)` — 3+ followers but <3 posts: credibility-without-voice users worth a personal nudge
 - `get_admin_config(p_key)` — returns `value` JSONB; non-admins may read `luminary_board`, `paper_of_week`, `milestone_post_template`; admins read all
 - `set_admin_config(p_key, p_value)` — upserts admin config; admin only
 - `send_admin_post(p_mode, p_content, p_bot_user_id, p_post_type, ...)` — broadcast (one post, no target_user_id), targeted (per-user post + notification), group (group_posts insert); sets `is_admin_post=true`

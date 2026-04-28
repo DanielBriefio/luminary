@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-28 (rev 22)_
+_Last updated: 2026-04-28 (rev 23)_
 
 ## What exists and works
 
@@ -168,7 +168,7 @@ _Last updated: 2026-04-28 (rev 22)_
 
 ### Admin Panel (`/admin`)
 - Gated via `is_admin = true` on `profiles`; non-admins hit NotFoundScreen
-- Left nav (220px): Overview / Users / Invites / Templates / Content / Interventions / Analytics — Analytics is placeholder; all others fully implemented
+- Left nav (220px): Overview / Users / Invites / Templates / Content / Interventions / Storage / Inbox / Analytics — all fully implemented
 
 **Invite management** (fully implemented):
 - Full invite code table loaded via `get_invite_codes_with_stats()` RPC
@@ -256,11 +256,20 @@ _Last updated: 2026-04-28 (rev 22)_
 - `ProfileCompletionMeter`: live milestone system (5 stages, confetti) — wired to real DB counts. Separate from Lumens; tracks profile completeness, not contribution.
 - Founding members: `is_founding_member` flag set by trigger for signups before `admin_config.founding_member_cutoff`.
 
-### Analytics
+**Analytics** (fully implemented):
+- Four tabs over a shared 7d / 30d / 90d / All-time time-range selector (default 30d)
+- **Health tab**: total/today stat cards, D7 + D30 retention with green/amber/rose thresholds and benchmark notes (≥30% / ≥20%), activation funnel (5 stages with drop-off %), weekly cumulative-signups line chart (12 weeks), daily-active-users bar chart (30 days), PostHog deep-link footer
+- **Growth tab**: signup-method breakdown (ORCID vs invite — users + avg posts/comments/lumens + % activated), per-work-mode behaviour table, Lumen tier distribution (stacked bar + legend), top inviters table with active-invitee conversion %
+- **Product tab**: feature adoption bars (8 features, ≥50% green / ≥25% amber thresholds), content performance table (paper / text / deep-dive), Lumens lifetime histogram (9 buckets), profile completeness bars (6 fields), consent rates (≥70% green / ≥40% amber thresholds), group-health summary (active/quiet/dead chips), hot papers list (≥2 distinct discussers)
+- **Behaviour tab**: power posters / power commenters in the selected window (top 20 each), at-risk users (≥3 actions, silent 7+ days, signed up 14+ days ago — Nudge button opens BulkNudgeModal pre-filled), quiet champions (3+ followers, <3 posts — credibility-without-voice users worth a personal nudge)
+- All metrics gracefully empty-state when data is sparse; charts use `recharts` (already in package.json)
+- PostHog deep links currently point to the project root (`https://us.posthog.com/project/392644/`) — no saved insights yet, swap URLs in `PostHogLinks.jsx` once dashboards are built
+
+### Analytics (event capture)
 - PostHog consent-gated analytics via `analytics_consent_at` on profiles (separate from `marketing_consent_at` for email marketing)
 - Opt-in asked at sign-up; togglable in Account Settings
 - `opt_out_capturing_by_default: true` — no data sent until user consents
-- 15 events instrumented: `signed_up`, `invite_code_used`, `post_created`, `post_liked`, `comment_posted`, `group_created`, `group_joined`, `group_left`, `publication_added`, `library_item_added`, `project_created`, `template_used`, `template_submitted`, `dm_sent`, `onboarding_completed`, `profile_stage_reached`
+- 16 events instrumented: `signed_up`, `invite_code_used`, `post_created`, `post_liked`, `comment_posted`, `group_created`, `group_joined`, `group_left`, `publication_added`, `library_item_added`, `project_created`, `template_used`, `template_submitted`, `dm_sent`, `onboarding_completed`, `profile_stage_reached`, `board_dismissed`
 - Requires `REACT_APP_POSTHOG_KEY` in Vercel env vars (Production scope)
 
 ---
@@ -269,7 +278,7 @@ _Last updated: 2026-04-28 (rev 22)_
 
 - **Mobile layout (in-app)**: Tier-1 screens have been adapted (Feed, NewPostScreen, PublicPostPage, ProfileScreen, UserProfileScreen, MessagesScreen, GroupScreen, ProjectScreen, GroupsScreen, LibraryScreen — including the new Files view). Still desktop-only: NetworkScreen detail views, the Admin Panel (deferred — admin-on-phone is rare), LumensScreen.
 - **Push notifications / email digests**: Transactional emails ship (Resend, six event types + welcome). No push, no weekly digest.
-- **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state.
+- **Admin Inbox** is fully implemented but not in the left nav — reachable only via direct `section` state.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.
 - **Gold avatar ring in feed**: Av currently renders the `luminary`-tier ring on profile pages and the sidebar widget only. Feed `PostCard` avatars do not pass the `tier` prop — would require recreating `posts_with_meta` to expose author lumens/tier.
@@ -280,6 +289,7 @@ _Last updated: 2026-04-28 (rev 22)_
 
 - **`migration_storage_replace_cleanup.sql`**: adds `cleanup_replaced_storage_files(source_kind, source_id, keep_path)` for orphan sweeps when avatars/covers are replaced with a different-extension upload, and extends `delete_user_file` so deep-dive cover deletes clear `posts.deep_dive_cover_url` + `deep_dive_cover_position` instead of `image_url`.
 - **`migration_storage_quotas.sql`**: seeds `admin_config.storage_quota_mb = 50` (admin-editable via `/admin → Storage`) and adds `get_storage_quota_mb()` for any authenticated user to read their own quota. Backs the upload-time enforcement in `src/lib/storageQuota.js`.
+- **`migration_admin_analytics.sql`** (Phase 13): adds 17 admin-gated SECURITY DEFINER RPCs powering the four-tab analytics dashboard — `get_retention_cohorts`, `get_weekly_signups`, `get_daily_active_users`, `get_signup_method_breakdown(p_days)`, `get_work_mode_stats(p_days)`, `get_tier_distribution`, `get_top_inviters(p_limit)`, `get_feature_adoption`, `get_content_performance(p_days)`, `get_lumens_histogram`, `get_profile_completeness`, `get_consent_rates`, `get_hot_papers(p_limit)`, `get_power_posters(p_days, p_limit)`, `get_power_commenters(p_days, p_limit)`, `get_at_risk_users(p_limit)`, `get_quiet_champions(p_limit)`. All exclude the Luminary Team bot account and skip legacy post types where applicable.
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
 
 ## Recently shipped migrations

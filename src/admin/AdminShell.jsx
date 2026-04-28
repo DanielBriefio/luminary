@@ -8,6 +8,7 @@ import InboxSection from './InboxSection';
 import ContentSection from './ContentSection';
 import InterventionsSection from './InterventionsSection';
 import StorageSection from './StorageSection';
+import AnalyticsSection from './AnalyticsSection';
 
 const NAV_ITEMS = [
   { id: 'overview',      label: 'Overview',      icon: '📊' },
@@ -153,6 +154,8 @@ export default function AdminShell({ supabase, user, profile }) {
           ? <StorageSection supabase={supabase} />
           : section === 'inbox'
           ? <InboxSection supabase={supabase} />
+          : section === 'analytics'
+          ? <AnalyticsSection supabase={supabase} />
           : <AdminSectionPlaceholder section={section} />
         }
       </div>
