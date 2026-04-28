@@ -129,12 +129,21 @@ export default function PublicProfilePage({ slug }) {
         {/* Banner + Avatar */}
         <div style={{ position: 'relative', marginBottom: 46 }}>
           <div style={{ height: 148, borderRadius: '14px 14px 0 0', overflow: 'hidden' }}>
-            <svg width="100%" height="148" viewBox="0 0 760 148" preserveAspectRatio="xMidYMid slice">
-              <defs><linearGradient id="cov" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#667eea"/><stop offset="45%" stopColor="#764ba2"/><stop offset="100%" stopColor="#f093fb"/></linearGradient></defs>
-              <rect width="760" height="148" fill="url(#cov)"/>
-              <circle cx="95" cy="74" r="85" fill="white" opacity=".04"/>
-              <circle cx="665" cy="30" r="65" fill="white" opacity=".06"/>
-            </svg>
+            {profile.cover_url ? (
+              <img src={profile.cover_url} alt=""
+                style={{
+                  width: '100%', height: '100%', objectFit: 'cover',
+                  objectPosition: profile.cover_position || '50% 50%',
+                  display: 'block',
+                }}/>
+            ) : (
+              <svg width="100%" height="100%" viewBox="0 0 760 148" preserveAspectRatio="xMidYMid slice">
+                <defs><linearGradient id="cov" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#667eea"/><stop offset="45%" stopColor="#764ba2"/><stop offset="100%" stopColor="#f093fb"/></linearGradient></defs>
+                <rect width="760" height="148" fill="url(#cov)"/>
+                <circle cx="95" cy="74" r="85" fill="white" opacity=".04"/>
+                <circle cx="665" cy="30" r="65" fill="white" opacity=".06"/>
+              </svg>
+            )}
           </div>
           <div style={{ position: 'absolute', bottom: -43, left: 22 }}>
             <div style={{ borderRadius: '50%', border: '4px solid white', boxShadow: '0 4px 18px rgba(108,99,255,.2)', display: 'inline-block' }}>

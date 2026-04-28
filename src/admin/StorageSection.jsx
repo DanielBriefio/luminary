@@ -17,13 +17,14 @@ function fmtDate(iso) {
 }
 
 const SOURCE_ICONS = {
-  post:         '📝',
-  group_post:   '👥',
-  library:      '📚',
-  avatar:       '🖼️',
-  group_avatar: '🏷️',
-  group_cover:  '🎨',
-  unknown:      '📎',
+  post:           '📝',
+  group_post:     '👥',
+  library:        '📚',
+  avatar:         '🖼️',
+  profile_cover:  '🌅',
+  group_avatar:   '🏷️',
+  group_cover:    '🎨',
+  unknown:        '📎',
 };
 
 function buildContextHref(file) {

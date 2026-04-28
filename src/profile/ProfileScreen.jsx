@@ -19,6 +19,7 @@ import TopicInterestsPicker from '../components/TopicInterestsPicker';
 import ProfileCompletionMeter from '../components/ProfileCompletionMeter';
 import OrcidBadge from '../components/OrcidBadge';
 import AvatarCropModal from '../components/AvatarCropModal';
+import CoverRepositioner from '../components/CoverRepositioner';
 
 function EF({label,val,onChange,placeholder=""}) {
   return (
@@ -341,6 +342,15 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
   const [avatarUploading,setAvatarUploading] = useState(false);
   const [avatarHover,setAvatarHover]         = useState(false);
   const [avatarCropFile, setAvatarCropFile]  = useState(null); // pending File for crop modal
+  const [coverUploading, setCoverUploading]  = useState(false);
+  const [coverY, setCoverY]                  = useState(50);
+  const coverInputRef = useRef(null);
+  // Seed coverY from saved object-position whenever the profile loads
+  // or cover_position changes externally.
+  useEffect(() => {
+    const m = (profile?.cover_position || '50% 50%').match(/(\d+(?:\.\d+)?)%\s*$/);
+    setCoverY(m ? parseFloat(m[1]) : 50);
+  }, [profile?.cover_position]);
 
   const save=async()=>{
     setSaving(true);
@@ -449,6 +459,43 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       p_source_id:   user.id,
     }).then(() => {}, () => {});
     setAvatarUploading(false);
+  };
+
+  const uploadCover = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+    if (file.size > 10 * 1024 * 1024) { alert('Cover image is too large (max 10 MB).'); return; }
+    setCoverUploading(true);
+    const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${user.id}/cover.${ext}`;
+    const { data, error } = await supabase.storage.from('post-files')
+      .upload(path, file, { contentType: file.type, upsert: true });
+    if (error) { alert(`Cover upload failed: ${error.message}`); setCoverUploading(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from('post-files').getPublicUrl(data.path);
+    const bustedUrl = `${publicUrl}?v=${Date.now()}`;
+    const { data: updated } = await supabase.from('profiles')
+      .update({ cover_url: bustedUrl })
+      .eq('id', user.id).select().single();
+    if (updated) setProfile(updated);
+    supabase.rpc('record_storage_file', {
+      p_bucket:      'post-files',
+      p_path:        data.path,
+      p_size_bytes:  file.size,
+      p_mime_type:   file.type || '',
+      p_file_name:   file.name,
+      p_source_kind: 'profile_cover',
+      p_source_id:   user.id,
+    }).then(() => {}, () => {});
+    setCoverUploading(false);
+  };
+
+  const persistCoverPosition = async () => {
+    const next = `50% ${Math.round(coverY)}%`;
+    if (next === profile?.cover_position) return;
+    const { data } = await supabase.from('profiles')
+      .update({ cover_position: next })
+      .eq('id', user.id).select().single();
+    if (data) setProfile(data);
   };
 
   useEffect(()=>{
@@ -870,13 +917,67 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       <div style={{padding:'16px 18px'}}>
 
         <div style={{position:'relative',marginBottom: isMobile ? 38 : 46}}>
-          <div style={{height: isMobile ? 96 : 148, borderRadius:'14px 14px 0 0', overflow:'hidden'}}>
-            <svg width="100%" height="100%" viewBox="0 0 760 148" preserveAspectRatio="xMidYMid slice">
-              <defs><linearGradient id="cov" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#667eea"/><stop offset="45%" stopColor="#764ba2"/><stop offset="100%" stopColor="#f093fb"/></linearGradient></defs>
-              <rect width="760" height="148" fill="url(#cov)"/>
-              <circle cx="95" cy="74" r="85" fill="white" opacity=".04"/><circle cx="665" cy="30" r="65" fill="white" opacity=".06"/>
-            </svg>
-          </div>
+          {(() => {
+            const bannerH = isMobile ? 96 : 148;
+            // Edit mode + cover present → drag-to-reposition.
+            if (editing && profile?.cover_url) {
+              return (
+                <div style={{ borderRadius:'14px 14px 0 0', overflow:'hidden', position:'relative' }}>
+                  <CoverRepositioner
+                    url={profile.cover_url}
+                    y={coverY}
+                    onChange={setCoverY}
+                    onDragEnd={persistCoverPosition}
+                    height={bannerH}
+                    hint="↕ Drag to reposition cover"
+                  />
+                  <input ref={coverInputRef} type="file" accept="image/*" style={{display:'none'}}
+                    onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) uploadCover(f); }}/>
+                  <button onClick={() => coverInputRef.current?.click()} disabled={coverUploading} style={{
+                    position:'absolute', bottom:8, right:8,
+                    padding:'5px 12px', borderRadius:20, border:'none',
+                    background:'rgba(0,0,0,.65)', color:'#fff', cursor:'pointer',
+                    fontFamily:'inherit', fontSize:11.5, fontWeight:700,
+                  }}>
+                    {coverUploading ? 'Uploading…' : '📷 Change cover'}
+                  </button>
+                </div>
+              );
+            }
+            // View / non-cover render: image when set, gradient when not.
+            return (
+              <div style={{height: bannerH, borderRadius:'14px 14px 0 0', overflow:'hidden', position:'relative'}}>
+                {profile?.cover_url ? (
+                  <img src={profile.cover_url} alt=""
+                    style={{
+                      width:'100%', height:'100%', objectFit:'cover',
+                      objectPosition: profile.cover_position || '50% 50%',
+                      display:'block',
+                    }}/>
+                ) : (
+                  <svg width="100%" height="100%" viewBox="0 0 760 148" preserveAspectRatio="xMidYMid slice">
+                    <defs><linearGradient id="cov" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#667eea"/><stop offset="45%" stopColor="#764ba2"/><stop offset="100%" stopColor="#f093fb"/></linearGradient></defs>
+                    <rect width="760" height="148" fill="url(#cov)"/>
+                    <circle cx="95" cy="74" r="85" fill="white" opacity=".04"/><circle cx="665" cy="30" r="65" fill="white" opacity=".06"/>
+                  </svg>
+                )}
+                {editing && !profile?.cover_url && (
+                  <>
+                    <input ref={coverInputRef} type="file" accept="image/*" style={{display:'none'}}
+                      onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) uploadCover(f); }}/>
+                    <button onClick={() => coverInputRef.current?.click()} disabled={coverUploading} style={{
+                      position:'absolute', bottom:8, right:8,
+                      padding:'5px 12px', borderRadius:20, border:'none',
+                      background:'rgba(0,0,0,.55)', color:'#fff', cursor:'pointer',
+                      fontFamily:'inherit', fontSize:11.5, fontWeight:700,
+                    }}>
+                      {coverUploading ? 'Uploading…' : '📷 Add cover'}
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })()}
           <div style={{position:'absolute',bottom:-43,left:22}}>
             <label style={{display:'block',cursor:'pointer',position:'relative'}}
               onMouseEnter={()=>setAvatarHover(true)}

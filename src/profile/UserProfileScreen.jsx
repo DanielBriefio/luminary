@@ -126,16 +126,25 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
           {/* Banner + Avatar */}
           <div style={{ position: 'relative', marginBottom: isMobile ? 38 : 46 }}>
             <div style={{ height: isMobile ? 86 : 120, borderRadius: '14px 14px 0 0', overflow: 'hidden' }}>
-              <svg width="100%" height="100%" viewBox="0 0 740 120" preserveAspectRatio="xMidYMid slice">
-                <defs><linearGradient id="ubg" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#667eea"/>
-                  <stop offset="50%" stopColor="#764ba2"/>
-                  <stop offset="100%" stopColor="#f093fb"/>
-                </linearGradient></defs>
-                <rect width="740" height="120" fill="url(#ubg)"/>
-                <circle cx="80" cy="60" r="70" fill="white" opacity=".04"/>
-                <circle cx="650" cy="20" r="55" fill="white" opacity=".06"/>
-              </svg>
+              {p.cover_url ? (
+                <img src={p.cover_url} alt=""
+                  style={{
+                    width: '100%', height: '100%', objectFit: 'cover',
+                    objectPosition: p.cover_position || '50% 50%',
+                    display: 'block',
+                  }}/>
+              ) : (
+                <svg width="100%" height="100%" viewBox="0 0 740 120" preserveAspectRatio="xMidYMid slice">
+                  <defs><linearGradient id="ubg" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#667eea"/>
+                    <stop offset="50%" stopColor="#764ba2"/>
+                    <stop offset="100%" stopColor="#f093fb"/>
+                  </linearGradient></defs>
+                  <rect width="740" height="120" fill="url(#ubg)"/>
+                  <circle cx="80" cy="60" r="70" fill="white" opacity=".04"/>
+                  <circle cx="650" cy="20" r="55" fill="white" opacity=".06"/>
+                </svg>
+              )}
             </div>
             <div style={{ position: 'absolute', bottom: -38, left: 20 }}>
               <div style={{ borderRadius: '50%', border: '4px solid white', boxShadow: '0 4px 18px rgba(108,99,255,.2)', display: 'inline-block' }}>

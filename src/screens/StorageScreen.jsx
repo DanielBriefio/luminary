@@ -8,9 +8,10 @@ const SOURCE_GROUPS = [
   { kind: 'post',         label: 'Post attachments',     icon: '📝', deletable: true,  hint: 'Deleting leaves the post; the file is replaced with a placeholder.' },
   { kind: 'group_post',   label: 'Group post attachments', icon: '👥', deletable: true,  hint: 'Same as post attachments — the group post stays.' },
   { kind: 'library',      label: 'Library files',        icon: '📚', deletable: true,  hint: 'Deletes the library entry and the underlying file.' },
-  { kind: 'avatar',       label: 'Profile photo',        icon: '🖼️', deletable: false, hint: 'Replace via Profile → upload a new photo.' },
-  { kind: 'group_avatar', label: 'Group avatars',        icon: '🏷️', deletable: false, hint: 'Replace via Group profile.' },
-  { kind: 'group_cover',  label: 'Group covers',         icon: '🎨', deletable: false, hint: 'Replace via Group profile.' },
+  { kind: 'avatar',        label: 'Profile photo',       icon: '🖼️', deletable: false, hint: 'Replace via Profile → upload a new photo.' },
+  { kind: 'profile_cover', label: 'Profile cover',       icon: '🌅', deletable: false, hint: 'Replace via Profile → upload a new cover.' },
+  { kind: 'group_avatar',  label: 'Group avatars',       icon: '🏷️', deletable: false, hint: 'Replace via Group profile.' },
+  { kind: 'group_cover',   label: 'Group covers',        icon: '🎨', deletable: false, hint: 'Replace via Group profile.' },
   { kind: 'unknown',      label: 'Other',                icon: '📎', deletable: true,  hint: 'Files we couldn\'t link back to a post or library entry.' },
 ];
 
