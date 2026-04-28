@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-28 (rev 18)_
+_Last updated: 2026-04-28 (rev 19)_
 
 ## What exists and works
 
@@ -9,6 +9,17 @@ _Last updated: 2026-04-28 (rev 18)_
 - Validated invite code is handed off to AuthScreen via `sessionStorage.prefill_invite_code` so the user lands directly on the signup form with their code pre-filled
 - Mobile responsive (single-column grids, full-width CTAs, compact header) below 768px via `useWindowSize`
 - ORCID OAuth handler matches AuthScreen exactly (same client ID, redirect URI, `state=signup`)
+
+### Mobile (< 768px)
+- **App shell**: BottomNav (Feed / Explore / Network / Library / Groups), top bar with hamburger sidebar trigger and notifications bell (single source of truth — feed-screen bell deleted to avoid duplicate).
+- **GroupScreen / ProjectScreen**: 200px left tab sidebar replaced with horizontal scrolling pills above the content. Tab body shared between desktop sidebar layout and mobile pills via a `renderActiveTab` / `renderContent` helper.
+- **GroupsScreen (overview)**: tabs `My Groups | Discover` over a 2-column grid of `CompactGroupCard` (no avatar, no chips — just name, topic, member count, 🌐/🔒 indicator, plus join action on Discover). Desktop unchanged (full-width tabs + sectioned Discover, see Groups below).
+- **LibraryScreen**: 220px folder sidebar hidden on mobile; header gets a "≡ &lt;current folder&gt;" button that slides in the existing `LibraryFolderSidebar` as a 85%-width drawer. Selecting a folder closes the drawer. Static sidebar still on desktop.
+- **PublicPostPage**: title size shrinks (42 → 30), padding tightens (32/24 → 20/16) on mobile.
+- **NewPostScreen**: Deep Dive toggle hidden on mobile (long-form composition isn't a phone use-case); composer otherwise unchanged.
+- **FeedScreen filter bar**: tighter padding + gap on mobile; mode pills horizontal-scroll, Sort dropdown hidden, Filter button stays.
+- **UserProfileScreen**: shorter banner (120 → 86), tighter padding, stats grid collapses to 2 cols when more than 2 stats.
+- **MessagesScreen**: list-vs-thread two-panel collapses to single panel on mobile (already shipped earlier).
 
 ### ORCID integration
 - **AuthScreen + LandingScreen CTAs**: official ORCID iD logo (inline SVG, `src/components/OrcidIcon.jsx`) on the "Sign up / Sign in / Join with ORCID" buttons. Brand-asset-licensed for integrators.
@@ -58,6 +69,8 @@ _Last updated: 2026-04-28 (rev 18)_
 - Suggested connections from unfollowed profiles; 2-column friend card grid
 
 ### Groups
+- **GroupsScreen (overview, desktop)**: tabs `My Groups (N) | Discover` at full width. My Groups is an `auto-fill, minmax(280px, 1fr)` grid of `GroupBadgeCard`. Discover gets a search input + Tier-1 dropdown + Tier-2 chip row that appears under the chosen Tier-1 (mirrors ExploreScreen). With no explicit filter, sectioned by relevance to the viewer's profile: "In your field — &lt;tier1&gt;", "Related disciplines" (tier2 overlap), "All other groups". With a filter set, sectioning collapses to a single labelled grid. `groupRelevance` scores tier1 match = +10, per-tier2 overlap = +1.
+- **`GroupBadgeCard` business-card upgrade**: when `groups.cover_url` is set, the card renders a 96px banner (object-cover honouring `cover_position`) instead of the gradient strip. Gradient stays as the no-cover fallback.
 - Create public or closed groups (name, description, research_topic)
 - **GroupScreen**: 200px sidebar + Feed / Members / Library / Projects / Profile tabs
 - **GroupFeed**: sticky posts first; post types text/paper; file uploads; auto-tag; notifies all members
@@ -249,7 +262,7 @@ _Last updated: 2026-04-28 (rev 18)_
 
 ## Known gaps / not yet built
 
-- **Mobile layout (in-app)**: Landing page is responsive, but the authenticated app is still desktop-only — 200px sidebar + multi-column grids break on phones. `useWindowSize` is wired into `App.jsx`, `BottomNav`, and `LandingScreen` but most authenticated screens haven't been adapted.
+- **Mobile layout (in-app)**: Tier-1 screens have been adapted (Feed, NewPostScreen, PublicPostPage, ProfileScreen, UserProfileScreen, MessagesScreen, GroupScreen, ProjectScreen, GroupsScreen, LibraryScreen). Still desktop-only: NetworkScreen detail views, the Admin Panel (deferred — admin-on-phone is rare), Lumens / Storage screens.
 - **Push notifications / email digests**: Transactional emails ship (Resend, six event types + welcome). No push, no weekly digest.
 - **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state.
 - **PWA / offline**: Not configured.
@@ -280,6 +293,7 @@ _Last updated: 2026-04-28 (rev 18)_
 - **`migration_handoff_groups.sql`** (Phase 12.3): adds `get_my_admin_groups_for_handoff()` RPC — returns groups where the caller is the sole admin, used by the schedule-delete confirm flow to prompt for a successor.
 - **`migration_tombstone_comments.sql`** (Phase 12.4): switches `comments` / `group_post_comments` / `project_post_comments` `user_id` from CASCADE to SET NULL so threads keep their structure when an author is purged. Frontend renders "Deleted user" + greyed avatar in place of the missing author across all four comment surfaces (PostCard top + thread, GroupPostCard top + thread, ProjectPostCard, PublicPostPage CommentsSection).
 - **`migration_group_cover_position.sql`** (Phase 12.5): adds `groups.cover_position` (text, default `'50% 50%'`) for the drag-to-reposition group cover.
+- **`migration_groups_select_open.sql`**: drops any existing SELECT policy on `groups` and re-applies the open one (`auth.uid() IS NOT NULL`). A more restrictive policy had been layered on in production at some point, hiding closed groups from non-members in Discover. Group contents (posts, members) stay protected by per-table RLS; only the row metadata (name, topic, member counts) is now visible to authenticated users.
 
 ## Storage RLS policy required
 
