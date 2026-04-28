@@ -132,7 +132,11 @@ export default function PublicGroupProfileScreen({ slug }) {
 
         {/* Cover */}
         <div style={{ height: 180, background: 'linear-gradient(135deg,#667eea,#764ba2)', overflow: 'hidden', position: 'relative' }}>
-          {group.cover_url && <img src={group.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>}
+          {group.cover_url && <img src={group.cover_url} alt=""
+            style={{
+              width: '100%', height: '100%', objectFit: 'cover',
+              objectPosition: group.cover_position || '50% 50%',
+            }}/>}
         </div>
 
         {/* Card */}

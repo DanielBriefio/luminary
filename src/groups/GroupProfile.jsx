@@ -5,6 +5,7 @@ import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
 import AvatarCropModal from '../components/AvatarCropModal';
+import CoverRepositioner from '../components/CoverRepositioner';
 
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function trunc(s, n) { return s && s.length > n ? s.slice(0, n-1)+'…' : (s||''); }
@@ -75,6 +76,8 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
   // Image uploads
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarCropFile,  setAvatarCropFile]  = useState(null);
+  // Drag-to-reposition state for the group cover, edit-mode only.
+  const [coverY,          setCoverY]          = useState(50);
   const [coverUploading,  setCoverUploading]  = useState(false);
   const [uploadError,     setUploadError]     = useState('');
   const avatarRef = useRef();
@@ -154,6 +157,26 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       .eq('group_id', groupId).eq('user_id', user.id).maybeSingle();
     setEditDispRole(mem?.display_role || '');
     setEditing(true);
+  };
+
+  // Seed cover Y% from the saved object-position whenever the group loads
+  // or edit mode opens. cover_position is stored as "50% YY%".
+  useEffect(() => {
+    const m = (group?.cover_position || '50% 50%').match(/(\d+(?:\.\d+)?)%\s*$/);
+    setCoverY(m ? parseFloat(m[1]) : 50);
+  }, [group?.id, group?.cover_position, editing]);
+
+  // Persist the dragged position once the user releases.
+  const persistCoverPosition = async () => {
+    if (!groupId) return;
+    const next = `50% ${Math.round(coverY)}%`;
+    if (next === group?.cover_position) return;
+    const { data } = await supabase.from('groups')
+      .update({ cover_position: next })
+      .eq('id', groupId)
+      .select()
+      .single();
+    if (data) onGroupUpdate?.(data);
   };
 
   useEffect(() => {
@@ -293,25 +316,53 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
     <div style={{ flex: 1, overflowY: 'auto' }}>
 
       {/* Cover image */}
-      <div style={{ position: 'relative', height: 160, background: 'linear-gradient(135deg,#667eea,#764ba2)', overflow: 'hidden' }}>
-        {group.cover_url && (
-          <img src={group.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
-        )}
-        {editing && (
-          <>
-            <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }}
-              onChange={e => uploadCover(e.target.files[0])}/>
-            <button onClick={() => coverRef.current?.click()} disabled={coverUploading} style={{
-              position: 'absolute', bottom: 8, right: 8,
-              padding: '5px 12px', borderRadius: 20, border: 'none',
-              background: 'rgba(0,0,0,.5)', color: '#fff', cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700,
-            }}>
-              {coverUploading ? 'Uploading…' : '📷 Change cover'}
-            </button>
-          </>
-        )}
-      </div>
+      {editing && group.cover_url ? (
+        <div style={{ position: 'relative' }}>
+          <CoverRepositioner
+            url={group.cover_url}
+            y={coverY}
+            onChange={setCoverY}
+            onDragEnd={persistCoverPosition}
+            height={160}
+            hint="↕ Drag to reposition cover"
+          />
+          <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }}
+            onChange={e => uploadCover(e.target.files[0])}/>
+          <button onClick={() => coverRef.current?.click()} disabled={coverUploading} style={{
+            position: 'absolute', bottom: 8, right: 8,
+            padding: '5px 12px', borderRadius: 20, border: 'none',
+            background: 'rgba(0,0,0,.65)', color: '#fff', cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700,
+          }}>
+            {coverUploading ? 'Uploading…' : '📷 Change cover'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ position: 'relative', height: 160, background: 'linear-gradient(135deg,#667eea,#764ba2)', overflow: 'hidden' }}>
+          {group.cover_url && (
+            <img src={group.cover_url} alt=""
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover',
+                objectPosition: group.cover_position || '50% 50%',
+                display: 'block',
+              }}/>
+          )}
+          {editing && (
+            <>
+              <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }}
+                onChange={e => uploadCover(e.target.files[0])}/>
+              <button onClick={() => coverRef.current?.click()} disabled={coverUploading} style={{
+                position: 'absolute', bottom: 8, right: 8,
+                padding: '5px 12px', borderRadius: 20, border: 'none',
+                background: 'rgba(0,0,0,.5)', color: '#fff', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700,
+              }}>
+                {coverUploading ? 'Uploading…' : '📷 Add cover'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Avatar overlapping cover */}
       <div style={{ padding: '0 20px' }}>
