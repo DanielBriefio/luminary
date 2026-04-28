@@ -271,7 +271,16 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       p_file_name:   file.name,
       p_source_kind: 'group_avatar',
       p_source_id:   groupId,
-    }).then(() => {}, () => {});
+    }).then(async () => {
+      const { data: orphans } = await supabase.rpc('cleanup_replaced_storage_files', {
+        p_source_kind: 'group_avatar',
+        p_source_id:   groupId,
+        p_keep_path:   upData.path,
+      });
+      if (orphans?.length) {
+        await supabase.storage.from('post-files').remove(orphans.map(o => o.path));
+      }
+    }, () => {});
     setAvatarUploading(false);
     onGroupUpdate?.();
   };
@@ -300,7 +309,16 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       p_file_name:   file.name,
       p_source_kind: 'group_cover',
       p_source_id:   groupId,
-    }).then(() => {}, () => {});
+    }).then(async () => {
+      const { data: orphans } = await supabase.rpc('cleanup_replaced_storage_files', {
+        p_source_kind: 'group_cover',
+        p_source_id:   groupId,
+        p_keep_path:   upData.path,
+      });
+      if (orphans?.length) {
+        await supabase.storage.from('post-files').remove(orphans.map(o => o.path));
+      }
+    }, () => {});
     setCoverUploading(false);
     onGroupUpdate?.();
   };

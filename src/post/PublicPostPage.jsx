@@ -652,11 +652,19 @@ export default function PublicPostPage({ postId }) {
         })()}
 
         {/* File attachment */}
-        {post.image_url && (
+        {post.file_deleted_at ? (
+          <div style={{
+            marginTop:20, padding:'12px 16px', borderRadius:10,
+            background:T.s2, border:`1px dashed ${T.bdr}`,
+            fontSize:13.5, color:T.mu, fontStyle:'italic',
+          }}>
+            📎 File removed by author
+          </div>
+        ) : post.image_url ? (
           <div style={{ marginTop:20 }}>
             <FilePreview url={post.image_url} fileType={post.file_type || 'image'} fileName={post.file_name}/>
           </div>
-        )}
+        ) : null}
 
         {/* Paper card */}
         {post.post_type === 'paper' && post.paper_title && (

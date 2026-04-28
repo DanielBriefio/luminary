@@ -457,7 +457,16 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       p_file_name:   file.name,
       p_source_kind: 'avatar',
       p_source_id:   user.id,
-    }).then(() => {}, () => {});
+    }).then(async () => {
+      const { data: orphans } = await supabase.rpc('cleanup_replaced_storage_files', {
+        p_source_kind: 'avatar',
+        p_source_id:   user.id,
+        p_keep_path:   data.path,
+      });
+      if (orphans?.length) {
+        await supabase.storage.from('post-files').remove(orphans.map(o => o.path));
+      }
+    }, () => {});
     setAvatarUploading(false);
   };
 
@@ -485,7 +494,16 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       p_file_name:   file.name,
       p_source_kind: 'profile_cover',
       p_source_id:   user.id,
-    }).then(() => {}, () => {});
+    }).then(async () => {
+      const { data: orphans } = await supabase.rpc('cleanup_replaced_storage_files', {
+        p_source_kind: 'profile_cover',
+        p_source_id:   user.id,
+        p_keep_path:   data.path,
+      });
+      if (orphans?.length) {
+        await supabase.storage.from('post-files').remove(orphans.map(o => o.path));
+      }
+    }, () => {});
     setCoverUploading(false);
   };
 

@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-28 (rev 20)_
+_Last updated: 2026-04-28 (rev 21)_
 
 ## What exists and works
 
@@ -237,7 +237,9 @@ _Last updated: 2026-04-28 (rev 20)_
 - **Library → Files** (`LibraryFilesView`, surfaced as the third sidebar section in LibraryScreen alongside Bookmarks and Library Folders): full-width manager grouped by source kind (Post attachments / Group post attachments / Library files / Profile photo / Profile cover / Group avatars / Group covers / Other). Totals strip + per-bucket chips at the top. Each row shows the linked context (paper title or content excerpt / library title / group name), size, date, a `View ↗` deep link (`/s/:postId` for posts, `/g/:slug` for group items), and a Delete button where deletable. Mobile collapses the four-column row into two — name+meta+size on the left, View+Delete on the right.
 - **Account Settings → Storage**: violet total card with bytes + per-bucket chips and an `Open Library → Files` button that navigates to LibraryScreen with `defaultView='files'`. Lightweight summary inside the drawer; the actual manager lives in Library.
 - **Settings → Library navigation glue** (App.jsx): a `libraryView` state ('library' | 'bookmarks' | 'files') feeds LibraryScreen's `defaultView` prop. The Settings button sets it to 'files' before `setScreen('library')`. A `useEffect` resets it to 'library' whenever the user navigates away, so the next non-Settings entry into Library lands on the default Library Folders view. The LibraryScreen instance carries a `key={lib-${libraryView}}` to remount cleanly when the view changes via deep link.
-- **Soft-delete attachments**: deleting a post / group post attachment sets `file_deleted_at = now()` on the row + nulls `image_url` / `file_name` / `file_type`. PostCard / GroupPostCard / ProjectPostCard render `📎 File removed by author` placeholder; the post body stays. Library deletions remove the `library_items` row entirely. Avatars, profile covers, and group images cannot be deleted — only replaced via the regular upload flow.
+- **Soft-delete attachments**: deleting a post / group post attachment sets `file_deleted_at = now()` on the row + nulls `image_url` / `file_name` / `file_type`. PostCard / GroupPostCard / ProjectPostCard / PublicPostPage render `📎 File removed by author` placeholder; the post body stays. Library deletions remove the `library_items` row entirely. Avatars, profile covers, and group images cannot be deleted — only replaced via the regular upload flow.
+- **Deep-dive cover delete**: `delete_user_file` detects whether the file path matches `posts.image_url` or `posts.deep_dive_cover_url` and updates the right column. Cover deletes clear `deep_dive_cover_url` + reset `deep_dive_cover_position` without setting `file_deleted_at` (the rest of the article stays intact). Inline images embedded in the deep-dive content HTML are not stripped — the storage blob delete leaves a broken-image icon and the user must edit the post via the composer to remove them cleanly.
+- **Replace-on-upload orphan cleanup**: avatar / profile cover / group avatar / group cover uploads use the file's actual extension in the path (`<id>/avatar.<ext>`), so a `.jpg → .png` swap writes to a different path and would otherwise leave the old blob + tracking row behind. After every record_storage_file call at the four upload sites, the client calls `cleanup_replaced_storage_files(p_source_kind, p_source_id, p_keep_path)` to delete the orphan rows and sweeps the matching storage blobs via `supabase.storage.remove()`.
 - **Admin Storage section** (`/admin → Storage`): global total, per-bucket totals, sortable per-user roll-up. Click any user row to expand; lazy-fetches that user's enriched file list via `get_admin_user_storage_files(p_user_id)` and renders inline. Read-only — admins moderate via existing tools (hide / delete post).
 - Quotas not enforced yet. `total_bytes` from `get_my_storage_usage()` is the future hook for a per-user quota check.
 
@@ -274,6 +276,7 @@ _Last updated: 2026-04-28 (rev 20)_
 
 ## Pending migrations (not yet run in production)
 
+- **`migration_storage_replace_cleanup.sql`**: adds `cleanup_replaced_storage_files(source_kind, source_id, keep_path)` for orphan sweeps when avatars/covers are replaced with a different-extension upload, and extends `delete_user_file` so deep-dive cover deletes clear `posts.deep_dive_cover_url` + `deep_dive_cover_position` instead of `image_url`.
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
 
 ## Recently shipped migrations
