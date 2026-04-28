@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T } from '../lib/constants';
+import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 import { useWindowSize } from '../lib/useWindowSize';
 import Spinner from '../components/Spinner';
 import CreateGroupModal from './CreateGroupModal';
@@ -34,8 +34,20 @@ function GroupBadgeCard({ group, role, memberCount, unreadCount, onSelect, actio
         </div>
       )}
 
-      {/* Gradient strip — always, no cover image */}
-      <div style={{ height: 6, background: 'linear-gradient(90deg,#667eea,#764ba2,#f093fb)' }}/>
+      {/* Cover image if the group has one — gives the card a "business card"
+          banner. Falls back to the gradient strip when absent. */}
+      {group.cover_url ? (
+        <div style={{ height: 96, position: 'relative', overflow: 'hidden' }}>
+          <img src={group.cover_url} alt=""
+            style={{
+              width: '100%', height: '100%', objectFit: 'cover',
+              objectPosition: group.cover_position || '50% 50%',
+              display: 'block',
+            }}/>
+        </div>
+      ) : (
+        <div style={{ height: 6, background: 'linear-gradient(90deg,#667eea,#764ba2,#f093fb)' }}/>
+      )}
 
       <div style={{ padding: '14px 16px 16px' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
@@ -217,14 +229,17 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
   const [discoverQuery, setDiscoverQuery] = useState('');
   const [joining,       setJoining]       = useState(null);
   const [unreadCounts,  setUnreadCounts]  = useState({});
-  const [mobileTab,     setMobileTab]     = useState('mine'); // mobile only
+  const [mobileTab,     setMobileTab]     = useState('mine');     // mobile only
+  const [desktopTab,    setDesktopTab]    = useState('mine');     // desktop tab state
+  const [tier1Filter,   setTier1Filter]   = useState('');         // explicit tier1 in Discover
+  const [tier2Filter,   setTier2Filter]   = useState('');         // explicit tier2 in Discover
 
   const fetchMyGroups = useCallback(async () => {
     setLoadingMine(true);
     // Try with new columns first; fall back to core columns if migration hasn't run
     let { data, error } = await supabase
       .from('group_members')
-      .select(`role, last_read_at, groups(id, name, slug, avatar_url, is_public, research_topic, tier1, tier2, institution, company, country, location)`)
+      .select(`role, last_read_at, groups(id, name, slug, avatar_url, cover_url, cover_position, is_public, research_topic, tier1, tier2, institution, company, country, location)`)
       .eq('user_id', user.id)
       .in('role', ['admin', 'member', 'alumni']);
     if (error) {
@@ -272,7 +287,7 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
     const { data: myMemberships } = await supabase.from('group_members').select('group_id').eq('user_id', user.id);
     const myIds = (myMemberships || []).map(r => r.group_id);
 
-    let q = supabase.from('groups').select('id, name, slug, description, research_topic, tier1, tier2, institution, company, country, location, avatar_url, is_public').limit(30);
+    let q = supabase.from('groups').select('id, name, slug, description, research_topic, tier1, tier2, institution, company, country, location, avatar_url, cover_url, cover_position, is_public').limit(60);
     if (myIds.length) q = q.not('id', 'in', `(${myIds.join(',')})`);
     const { data: groups } = await q;
 
@@ -303,6 +318,50 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
     const q = discoverQuery.toLowerCase();
     return g.name.toLowerCase().includes(q) || (g.research_topic || '').toLowerCase().includes(q) || (g.tier1 || '').toLowerCase().includes(q);
   });
+
+  // ── Discover personalisation ────────────────────────────────────────
+  // Score each group by how well it matches the viewer's profile tiers,
+  // then bucket into "your field / related / other" sections. When the
+  // user explicitly picks a tier1 (or tier1 + tier2) filter, sectioning
+  // is bypassed and a single filtered list is shown instead.
+  const userTier1  = profile?.identity_tier1 || '';
+  const userTier2s = Array.isArray(profile?.identity_tier2)
+    ? profile.identity_tier2
+    : (profile?.identity_tier2 ? [profile.identity_tier2] : []);
+
+  const matchesTierFilters = (g) => {
+    if (tier1Filter && g.tier1 !== tier1Filter) return false;
+    if (tier2Filter && !(g.tier2 || []).includes(tier2Filter)) return false;
+    return true;
+  };
+
+  const groupRelevance = (g) => {
+    let score = 0;
+    if (userTier1 && g.tier1 === userTier1) score += 10;
+    const overlap = (g.tier2 || []).filter(t => userTier2s.includes(t)).length;
+    score += overlap;
+    return score;
+  };
+
+  // Apply the same search + tier filters used everywhere
+  const visibleDiscover = filteredDiscover.filter(matchesTierFilters);
+
+  const explicitFilter = !!(tier1Filter || tier2Filter);
+  const inYourField = !explicitFilter && userTier1
+    ? visibleDiscover.filter(g => g.tier1 === userTier1)
+    : [];
+  const relatedField = !explicitFilter && userTier2s.length > 0
+    ? visibleDiscover.filter(g => g.tier1 !== userTier1
+        && (g.tier2 || []).some(t => userTier2s.includes(t)))
+    : [];
+  const otherField = !explicitFilter
+    ? visibleDiscover.filter(g =>
+        !inYourField.includes(g) && !relatedField.includes(g))
+    : [];
+  // Sort each section by relevance (mostly meaningful for "in your field"
+  // when there are tier2 sub-matches stacking on top of tier1).
+  inYourField.sort((a, b) => groupRelevance(b) - groupRelevance(a));
+  relatedField.sort((a, b) => groupRelevance(b) - groupRelevance(a));
 
   // ── Mobile: tabs + 2-col grid of compact cards ─────────────────────────
   if (isMobile) {
@@ -408,14 +467,61 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
     );
   }
 
+  // Helpers used inside the desktop Discover sections.
+  const renderJoinAction = (g) => (
+    <button
+      onClick={e => { e.stopPropagation(); joinGroup(g); }}
+      disabled={joining === g.id}
+      style={{
+        width: '100%', padding: '7px', borderRadius: 9, fontSize: 12, fontWeight: 700,
+        fontFamily: 'inherit', cursor: 'pointer',
+        border: `1.5px solid ${T.v}`,
+        background: g.is_public ? T.v : T.v2,
+        color: g.is_public ? '#fff' : T.v,
+      }}>
+      {joining === g.id ? '…' : g.is_public ? '+ Join group' : '🔒 Request to join'}
+    </button>
+  );
+
+  const discoverGrid = (groups) => (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+      gap: 14,
+    }}>
+      {groups.map(g => (
+        <GroupBadgeCard
+          key={g.id}
+          group={g}
+          role={null}
+          memberCount={g.memberCount}
+          onSelect={() => joinGroup(g)}
+          actionButton={renderJoinAction(g)}
+        />
+      ))}
+    </div>
+  );
+
+  const sectionLabel = (text, count) => (
+    <div style={{
+      display: 'flex', alignItems: 'baseline', gap: 8,
+      fontSize: 11, fontWeight: 700, color: T.mu,
+      textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12,
+    }}>
+      <span>{text}</span>
+      {count != null && <span style={{ color: T.v }}>·</span>}
+      {count != null && <span style={{ color: T.mu }}>{count}</span>}
+    </div>
+  );
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px', background: T.bg }}>
       {showCreate && (
         <CreateGroupModal user={user} onGroupCreated={id => { setShowCreate(false); onGroupSelect(id); }} onClose={() => setShowCreate(false)}/>
       )}
 
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ maxWidth: 920, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: T.text }}>Research Groups</div>
             <div style={{ fontSize: 13, color: T.mu, marginTop: 2 }}>Private spaces for labs, teams, and departments</div>
@@ -427,89 +533,162 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
           }}>+ Create group</button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+        {/* Tabs */}
+        <div style={{
+          display: 'flex', gap: 18, marginBottom: 18,
+          borderBottom: `1px solid ${T.bdr}`,
+        }}>
+          {[
+            { id: 'mine',     label: 'My Groups', count: myGroups.length },
+            { id: 'discover', label: 'Discover',  count: null },
+          ].map(t => (
+            <button key={t.id} onClick={() => setDesktopTab(t.id)} style={{
+              padding: '10px 4px',
+              border: 'none', background: 'transparent',
+              cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 14, fontWeight: desktopTab === t.id ? 700 : 500,
+              color: desktopTab === t.id ? T.v : T.mu,
+              borderBottom: `2px solid ${desktopTab === t.id ? T.v : 'transparent'}`,
+              marginBottom: -1,
+            }}>
+              {t.label}{t.count != null ? ` (${t.count})` : ''}
+            </button>
+          ))}
+        </div>
 
-          {/* My Groups */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 12 }}>
-              My Groups
+        {desktopTab === 'mine' ? (
+          loadingMine ? <Spinner/> : myGroups.length === 0 ? (
+            <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14, padding: '32px 20px', textAlign: 'center' }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>🔬</div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 6 }}>No groups yet</div>
+              <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 14 }}>Create a group for your lab or research team.</div>
+              <button onClick={() => setShowCreate(true)} style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: T.v, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700 }}>
+                Create your first group →
+              </button>
             </div>
-            {loadingMine ? <Spinner/> : myGroups.length === 0 ? (
-              <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14, padding: '32px 20px', textAlign: 'center' }}>
-                <div style={{ fontSize: 32, marginBottom: 10 }}>🔬</div>
-                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, marginBottom: 6 }}>No groups yet</div>
-                <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 14 }}>Create a group for your lab or research team.</div>
-                <button onClick={() => setShowCreate(true)} style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: T.v, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700 }}>
-                  Create your first group →
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: 14,
+            }}>
+              {myGroups.map(m => m.groups && (
+                <GroupBadgeCard
+                  key={m.groups.id}
+                  group={m.groups}
+                  role={m.role}
+                  memberCount={m.memberCount}
+                  unreadCount={unreadCounts[m.groups.id] || 0}
+                  onSelect={onGroupSelect}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          <>
+            {/* Search + tier filter row */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+              <input
+                value={discoverQuery}
+                onChange={e => setDiscoverQuery(e.target.value)}
+                placeholder="Search by name, topic, or discipline…"
+                style={{
+                  flex: '1 1 280px', background: T.w, border: `1.5px solid ${T.bdr}`,
+                  borderRadius: 10, padding: '9px 13px', fontSize: 13,
+                  fontFamily: 'inherit', outline: 'none', color: T.text,
+                  boxSizing: 'border-box',
+                }}
+              />
+              <select
+                value={tier1Filter}
+                onChange={e => { setTier1Filter(e.target.value); setTier2Filter(''); }}
+                style={{
+                  padding: '9px 12px', borderRadius: 10,
+                  border: `1.5px solid ${tier1Filter ? T.v : T.bdr}`,
+                  background: tier1Filter ? T.v2 : T.w,
+                  color: tier1Filter ? T.v : T.text,
+                  fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                  outline: 'none', cursor: 'pointer',
+                }}
+              >
+                <option value="">All disciplines</option>
+                {TIER1_LIST.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              {(tier1Filter || tier2Filter) && (
+                <button onClick={() => { setTier1Filter(''); setTier2Filter(''); }} style={{
+                  fontSize: 12, color: T.mu, border: 'none', background: 'transparent',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}>
+                  Clear
                 </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {myGroups.map(m => m.groups && (
-                  <GroupBadgeCard
-                    key={m.groups.id}
-                    group={m.groups}
-                    role={m.role}
-                    memberCount={m.memberCount}
-                    unreadCount={unreadCounts[m.groups.id] || 0}
-                    onSelect={onGroupSelect}
-                  />
+              )}
+            </div>
+
+            {/* Tier-2 sub-chips appear when a tier1 is picked */}
+            {tier1Filter && getTier2(tier1Filter).length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                {getTier2(tier1Filter).map(t2 => (
+                  <button
+                    key={t2}
+                    onClick={() => setTier2Filter(t2 === tier2Filter ? '' : t2)}
+                    style={{
+                      padding: '5px 11px', borderRadius: 20,
+                      border: `1.5px solid ${tier2Filter === t2 ? T.v : T.bdr}`,
+                      background: tier2Filter === t2 ? T.v2 : T.w,
+                      color: tier2Filter === t2 ? T.v : T.mu,
+                      fontFamily: 'inherit', fontSize: 12,
+                      fontWeight: tier2Filter === t2 ? 700 : 500,
+                      cursor: 'pointer',
+                    }}>
+                    {t2}
+                  </button>
                 ))}
               </div>
             )}
-          </div>
 
-          {/* Discover Groups */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 12 }}>
-              Discover Groups
-            </div>
-            <input
-              value={discoverQuery}
-              onChange={e => setDiscoverQuery(e.target.value)}
-              placeholder="Search by name, topic, or discipline…"
-              style={{
-                width: '100%', background: T.w, border: `1.5px solid ${T.bdr}`,
-                borderRadius: 10, padding: '8px 13px', fontSize: 13,
-                fontFamily: 'inherit', outline: 'none', color: T.text,
-                boxSizing: 'border-box', marginBottom: 12,
-              }}
-            />
-            {loadingDisc ? <Spinner/> : filteredDiscover.length === 0 ? (
-              <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14, padding: '24px 20px', textAlign: 'center' }}>
+            {loadingDisc ? <Spinner/> : visibleDiscover.length === 0 ? (
+              <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 14, padding: '32px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: 13, color: T.mu }}>
-                  {discoverQuery ? 'No groups match your search.' : 'No groups to discover yet.'}
+                  {discoverQuery || tier1Filter ? 'No groups match your filters.' : 'No groups to discover yet.'}
                 </div>
               </div>
+            ) : explicitFilter ? (
+              // Single filtered list when the user explicitly picked a tier.
+              <>
+                {sectionLabel(
+                  tier2Filter ? `${tier1Filter} · ${tier2Filter}` : tier1Filter,
+                  visibleDiscover.length
+                )}
+                {discoverGrid(visibleDiscover)}
+              </>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {filteredDiscover.map(g => (
-                  <GroupBadgeCard
-                    key={g.id}
-                    group={g}
-                    role={null}
-                    memberCount={g.memberCount}
-                    onSelect={() => joinGroup(g)}
-                    actionButton={
-                      <button
-                        onClick={e => { e.stopPropagation(); joinGroup(g); }}
-                        disabled={joining === g.id}
-                        style={{
-                          width: '100%', padding: '7px', borderRadius: 9, fontSize: 12, fontWeight: 700,
-                          fontFamily: 'inherit', cursor: 'pointer',
-                          border: `1.5px solid ${T.v}`,
-                          background: g.is_public ? T.v : T.v2,
-                          color: g.is_public ? '#fff' : T.v,
-                        }}>
-                        {joining === g.id ? '…' : g.is_public ? '+ Join group' : '🔒 Request to join'}
-                      </button>
-                    }
-                  />
-                ))}
-              </div>
+              // Personalised sectioning by relevance to the viewer's profile.
+              <>
+                {inYourField.length > 0 && (
+                  <div style={{ marginBottom: 28 }}>
+                    {sectionLabel(`In your field — ${userTier1}`, inYourField.length)}
+                    {discoverGrid(inYourField)}
+                  </div>
+                )}
+                {relatedField.length > 0 && (
+                  <div style={{ marginBottom: 28 }}>
+                    {sectionLabel('Related disciplines', relatedField.length)}
+                    {discoverGrid(relatedField)}
+                  </div>
+                )}
+                {otherField.length > 0 && (
+                  <div>
+                    {sectionLabel(
+                      (inYourField.length || relatedField.length) ? 'All other groups' : 'All groups',
+                      otherField.length
+                    )}
+                    {discoverGrid(otherField)}
+                  </div>
+                )}
+              </>
             )}
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
