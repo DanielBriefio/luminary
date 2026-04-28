@@ -30,16 +30,18 @@ alter table user_storage_files
   ));
 
 -- ─── delete_user_file: protect profile_cover ────────────────────────────────
+-- Preserves the original `returns table (bucket text, path text)` signature
+-- so we don't have to DROP first and don't break the StorageScreen caller.
 create or replace function delete_user_file(p_id uuid)
-returns jsonb
+returns table (bucket text, path text)
 language plpgsql security definer
 set search_path = public as $$
 declare
-  v_row user_storage_files;
+  v_row user_storage_files%rowtype;
 begin
   select * into v_row from user_storage_files where id = p_id;
   if not found then
-    raise exception 'not found';
+    raise exception 'file not found';
   end if;
   if v_row.user_id <> auth.uid() then
     raise exception 'not allowed';
@@ -68,7 +70,9 @@ begin
   end if;
 
   delete from user_storage_files where id = p_id;
-  return jsonb_build_object('bucket', v_row.bucket, 'path', v_row.path);
+  bucket := v_row.bucket;
+  path   := v_row.path;
+  return next;
 end;
 $$;
 
