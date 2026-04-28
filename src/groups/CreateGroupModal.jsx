@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
-import { capture } from '../lib/analytics';
+import { capture, captureLumensEarned } from '../lib/analytics';
 import { T, TIER1_LIST, getTier2, LUMENS_ENABLED } from '../lib/constants';
 
 const GROUP_TYPES = [
@@ -64,6 +64,7 @@ export default function CreateGroupModal({ user, onGroupCreated, onClose }) {
             p_category: 'creation',
             p_meta:     { group_id: group.id },
           }).then(() => {}, () => {});
+          captureLumensEarned({ reason: 'group_created', amount: 25, meta: { group_id: group.id } });
         } catch {}
       }
       onGroupCreated(group.id);

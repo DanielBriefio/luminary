@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
-import { capture } from '../lib/analytics';
+import { capture, captureLumensEarned } from '../lib/analytics';
 import { T, LUMENS_ENABLED } from '../lib/constants';
 import { FAST_TEMPLATES, PROJECT_TEMPLATES, applyTemplate } from '../lib/projectTemplates';
 import Btn from '../components/Btn';
@@ -133,6 +133,7 @@ export default function CreateProjectModal({
             p_category: 'creation',
             p_meta:     { project_id: project.id },
           }).then(() => {}, () => {});
+          captureLumensEarned({ reason: 'project_created', amount: 10, meta: { project_id: project.id } });
         } catch {}
       }
       onProjectCreated(project.id);

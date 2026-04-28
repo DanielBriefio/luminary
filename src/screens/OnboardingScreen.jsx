@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { capture } from '../lib/analytics';
+import { capture, captureLumensEarned } from '../lib/analytics';
 import { T, TIER1_LIST, getTier2, WORK_MODES, LUMENS_ENABLED } from '../lib/constants';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
@@ -131,6 +131,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
     capture('onboarding_completed');
     if (LUMENS_ENABLED) {
       try {
+        const prevLumens = profile?.lumens_current_period || 0;
         supabase.rpc('award_lumens', {
           p_user_id:  user.id,
           p_amount:   25,
@@ -138,6 +139,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
           p_category: 'creation',
           p_meta:     {},
         }).then(() => {}, () => {});
+        captureLumensEarned({ reason: 'onboarding_completed', amount: 25, prevLumens });
         setProfile(p => p ? {
           ...p,
           lumens_current_period: (p.lumens_current_period || 0) + 25,

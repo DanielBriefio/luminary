@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { capture } from '../lib/analytics';
+import { capture, captureLumensEarned } from '../lib/analytics';
 import { T, TIER1_LIST, getTier2, DISCUSSION_PROMPTS, ZERO_COMMENT_PROMPTS, getDiscussionPrompts, LUMENS_ENABLED } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import { useWindowSize } from '../lib/useWindowSize';
@@ -23,7 +23,7 @@ const DEEPDIVE_MIN_WORDS      = 50;
 // post owner the first time each commenter comments on this post (engagement).
 // Self-comments earn no engagement Lumens. Best-effort — failures swallowed.
 // Gated on LUMENS_ENABLED so a missing RPC can never break the comment flow.
-async function awardLumensForComment(post, commenterId) {
+async function awardLumensForComment(post, commenterId, commenterPrevLumens) {
   if (!LUMENS_ENABLED) return;
   try {
     supabase.rpc('award_lumens', {
@@ -33,6 +33,7 @@ async function awardLumensForComment(post, commenterId) {
       p_category: 'creation',
       p_meta:     { post_id: post.id },
     }).then(() => {}, () => {});
+    captureLumensEarned({ reason: 'comment_posted', amount: 2, meta: { post_id: post.id }, prevLumens: commenterPrevLumens });
 
     if (post?.user_id && post.user_id !== commenterId) {
       const { count } = await supabase
@@ -50,6 +51,8 @@ async function awardLumensForComment(post, commenterId) {
           p_category: 'engagement',
           p_meta:     { post_id: post.id, actor_id: commenterId },
         }).then(() => {}, () => {});
+        // Cross-user — no tier event from this session.
+        captureLumensEarned({ reason: 'comment_received', amount: 10, meta: { post_id: post.id, actor_id: commenterId, recipient_id: post.user_id } });
       }
 
       // Discussion threshold: when distinct commenter count just hits 3,
@@ -77,6 +80,7 @@ async function awardLumensForComment(post, commenterId) {
             p_category: 'recognition',
             p_meta:     { post_id: post.id },
           }).then(() => {}, () => {});
+          captureLumensEarned({ reason: 'discussion_threshold', amount: 50, meta: { post_id: post.id, recipient_id: post.user_id } });
         }
       }
     }
@@ -296,6 +300,8 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             p_category: 'recognition',
             p_meta:     { post_id: post.id, actor_id: currentUserId },
           }).then(() => {}, () => {});
+          // Cross-user — recipient is the post owner, no tier event from this session.
+          captureLumensEarned({ reason: 'post_reposted', amount: 20, meta: { post_id: post.id, actor_id: currentUserId, recipient_id: post.user_id } });
         } catch {}
       }
     } else {
@@ -362,7 +368,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       setCommCount(n => n + 1);
       setCommText('');
       capture('comment_posted');
-      await awardLumensForComment(post, currentUserId);
+      await awardLumensForComment(post, currentUserId, currentProfile?.lumens_current_period);
       await notifyPostOwnerOfComment(post, currentUserId);
     }
     setCommSaving(false);
@@ -410,7 +416,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       .single();
     if (data) setTopComment(data);
     setPromptIndex(i => i + 1);
-    await awardLumensForComment(post, currentUserId);
+    await awardLumensForComment(post, currentUserId, currentProfile?.lumens_current_period);
     await notifyPostOwnerOfComment(post, currentUserId);
   };
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
-import { capture } from '../lib/analytics';
+import { capture, captureLumensEarned } from '../lib/analytics';
 import { T, AUTO_TAG_ENABLED, EDGE_HEADERS, COMPOSER_PROMPTS, LUMENS_ENABLED } from '../lib/constants';
 
 const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
@@ -451,6 +451,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
 
     if (LUMENS_ENABLED && newPost?.id) {
       try {
+        const prevLumens = profile?.lumens_current_period || 0;
         supabase.rpc('award_lumens', {
           p_user_id:  user.id,
           p_amount:   5,
@@ -458,6 +459,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           p_category: 'creation',
           p_meta:     { post_id: newPost.id, post_type: resolvedPostType },
         }).then(() => {}, () => {});
+        captureLumensEarned({ reason: 'post_created', amount: 5, meta: { post_id: newPost.id, post_type: resolvedPostType }, prevLumens });
         // Optimistic local update so the sidebar widget reflects the +5 right
         // away without waiting for a profile re-fetch.
         setProfile?.(p => p ? {
@@ -489,6 +491,8 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
                 p_category: 'recognition',
                 p_meta:     { invited_user_id: user.id },
               }).then(() => {}, () => {});
+              // No prevLumens — inviter is a different user, we don't know their balance.
+              captureLumensEarned({ reason: 'invited_user_active', amount: 100, meta: { invited_user_id: user.id, inviter_id: inviterId } });
             }
           } catch {}
         })();

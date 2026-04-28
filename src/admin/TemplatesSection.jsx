@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { T, LUMENS_ENABLED } from '../lib/constants';
-import { capture } from '../lib/analytics';
+import { capture, captureLumensEarned } from '../lib/analytics';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import { timeAgo } from '../lib/utils';
@@ -65,6 +65,8 @@ export default function TemplatesSection({ supabase }) {
           p_category: 'recognition',
           p_meta:     { template_id: id },
         }).then(() => {}, () => {});
+        // Cross-user — admin awarding the submitter, no tier event from this session.
+        captureLumensEarned({ reason: 'template_approved', amount: 50, meta: { template_id: id, recipient_id: tpl.submitted_by } });
       } catch {}
     }
     setActing(null);
