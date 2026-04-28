@@ -5,6 +5,7 @@ import Av from '../components/Av';
 import Bdg from '../components/Bdg';
 import Spinner from '../components/Spinner';
 import { sanitiseHtml } from '../lib/htmlUtils';
+import { useWindowSize } from '../lib/useWindowSize';
 import PaperPreview from '../components/PaperPreview';
 import FilePreview from '../components/FilePreview';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
@@ -67,7 +68,7 @@ function ReadingProgressBar() {
   );
 }
 
-function ArticleHeader({ post, author, readMins }) {
+function ArticleHeader({ post, author, readMins, isMobile }) {
   const isDeepDive = post.is_deep_dive === true;
   const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
   const lines = plain.split('\n').filter(l => l.trim());
@@ -89,7 +90,7 @@ function ArticleHeader({ post, author, readMins }) {
       {title && (
         <h1 style={{
           fontFamily:"'DM Serif Display', serif",
-          fontSize: READING.titleSize,
+          fontSize: isMobile ? 30 : READING.titleSize,
           color: READING.textColor,
           lineHeight: 1.2,
           margin:'0 0 20px',
@@ -462,6 +463,7 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
 }
 
 export default function PublicPostPage({ postId }) {
+  const { isMobile } = useWindowSize();
   const [post,          setPost]          = useState(null);
   const [author,        setAuthor]        = useState(null);
   const [loading,       setLoading]       = useState(true);
@@ -637,9 +639,9 @@ export default function PublicPostPage({ postId }) {
 
       <article style={{
         maxWidth: READING.maxWidth, margin:'0 auto',
-        padding:`32px ${READING.sidepadding}px 0`,
+        padding:`${isMobile ? 20 : 32}px ${isMobile ? 16 : READING.sidepadding}px 0`,
       }}>
-        <ArticleHeader post={post} author={author} readMins={readMins}/>
+        <ArticleHeader post={post} author={author} readMins={readMins} isMobile={isMobile}/>
 
         <ArticleBody post={post} isDeepDive={isDeepDive}/>
 

@@ -719,8 +719,10 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           </div>
         )}
 
-        {/* Deep Dive toggle — text posts only, shown above the editor */}
-        {postType === 'text' && (
+        {/* Deep Dive toggle — text posts only, hidden on mobile (long-form
+            article composition isn't a phone use-case; the toggle just
+            invites confusion). Tablet (≥768px) and desktop see it. */}
+        {postType === 'text' && !isMobile && (
           <div
             onClick={() => setIsDeepDive(d => !d)}
             style={{

@@ -8,8 +8,10 @@ import Spinner from '../components/Spinner';
 import PostCard from '../feed/PostCard';
 import OrcidBadge from '../components/OrcidBadge';
 import { formatDateRange } from '../lib/linkedInUtils';
+import { useWindowSize } from '../lib/useWindowSize';
 
 export default function UserProfileScreen({ userId, currentUserId, currentProfile, onBack, onViewPaper, onMessage }) {
+  const { isMobile } = useWindowSize();
   const [profile,  setProfile]  = useState(null);
   const [pubs,     setPubs]     = useState([]);
   const [posts,    setPosts]    = useState([]);
@@ -119,12 +121,12 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
       <TopBar onBack={onBack} />
 
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: T.bg }}>
-        <div style={{ maxWidth: 740, margin: '0 auto', padding: '20px 18px 48px' }}>
+        <div style={{ maxWidth: 740, margin: '0 auto', padding: isMobile ? '12px 12px 48px' : '20px 18px 48px' }}>
 
           {/* Banner + Avatar */}
-          <div style={{ position: 'relative', marginBottom: 46 }}>
-            <div style={{ height: 120, borderRadius: '14px 14px 0 0', overflow: 'hidden' }}>
-              <svg width="100%" height="120" viewBox="0 0 740 120" preserveAspectRatio="xMidYMid slice">
+          <div style={{ position: 'relative', marginBottom: isMobile ? 38 : 46 }}>
+            <div style={{ height: isMobile ? 86 : 120, borderRadius: '14px 14px 0 0', overflow: 'hidden' }}>
+              <svg width="100%" height="100%" viewBox="0 0 740 120" preserveAspectRatio="xMidYMid slice">
                 <defs><linearGradient id="ubg" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#667eea"/>
                   <stop offset="50%" stopColor="#764ba2"/>
@@ -243,7 +245,13 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                 [hIndex > 0 ? `h${hIndex}` : '—', 'h-index'],
               ];
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${statItems.length},1fr)`, gap: 8, margin: '10px 0 16px' }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile && statItems.length > 2
+                    ? 'repeat(2, 1fr)'
+                    : `repeat(${statItems.length},1fr)`,
+                  gap: 8, margin: '10px 0 16px',
+                }}>
                   {statItems.map(([v, l]) => (
                     <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
                       <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v }}>{v}</div>

@@ -386,39 +386,12 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
           }}>
           ↻
         </button>
-        {onOpenNotifs && (
-          <button onClick={onOpenNotifs} title="Notifications"
-            style={{
-              position:"relative",
-              width:32, height:32, borderRadius:7,
-              border:"none", background:"transparent",
-              cursor:"pointer", color:T.mu,
-              display:"flex", alignItems:"center", justifyContent:"center",
-            }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-            {unreadNotifs > 0 && (
-              <span style={{
-                position:"absolute", top:-2, right:-2,
-                minWidth:16, height:16, padding:"0 4px",
-                borderRadius:20, background:T.ro, color:"#fff",
-                fontSize:10, fontWeight:700,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                border:`2px solid ${T.w}`,
-              }}>
-                {unreadNotifs > 9 ? "9+" : unreadNotifs}
-              </span>
-            )}
-          </button>
-        )}
       </div>
       {/* Mode pills + Sort + Filter — single combined row */}
       <div style={{
-        display:'flex', alignItems:'center', gap:8,
-        padding:'7px 16px', borderBottom:`1px solid ${T.bdr}`,
+        display:'flex', alignItems:'center', gap: isMobile ? 6 : 8,
+        padding: isMobile ? '7px 12px' : '7px 16px',
+        borderBottom:`1px solid ${T.bdr}`,
         background:T.w, flexShrink:0, flexWrap:'wrap',
       }}>
         {fp === 'sug' && (
