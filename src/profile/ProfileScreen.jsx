@@ -18,6 +18,7 @@ import { useWindowSize } from '../lib/useWindowSize';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
 import ProfileCompletionMeter from '../components/ProfileCompletionMeter';
 import OrcidBadge from '../components/OrcidBadge';
+import AvatarCropModal from '../components/AvatarCropModal';
 
 function EF({label,val,onChange,placeholder=""}) {
   return (
@@ -339,6 +340,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
   const [networkLoading,setNetworkLoading] = useState(false);
   const [avatarUploading,setAvatarUploading] = useState(false);
   const [avatarHover,setAvatarHover]         = useState(false);
+  const [avatarCropFile, setAvatarCropFile]  = useState(null); // pending File for crop modal
 
   const save=async()=>{
     setSaving(true);
@@ -877,7 +879,11 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               onMouseEnter={()=>setAvatarHover(true)}
               onMouseLeave={()=>setAvatarHover(false)}>
               <input type="file" accept="image/*" style={{display:'none'}}
-                onChange={e=>e.target.files?.[0]&&uploadAvatar(e.target.files[0])}/>
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (f) setAvatarCropFile(f);
+                }}/>
               <div style={{borderRadius:'50%',border:'4px solid white',boxShadow:'0 4px 18px rgba(108,99,255,.2)',display:'inline-block',position:'relative',overflow:'hidden'}}>
                 <Av color={profile?.avatar_color||'me'} size={84} name={profile?.name} url={profile?.avatar_url||''} tier={getTierFromLumens(profile?.lumens_current_period)}/>
                 <div style={{
@@ -1636,6 +1642,18 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
           {tab==='publications'&&<PublicationsTab user={user} profile={profile} setProfile={setProfile} pendingCvPubs={pendingCvPubs} onPendingConsumed={()=>setPendingCvPubs([])} initialMode={pubsInitialMode}/>}
         </div>
       </div>
+
+      {avatarCropFile && (
+        <AvatarCropModal
+          file={avatarCropFile}
+          title="Adjust your profile photo"
+          onCancel={() => setAvatarCropFile(null)}
+          onConfirm={async (cropped) => {
+            await uploadAvatar(cropped);
+            setAvatarCropFile(null);
+          }}
+        />
+      )}
     </div>
   );
 }

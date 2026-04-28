@@ -4,6 +4,7 @@ import { T, TIER1_LIST, getTier2 } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
+import AvatarCropModal from '../components/AvatarCropModal';
 
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function trunc(s, n) { return s && s.length > n ? s.slice(0, n-1)+'…' : (s||''); }
@@ -73,6 +74,7 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
 
   // Image uploads
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarCropFile,  setAvatarCropFile]  = useState(null);
   const [coverUploading,  setCoverUploading]  = useState(false);
   const [uploadError,     setUploadError]     = useState('');
   const avatarRef = useRef();
@@ -329,7 +331,11 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
             {editing && (
               <>
                 <input ref={avatarRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }}
-                  onChange={e => uploadAvatar(e.target.files[0])}/>
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (f) setAvatarCropFile(f);
+                  }}/>
                 <button onClick={() => avatarRef.current?.click()} disabled={avatarUploading} style={{
                   position: 'absolute', bottom: 0, right: -4,
                   width: 22, height: 22, borderRadius: '50%', border: `2px solid ${T.w}`,
@@ -840,6 +846,18 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
           )}
         </div>
       </div>
+
+      {avatarCropFile && (
+        <AvatarCropModal
+          file={avatarCropFile}
+          title="Adjust group avatar"
+          onCancel={() => setAvatarCropFile(null)}
+          onConfirm={async (cropped) => {
+            await uploadAvatar(cropped);
+            setAvatarCropFile(null);
+          }}
+        />
+      )}
     </div>
   );
 }
