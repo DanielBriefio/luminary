@@ -261,7 +261,8 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       return;
     }
     const { data } = supabase.storage.from('post-files').getPublicUrl(upData.path);
-    await supabase.from('groups').update({ avatar_url: data.publicUrl }).eq('id', groupId);
+    const bustedUrl = `${data.publicUrl}?v=${Date.now()}`;
+    await supabase.from('groups').update({ avatar_url: bustedUrl }).eq('id', groupId);
     supabase.rpc('record_storage_file', {
       p_bucket:      'post-files',
       p_path:        upData.path,
@@ -289,7 +290,8 @@ export default function GroupProfile({ groupId, group, user, myRole, onGroupUpda
       return;
     }
     const { data } = supabase.storage.from('post-files').getPublicUrl(upData.path);
-    await supabase.from('groups').update({ cover_url: data.publicUrl }).eq('id', groupId);
+    const bustedUrl = `${data.publicUrl}?v=${Date.now()}`;
+    await supabase.from('groups').update({ cover_url: bustedUrl }).eq('id', groupId);
     supabase.rpc('record_storage_file', {
       p_bucket:      'post-files',
       p_path:        upData.path,

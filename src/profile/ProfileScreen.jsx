@@ -434,7 +434,10 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
     const { data, error } = await supabase.storage.from('post-files').upload(path, file, { contentType:file.type, upsert:true });
     if(error){ alert(`Upload failed: ${error.message}`); setAvatarUploading(false); return; }
     const { data:{ publicUrl } } = supabase.storage.from('post-files').getPublicUrl(data.path);
-    const { data:updated } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id).select().single();
+    // Cache-bust: same path on every upsert means the browser would otherwise
+    // keep showing the old bytes. The query param is ignored by storage.
+    const bustedUrl = `${publicUrl}?v=${Date.now()}`;
+    const { data:updated } = await supabase.from('profiles').update({ avatar_url: bustedUrl }).eq('id', user.id).select().single();
     if(updated) setProfile(updated);
     supabase.rpc('record_storage_file', {
       p_bucket:      'post-files',
