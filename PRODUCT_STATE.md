@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-28 (rev 17)_
+_Last updated: 2026-04-28 (rev 18)_
 
 ## What exists and works
 
@@ -9,6 +9,11 @@ _Last updated: 2026-04-28 (rev 17)_
 - Validated invite code is handed off to AuthScreen via `sessionStorage.prefill_invite_code` so the user lands directly on the signup form with their code pre-filled
 - Mobile responsive (single-column grids, full-width CTAs, compact header) below 768px via `useWindowSize`
 - ORCID OAuth handler matches AuthScreen exactly (same client ID, redirect URI, `state=signup`)
+
+### ORCID integration
+- **AuthScreen + LandingScreen CTAs**: official ORCID iD logo (inline SVG, `src/components/OrcidIcon.jsx`) on the "Sign up / Sign in / Join with ORCID" buttons. Brand-asset-licensed for integrators.
+- **Profile badge** (`OrcidBadge`): renders next to the ORCID link on ProfileScreen / UserProfileScreen / PublicProfilePage. Shows the iD logo only when `profiles.orcid_verified === true` (set by the OAuth signup path); importer-only iDs (typed into the OrcidImporter) link out without the icon. Tooltip clarifies "authenticated via ORCID OAuth" vs "self-asserted".
+- ORCID OAuth signup writes both `profiles.orcid` and `profiles.orcid_verified = true`; OrcidImporter writes `orcid` + `orcid_imported_at` only. The two paths converge on the same `profiles.orcid` column.
 
 ### Core auth & onboarding
 - Email/password sign-up and login (Supabase Auth)
@@ -60,7 +65,7 @@ _Last updated: 2026-04-28 (rev 17)_
 - **GroupMembers**: admin list + member list; promote/demote/remove; join requests with approve/reject; closed groups show JoinRequestPanel; public groups show PublicJoinPanel
 - **GroupLibrary**: Search PMC, DOI, upload, .ris/.bib import, ClinicalTrials.gov search; 3-dot menu (move/remove); "Share this paper"
 - **GroupProjects**: same template gallery + archiving/pinning flow as personal projects (admin/member only)
-- **GroupProfile**: group stats, leader info, collaborator list, publications, SVG badge export, QR code; admin can edit metadata inline
+- **GroupProfile**: group stats, leader info, collaborator list, publications, SVG badge export, QR code; admin can edit metadata inline. Avatar uses `AvatarCropModal` (square crop). Cover image uses drag-to-reposition (`CoverRepositioner`, height 160) in edit mode; release saves to `groups.cover_position`. Both display sites (GroupProfile non-edit, PublicGroupProfileScreen) honour the saved `object-position`.
 - **PublicGroupProfileScreen** (`/g/:slug`): public group page with stats, recent posts, publications (no auth)
 
 ### Notifications
@@ -97,6 +102,7 @@ _Last updated: 2026-04-28 (rev 17)_
 - Publications tab: CRUD, EPMC name search, ORCID import, AI import, .ris/.bib import, export (BibTeX / RIS / PDF)
 - Share panel: slug editor, per-section visibility toggles, SVG badge, QR code
 - Login email displayed as read-only in the business card edit section (above work email) and in Account Settings; labelled "Login email — not editable here"
+- **Avatar crop**: file picker → `AvatarCropModal` (`react-easy-crop`, square crop, circular preview, zoom slider, 512×512 output) → existing upload + storage tracking flow. Same flow for group avatars in `GroupProfile`. Avatar URLs are cache-busted (`?v=<ts>`) so browsers refetch after replacement.
 - Profile completion meter (`ProfileCompletionMeter`): 12 milestones across 5 stages (Identified → Visible) at thresholds 3 / 5 / 7 / 9 / 12; confetti on stage unlock; CTA actions link to relevant edit flows. Simplified in 2026-04: ORCID-required, first-publication, and 5-publications milestones removed; "Follow 3 researchers" relaxed to 1.
 
 ### User Profile (other users)
@@ -246,10 +252,8 @@ _Last updated: 2026-04-28 (rev 17)_
 - **Mobile layout (in-app)**: Landing page is responsive, but the authenticated app is still desktop-only — 200px sidebar + multi-column grids break on phones. `useWindowSize` is wired into `App.jsx`, `BottomNav`, and `LandingScreen` but most authenticated screens haven't been adapted.
 - **Push notifications / email digests**: Transactional emails ship (Resend, six event types + welcome). No push, no weekly digest.
 - **Admin panel**: Analytics tab is placeholder. Admin Inbox is fully implemented but not in the left nav — reachable only via direct `section` state.
-- **Public-group-join email**: Joining a public group inserts a `group_member_joined` notification for admins, but that type isn't in the email function's `EMAIL_TYPES` set yet.
 - **PWA / offline**: Not configured.
 - **End-to-end encryption for group posts**: Schema has `content_iv`/`content_encrypted` columns but encryption is not implemented.
-- **Lumens analytics**: PostHog `lumens_earned` and `tier_reached` events are not yet instrumented; tier crossings only update DB state, no event fires.
 - **Gold avatar ring in feed**: Av currently renders the `luminary`-tier ring on profile pages and the sidebar widget only. Feed `PostCard` avatars do not pass the `tier` prop — would require recreating `posts_with_meta` to expose author lumens/tier.
 
 ---
@@ -275,6 +279,20 @@ _Last updated: 2026-04-28 (rev 17)_
 - **`migration_account_deletion_safety.sql`** (Phase 12.2): drops legacy `groups.owner_id` (cascade footgun) and switches `conversations.user_id_a/b` + `messages.sender_id` from CASCADE to SET NULL so DM threads survive when one party is purged.
 - **`migration_handoff_groups.sql`** (Phase 12.3): adds `get_my_admin_groups_for_handoff()` RPC — returns groups where the caller is the sole admin, used by the schedule-delete confirm flow to prompt for a successor.
 - **`migration_tombstone_comments.sql`** (Phase 12.4): switches `comments` / `group_post_comments` / `project_post_comments` `user_id` from CASCADE to SET NULL so threads keep their structure when an author is purged. Frontend renders "Deleted user" + greyed avatar in place of the missing author across all four comment surfaces (PostCard top + thread, GroupPostCard top + thread, ProjectPostCard, PublicPostPage CommentsSection).
+- **`migration_group_cover_position.sql`** (Phase 12.5): adds `groups.cover_position` (text, default `'50% 50%'`) for the drag-to-reposition group cover.
+
+## Storage RLS policy required
+
+The user-folder UPDATE policy on `storage.objects` is required for avatar replacement (upsert: true downgrades to UPDATE on the second upload):
+
+```sql
+create policy "users can update own files in post-files"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'post-files' and split_part(name, '/', 1) = auth.uid()::text)
+  with check (bucket_id = 'post-files' and split_part(name, '/', 1) = auth.uid()::text);
+```
+
+Without it, the second avatar upload fails with "new row violates row-level security policy".
 
 ---
 
