@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
+import StorageQuotaBar from '../components/StorageQuotaBar';
 
 const SOURCE_GROUPS = [
   { kind: 'post',         label: 'Post attachments',      icon: '📝', deletable: true,  hint: 'Deleting leaves the post; the file is replaced with a placeholder.' },
@@ -37,17 +38,22 @@ function buildContextHref(file) {
 }
 
 export default function LibraryFilesView({ isMobile = false }) {
-  const [loading, setLoading] = useState(true);
-  const [usage,   setUsage]   = useState(null);
-  const [busyId,  setBusyId]  = useState(null);
-  const [err,     setErr]     = useState('');
+  const [loading, setLoading]   = useState(true);
+  const [usage,   setUsage]     = useState(null);
+  const [quotaMb, setQuotaMb]   = useState(null);
+  const [busyId,  setBusyId]    = useState(null);
+  const [err,     setErr]       = useState('');
 
   const refresh = async () => {
     setLoading(true);
     setErr('');
-    const { data, error } = await supabase.rpc('get_my_storage_usage');
-    if (error) setErr(error.message);
-    else setUsage(data);
+    const [usageRes, quotaRes] = await Promise.all([
+      supabase.rpc('get_my_storage_usage'),
+      supabase.rpc('get_storage_quota_mb'),
+    ]);
+    if (usageRes.error) setErr(usageRes.error.message);
+    else setUsage(usageRes.data);
+    setQuotaMb(quotaRes.data || 50);
     setLoading(false);
   };
 
@@ -110,31 +116,37 @@ export default function LibraryFilesView({ isMobile = false }) {
       {/* Total card */}
       <div style={{
         background:T.w, border:`1px solid ${T.bdr}`, borderRadius:14,
-        padding:'16px 18px', marginBottom:18, display:'flex', alignItems:'baseline',
-        gap:18, flexWrap:'wrap',
+        padding:'16px 18px', marginBottom:18,
       }}>
-        <div>
-          <div style={{ fontSize:11, fontWeight:700, color:T.mu, letterSpacing:0.4, textTransform:'uppercase' }}>
-            Total used
-          </div>
-          <div style={{ fontFamily:"'DM Serif Display', serif", fontSize: isMobile ? 26 : 30, color:T.text, lineHeight:1.1 }}>
-            {fmtBytes(usage.total_bytes)}
-          </div>
-          <div style={{ fontSize:13, color:T.mu, marginTop:2 }}>
-            {usage.total_files} {usage.total_files === 1 ? 'file' : 'files'}
-          </div>
-        </div>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginLeft:'auto' }}>
-          {(usage.buckets || []).map(b => (
-            <div key={b.bucket} style={{
-              background:T.s2, border:`1px solid ${T.bdr}`, borderRadius:10,
-              padding:'7px 11px', fontSize:12,
-            }}>
-              <div style={{ fontWeight:700, color:T.text }}>{b.bucket}</div>
-              <div style={{ color:T.mu, marginTop:1 }}>{fmtBytes(b.bytes)} · {b.files}</div>
+        <div style={{ display:'flex', alignItems:'baseline', gap:18, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:T.mu, letterSpacing:0.4, textTransform:'uppercase' }}>
+              Total used
             </div>
-          ))}
+            <div style={{ fontFamily:"'DM Serif Display', serif", fontSize: isMobile ? 26 : 30, color:T.text, lineHeight:1.1 }}>
+              {fmtBytes(usage.total_bytes)}
+            </div>
+            <div style={{ fontSize:13, color:T.mu, marginTop:2 }}>
+              {usage.total_files} {usage.total_files === 1 ? 'file' : 'files'}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginLeft:'auto' }}>
+            {(usage.buckets || []).map(b => (
+              <div key={b.bucket} style={{
+                background:T.s2, border:`1px solid ${T.bdr}`, borderRadius:10,
+                padding:'7px 11px', fontSize:12,
+              }}>
+                <div style={{ fontWeight:700, color:T.text }}>{b.bucket}</div>
+                <div style={{ color:T.mu, marginTop:1 }}>{fmtBytes(b.bytes)} · {b.files}</div>
+              </div>
+            ))}
+          </div>
         </div>
+        {quotaMb != null && (
+          <div style={{ marginTop:14 }}>
+            <StorageQuotaBar usedBytes={usage.total_bytes || 0} quotaBytes={quotaMb * 1024 * 1024} />
+          </div>
+        )}
       </div>
 
       {err && (

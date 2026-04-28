@@ -5,6 +5,7 @@ import { T, AUTO_TAG_ENABLED, EDGE_HEADERS, COMPOSER_PROMPTS, LUMENS_ENABLED } f
 
 const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
 import { getFileCategory } from '../lib/fileUtils';
+import { checkRemainingQuota } from '../lib/storageQuota';
 import { getCachedTagsByDoi, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
 import Btn from '../components/Btn';
 import Inp from '../components/Inp';
@@ -303,7 +304,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     setEpSearchTerm('');
   };
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if(!file) return;
     const cat = getFileCategory(file.type);
@@ -311,6 +312,8 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     if(file.size > limitMB * 1024 * 1024) {
       setError(`File too large. Max size for ${cat} is ${limitMB}MB.`); return;
     }
+    const quotaErr = await checkRemainingQuota(file.size);
+    if (quotaErr) { setError(quotaErr); return; }
     setUploadFile(file);
     setUploadCategory(cat);
     setError('');
@@ -811,6 +814,8 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
                 if (!f) return;
                 if (!f.type.startsWith('image/')) { setError('Please choose an image file.'); return; }
                 if (f.size > 10 * 1024 * 1024)   { setError('Cover image is too large (max 10 MB).'); return; }
+                const quotaErr = await checkRemainingQuota(f.size);
+                if (quotaErr) { setError(quotaErr); return; }
                 setCoverUploading(true);
                 setError('');
                 try {

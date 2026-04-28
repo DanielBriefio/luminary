@@ -4,6 +4,7 @@ import { T, AUTO_TAG_ENABLED, EDGE_HEADERS } from '../lib/constants';
 
 const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
 import { getFileCategory } from '../lib/fileUtils';
+import { checkRemainingQuota } from '../lib/storageQuota';
 import { getCachedTagsByDoi, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
 import Btn from '../components/Btn';
 import RichTextEditor from '../components/RichTextEditor';
@@ -254,12 +255,14 @@ export default function GroupNewPost({ groupId, groupName, user, onPostCreated, 
     else setDoiFetched(true);
   };
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const cat = getFileCategory(file.type);
     const limitMB = FILE_LIMITS[cat] || 10;
     if (file.size > limitMB * 1024 * 1024) { setError(`File too large. Max ${limitMB}MB for ${cat}.`); return; }
+    const quotaErr = await checkRemainingQuota(file.size);
+    if (quotaErr) { setError(quotaErr); return; }
     setUploadFile(file); setUploadCategory(cat); setError('');
     if (['image', 'video', 'audio'].includes(cat)) setUploadPreview(URL.createObjectURL(file));
     else setUploadPreview('');

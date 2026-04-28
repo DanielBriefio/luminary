@@ -48,15 +48,40 @@ export default function StorageSection({ supabase }) {
   const [sort,    setSort]    = useState('bytes');
   const [expanded, setExpanded] = useState(null);  // user_id of currently expanded row
   const [filesByUser, setFilesByUser] = useState({});  // { user_id: { loading, files, err } }
+  const [quotaMb,    setQuotaMb]    = useState('');
+  const [quotaInput, setQuotaInput] = useState('');
+  const [savingQuota, setSavingQuota] = useState(false);
+  const [quotaMsg,   setQuotaMsg]   = useState('');
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.rpc('get_admin_storage_usage');
-      if (error) setErr(error.message);
-      else setData(data);
+      const [adminRes, quotaRes] = await Promise.all([
+        supabase.rpc('get_admin_storage_usage'),
+        supabase.rpc('get_admin_config', { p_key: 'storage_quota_mb' }),
+      ]);
+      if (adminRes.error) setErr(adminRes.error.message);
+      else setData(adminRes.data);
+      const v = quotaRes.data ?? 50;
+      setQuotaMb(String(v));
+      setQuotaInput(String(v));
       setLoading(false);
     })();
   }, [supabase]);
+
+  const saveQuota = async () => {
+    const n = parseInt(quotaInput, 10);
+    if (isNaN(n) || n < 1) { setQuotaMsg('Enter a positive number.'); return; }
+    setSavingQuota(true); setQuotaMsg('');
+    const { error } = await supabase.rpc('set_admin_config', {
+      p_key:   'storage_quota_mb',
+      p_value: n,
+    });
+    setSavingQuota(false);
+    if (error) { setQuotaMsg(error.message); return; }
+    setQuotaMb(String(n));
+    setQuotaMsg('Saved.');
+    setTimeout(() => setQuotaMsg(''), 2500);
+  };
 
   const sortedUsers = useMemo(() => {
     if (!data?.per_user) return [];
@@ -84,8 +109,58 @@ export default function StorageSection({ supabase }) {
       <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 32, color: T.text, margin: '0 0 6px' }}>
         Storage
       </h1>
-      <div style={{ fontSize: 13, color: T.mu, marginBottom: 24 }}>
+      <div style={{ fontSize: 13, color: T.mu, marginBottom: 16 }}>
         Per-user breakdown of files tracked in <code>user_storage_files</code>. Click a row to view that user's files.
+      </div>
+
+      {/* Quota config */}
+      <div style={{
+        background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 12,
+        padding: '14px 16px', marginBottom: 24,
+        display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap',
+      }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
+            Per-user storage quota
+          </div>
+          <div style={{ fontSize: 12.5, color: T.mu, lineHeight: 1.5 }}>
+            Hard cap applied to every user before each upload. Current value: <b>{quotaMb} MB</b>.
+            On the Supabase free tier (1 GB project pool), 50 MB × 20 users ≈ project cap.
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            type="number" min={1}
+            value={quotaInput}
+            onChange={e => setQuotaInput(e.target.value)}
+            style={{
+              width: 90, padding: '7px 10px', borderRadius: 8,
+              border: `1px solid ${T.bdr}`, fontSize: 13,
+              fontFamily: 'inherit', outline: 'none', textAlign: 'right',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          />
+          <span style={{ fontSize: 12.5, color: T.mu }}>MB</span>
+          <button
+            onClick={saveQuota}
+            disabled={savingQuota || quotaInput === quotaMb}
+            style={{
+              padding: '7px 14px', borderRadius: 8,
+              border: 'none', background: quotaInput === quotaMb ? T.s3 : T.v,
+              color: quotaInput === quotaMb ? T.mu : '#fff',
+              fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+              cursor: savingQuota || quotaInput === quotaMb ? 'default' : 'pointer',
+              opacity: savingQuota ? 0.6 : 1,
+            }}
+          >
+            {savingQuota ? '…' : 'Save'}
+          </button>
+          {quotaMsg && (
+            <span style={{ fontSize: 12, color: quotaMsg === 'Saved.' ? T.gr : T.ro }}>
+              {quotaMsg}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Totals */}

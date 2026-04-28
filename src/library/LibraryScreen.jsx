@@ -13,6 +13,7 @@ import LibraryItemCard                from './LibraryItemCard';
 import LibraryRisImporter             from './LibraryRisImporter';
 import LibraryClinicalTrialSearch     from './LibraryClinicalTrialSearch';
 import LibraryFilesView               from './LibraryFilesView';
+import { checkRemainingQuota }        from '../lib/storageQuota';
 
 export default function LibraryScreen({ user, profile, onSaveToggled, onViewGroup, onNavigateToPost, defaultView = 'library' }) {
   const { isMobile } = useWindowSize();
@@ -224,6 +225,9 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
 
   const uploadFile = async (file) => {
     if (!activeFolderID) return;
+    if (file.size > 10 * 1024 * 1024) { alert('File is too large (max 10 MB).'); return; }
+    const quotaErr = await checkRemainingQuota(file.size);
+    if (quotaErr) { alert(quotaErr); return; }
     const path = `library/${user.id}/${Date.now()}_${file.name}`;
     const { error } = await supabase.storage.from('library-files').upload(path, file);
     if (error) { alert('Upload failed.'); return; }

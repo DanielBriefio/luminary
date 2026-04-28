@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Btn from './Btn';
 import Spinner from './Spinner';
+import StorageQuotaBar from './StorageQuotaBar';
 
 function fmtBytes(bytes) {
   if (!bytes) return '0 B';
@@ -15,13 +16,18 @@ function fmtBytes(bytes) {
 export default function StoragePanel({ onOpenStorage }) {
   const [loading, setLoading] = useState(true);
   const [usage,   setUsage]   = useState(null);
+  const [quotaMb, setQuotaMb] = useState(null);
   const [err,     setErr]     = useState('');
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.rpc('get_my_storage_usage');
-      if (error) setErr(error.message);
-      else setUsage(data);
+      const [usageRes, quotaRes] = await Promise.all([
+        supabase.rpc('get_my_storage_usage'),
+        supabase.rpc('get_storage_quota_mb'),
+      ]);
+      if (usageRes.error) setErr(usageRes.error.message);
+      else setUsage(usageRes.data);
+      setQuotaMb(quotaRes.data || 50);
       setLoading(false);
     })();
   }, []);
@@ -66,6 +72,12 @@ export default function StoragePanel({ onOpenStorage }) {
                 </span>
               </div>
             ))}
+          </div>
+        )}
+
+        {quotaMb != null && (
+          <div style={{ marginTop: 12 }}>
+            <StorageQuotaBar usedBytes={total} quotaBytes={quotaMb * 1024 * 1024} compact />
           </div>
         )}
 

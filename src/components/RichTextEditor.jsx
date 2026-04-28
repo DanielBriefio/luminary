@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import { sanitiseHtml, normalisePastedHtml, toEmbedUrl } from '../lib/htmlUtils';
+import { checkRemainingQuota } from '../lib/storageQuota';
 import Btn from './Btn';
 
 function TBtn({ label, title, onClick, active=false }) {
@@ -232,7 +233,9 @@ export default function RichTextEditor({
   const insertImageFromFile = async (file) => {
     if (!user) { alert('Sign-in required to upload images.'); return; }
     if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
-    if (file.size > 10 * 1024 * 1024) { alert('Image is too large (max 10 MB).'); return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Image is too large (max 5 MB).'); return; }
+    const quotaErr = await checkRemainingQuota(file.size);
+    if (quotaErr) { alert(quotaErr); return; }
     setImgUploading(true);
     try {
       const { url, path } = await uploadInlineImage(user, file);

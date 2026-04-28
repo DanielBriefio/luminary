@@ -8,6 +8,7 @@ import LibraryPaperSearch             from '../library/LibraryPaperSearch';
 import LibraryItemCard                from '../library/LibraryItemCard';
 import LibraryRisImporter             from '../library/LibraryRisImporter';
 import LibraryClinicalTrialSearch     from '../library/LibraryClinicalTrialSearch';
+import { checkRemainingQuota }        from '../lib/storageQuota';
 
 export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, onNavigateToPost }) {
   const [folders,        setFolders]        = useState([]);
@@ -136,6 +137,9 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
 
   const uploadFile = async (file) => {
     if (!activeFolderID) return;
+    if (file.size > 10 * 1024 * 1024) { alert('File is too large (max 10 MB).'); return; }
+    const quotaErr = await checkRemainingQuota(file.size);
+    if (quotaErr) { alert(quotaErr); return; }
     const path = `library/${groupId}/${Date.now()}_${file.name}`;
     const { error } = await supabase.storage.from('library-files').upload(path, file);
     if (error) { alert('Upload failed.'); return; }

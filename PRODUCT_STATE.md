@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-28 (rev 21)_
+_Last updated: 2026-04-28 (rev 22)_
 
 ## What exists and works
 
@@ -241,7 +241,9 @@ _Last updated: 2026-04-28 (rev 21)_
 - **Deep-dive cover delete**: `delete_user_file` detects whether the file path matches `posts.image_url` or `posts.deep_dive_cover_url` and updates the right column. Cover deletes clear `deep_dive_cover_url` + reset `deep_dive_cover_position` without setting `file_deleted_at` (the rest of the article stays intact). Inline images embedded in the deep-dive content HTML are not stripped — the storage blob delete leaves a broken-image icon and the user must edit the post via the composer to remove them cleanly.
 - **Replace-on-upload orphan cleanup**: avatar / profile cover / group avatar / group cover uploads use the file's actual extension in the path (`<id>/avatar.<ext>`), so a `.jpg → .png` swap writes to a different path and would otherwise leave the old blob + tracking row behind. After every record_storage_file call at the four upload sites, the client calls `cleanup_replaced_storage_files(p_source_kind, p_source_id, p_keep_path)` to delete the orphan rows and sweeps the matching storage blobs via `supabase.storage.remove()`.
 - **Admin Storage section** (`/admin → Storage`): global total, per-bucket totals, sortable per-user roll-up. Click any user row to expand; lazy-fetches that user's enriched file list via `get_admin_user_storage_files(p_user_id)` and renders inline. Read-only — admins moderate via existing tools (hide / delete post).
-- Quotas not enforced yet. `total_bytes` from `get_my_storage_usage()` is the future hook for a per-user quota check.
+- **Per-user quota**: `admin_config.storage_quota_mb` (default 50 MB, admin-editable from `/admin → Storage`) is enforced at every upload site that's not a singleton replacement. Helper `src/lib/storageQuota.js` exposes `checkRemainingQuota(fileSize)` and `fetchStorageStatus()` (used + quota + percent). Singletons (avatar, profile cover, group avatar, group cover) skip the total check because `cleanup_replaced_storage_files` keeps the net delta near zero, but per-file caps still apply (5 MB avatars, 10 MB covers).
+- **Per-file caps**: image attachments / inline images 5 MB, library PDFs 10 MB, deep-dive cover 10 MB, group post attachments inherit the existing FILE_LIMITS (image 10 MB, video 200 MB, audio 50 MB, pdf 25 MB, data 5 MB) — caps enforced before the storage upload runs.
+- **Visual quota bar** (`src/components/StorageQuotaBar.jsx`): used / quota + percent label, color-coded (green <80%, amber 80–99%, rose ≥100%). Rendered prominently in `LibraryFilesView` (next to the totals strip) and in compact mode inside the Settings `StoragePanel`.
 
 ### Lumens / Gamification
 - **Lumens** are points awarded for contributing to the community. Live system, gated behind `LUMENS_ENABLED` feature flag in constants.js.
@@ -277,6 +279,7 @@ _Last updated: 2026-04-28 (rev 21)_
 ## Pending migrations (not yet run in production)
 
 - **`migration_storage_replace_cleanup.sql`**: adds `cleanup_replaced_storage_files(source_kind, source_id, keep_path)` for orphan sweeps when avatars/covers are replaced with a different-extension upload, and extends `delete_user_file` so deep-dive cover deletes clear `posts.deep_dive_cover_url` + `deep_dive_cover_position` instead of `image_url`.
+- **`migration_storage_quotas.sql`**: seeds `admin_config.storage_quota_mb = 50` (admin-editable via `/admin → Storage`) and adds `get_storage_quota_mb()` for any authenticated user to read their own quota. Backs the upload-time enforcement in `src/lib/storageQuota.js`.
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
 
 ## Recently shipped migrations
