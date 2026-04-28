@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
 import { T } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
+import { useWindowSize } from '../lib/useWindowSize';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import Av from '../components/Av';
@@ -13,6 +14,8 @@ import LibraryRisImporter             from './LibraryRisImporter';
 import LibraryClinicalTrialSearch     from './LibraryClinicalTrialSearch';
 
 export default function LibraryScreen({ user, profile, onSaveToggled, onViewGroup, onNavigateToPost }) {
+  const { isMobile } = useWindowSize();
+  const [sidebarOpen,    setSidebarOpen]    = useState(false);
   const [folders,        setFolders]        = useState([]);
   const [activeFolderID, setActiveFolderID] = useState(null);
   const [items,          setItems]          = useState([]);
@@ -284,11 +287,13 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
   const onSelectBookmarksView = (id) => {
     setBookmarksActive(true);
     setActiveBmFolderId(id);
+    if (isMobile) setSidebarOpen(false);
   };
 
   const onSelectLibraryFolder = (id) => {
     setBookmarksActive(false);
     setActiveFolderID(id);
+    if (isMobile) setSidebarOpen(false);
   };
 
   // Bookmark counts for the sidebar
@@ -326,37 +331,101 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
     activeBmFolderId === '__unsorted__' ? 'Unsorted' :
                                           folderLabel(activeBmFolderId) || 'Bookmarks';
 
+  // Mobile drawer button label — what's currently selected.
+  const libraryFolderName = (id) => folders.find(f => f.id === id)?.name || '';
+  const activeLabel = bookmarksActive
+    ? `🔖 ${bookmarksHeader || 'Bookmarks'}`
+    : activeFolderID === '__inbox__'
+      ? '📥 Unsorted'
+      : libraryFolderName(activeFolderID)
+        ? `📁 ${libraryFolderName(activeFolderID)}`
+        : 'Folders';
+
+  const sidebarProps = {
+    folders, activeFolderId: activeFolderID,
+    onSelectFolder: onSelectLibraryFolder,
+    onCreateFolder: createFolder, onDeleteFolder: deleteFolder,
+    canManageFolders: true,
+    showInbox: inboxItems.length > 0, inboxCount: inboxItems.length,
+    bookmarkFolders, bookmarksActive,
+    activeBookmarkFolderId: activeBmFolderId,
+    onSelectBookmarksView, onCreateBookmarkFolder: createBookmarkFolder,
+    onDeleteBookmarkFolder: deleteBookmarkFolder,
+    bookmarkCount, unsortedBookmarkCount,
+  };
+
   return (
     <div style={{display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:T.s2}}>
 
       {/* Header */}
-      <div style={{padding:'14px 20px', background:T.w, borderBottom:`1px solid ${T.bdr}`, flexShrink:0}}>
-        <div style={{fontFamily:"'DM Serif Display',serif", fontSize:20}}>Library</div>
+      <div style={{
+        padding: isMobile ? '10px 14px' : '14px 20px',
+        background: T.w, borderBottom: `1px solid ${T.bdr}`, flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <div style={{fontFamily:"'DM Serif Display',serif", fontSize: isMobile ? 18 : 20}}>Library</div>
+        {isMobile && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            style={{
+              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 20,
+              border: `1.5px solid ${T.bdr}`, background: T.w,
+              cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 12.5, fontWeight: 600, color: T.text,
+              maxWidth: 220, overflow: 'hidden',
+            }}
+            title="Switch folder"
+          >
+            <span style={{ flexShrink: 0 }}>≡</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {activeLabel}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Body: sidebar + main panel */}
-      <div style={{display:'flex', flex:1, overflow:'hidden'}}>
+      <div style={{display:'flex', flex:1, overflow:'hidden', position: 'relative'}}>
 
-        <LibraryFolderSidebar
-          folders={folders}
-          activeFolderId={activeFolderID}
-          onSelectFolder={onSelectLibraryFolder}
-          onCreateFolder={createFolder}
-          onDeleteFolder={deleteFolder}
-          canManageFolders={true}
-          showInbox={inboxItems.length > 0}
-          inboxCount={inboxItems.length}
-          bookmarkFolders={bookmarkFolders}
-          bookmarksActive={bookmarksActive}
-          activeBookmarkFolderId={activeBmFolderId}
-          onSelectBookmarksView={onSelectBookmarksView}
-          onCreateBookmarkFolder={createBookmarkFolder}
-          onDeleteBookmarkFolder={deleteBookmarkFolder}
-          bookmarkCount={bookmarkCount}
-          unsortedBookmarkCount={unsortedBookmarkCount}
-        />
+        {/* Static sidebar — desktop only */}
+        {!isMobile && <LibraryFolderSidebar {...sidebarProps}/>}
 
-        <div style={{flex:1, overflowY:'auto', padding:16}}>
+        {/* Drawer overlay — mobile only, when open */}
+        {isMobile && sidebarOpen && (
+          <>
+            <div
+              onClick={() => setSidebarOpen(false)}
+              style={{
+                position: 'fixed', inset: 0, background: 'rgba(27,29,54,.45)',
+                zIndex: 90,
+              }}
+            />
+            <div style={{
+              position: 'fixed', top: 0, bottom: 0, left: 0,
+              width: '85%', maxWidth: 320,
+              zIndex: 91, display: 'flex', flexDirection: 'column',
+              boxShadow: '4px 0 24px rgba(0,0,0,.18)',
+              background: T.w,
+            }}>
+              <div style={{
+                padding: '12px 14px', borderBottom: `1px solid ${T.bdr}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16 }}>Folders</div>
+                <button onClick={() => setSidebarOpen(false)} style={{
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  fontSize: 16, color: T.mu, fontFamily: 'inherit', padding: '4px 8px',
+                }}>✕</button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                <LibraryFolderSidebar {...sidebarProps}/>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div style={{flex:1, overflowY:'auto', padding: isMobile ? 12 : 16}}>
 
           {/* ─── Bookmarks main view ─────────────────────────────── */}
           {bookmarksActive && (
