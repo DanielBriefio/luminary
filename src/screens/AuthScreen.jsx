@@ -5,6 +5,7 @@ import { T, ORCID_CLIENT_ID, ORCID_AUTHORIZE_URL, ORCID_REDIRECT_URI } from '../
 import Inp from '../components/Inp';
 import Btn from '../components/Btn';
 import Footer from '../components/Footer';
+import OrcidIcon from '../components/OrcidIcon';
 
 const inputStyle = {
   width: '100%', background: T.s2, border: `1.5px solid ${T.bdr}`,
@@ -492,7 +493,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           textAlign: 'left', fontFamily: 'inherit',
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
-          <span style={{ fontSize: 28 }}>🔬</span>
+          <OrcidIcon size={28}/>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
               Sign up with ORCID
@@ -735,7 +736,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
               textAlign: 'left', fontFamily: 'inherit',
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
-              <span style={{ fontSize: 22 }}>🔬</span>
+              <OrcidIcon size={22}/>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 1 }}>Sign in with ORCID</div>
                 <div style={{ fontSize: 11.5, color: T.mu }}>Use your researcher identity</div>

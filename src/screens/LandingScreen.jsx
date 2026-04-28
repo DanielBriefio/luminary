@@ -6,6 +6,7 @@ import {
   ORCID_REDIRECT_URI,
 } from '../lib/constants';
 import { useWindowSize } from '../lib/useWindowSize';
+import OrcidIcon from '../components/OrcidIcon';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -209,7 +210,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
               display: 'flex', alignItems: 'center', gap: 6,
             }}
           >
-            <span style={{ fontSize: isMobile ? 13 : 15 }}>🔬</span>
+            <OrcidIcon size={isMobile ? 14 : 16}/>
             {isMobile ? 'ORCID' : 'Join with ORCID'}
           </button>
           <button
