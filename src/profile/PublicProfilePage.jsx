@@ -6,6 +6,7 @@ import ExpandableBio from '../components/ExpandableBio';
 import Spinner from '../components/Spinner';
 import { formatDateRange } from '../lib/linkedInUtils';
 import { BusinessCardView } from './BusinessCardView';
+import OrcidBadge from '../components/OrcidBadge';
 
 export default function PublicProfilePage({ slug }) {
   const [profile,  setProfile]  = useState(null);
@@ -184,10 +185,7 @@ export default function PublicProfilePage({ slug }) {
             <div style={{ fontSize: 13, color: T.mu, marginBottom: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {profile.institution && <span>🏛️ {profile.institution}</span>}
               {profile.location    && <span>📍 {profile.location}</span>}
-              {profile.orcid && (
-                <a href={`https://orcid.org/${profile.orcid}`} target="_blank" rel="noopener noreferrer"
-                  style={{ color: T.gr, textDecoration: 'none', fontWeight: 600 }}>ORCID ↗</a>
-              )}
+              {profile.orcid && <OrcidBadge orcid={profile.orcid} verified={!!profile.orcid_verified}/>}
               {profile.twitter && (
                 <a href={`https://twitter.com/${profile.twitter.replace('@','')}`} target="_blank" rel="noopener noreferrer"
                   style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{profile.twitter} ↗</a>

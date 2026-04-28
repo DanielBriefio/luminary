@@ -6,6 +6,7 @@ import FollowBtn from '../components/FollowBtn';
 import ExpandableBio from '../components/ExpandableBio';
 import Spinner from '../components/Spinner';
 import PostCard from '../feed/PostCard';
+import OrcidBadge from '../components/OrcidBadge';
 import { formatDateRange } from '../lib/linkedInUtils';
 
 export default function UserProfileScreen({ userId, currentUserId, currentProfile, onBack, onViewPaper, onMessage }) {
@@ -191,10 +192,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                 <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   {p.institution && <span>🏛️ {p.institution}</span>}
                   {p.location    && <span>📍 {p.location}</span>}
-                  {p.orcid && (
-                    <a href={`https://orcid.org/${p.orcid}`} target="_blank" rel="noopener noreferrer"
-                      style={{ color: T.gr, textDecoration: 'none', fontWeight: 600 }}>ORCID ↗</a>
-                  )}
+                  {p.orcid && <OrcidBadge orcid={p.orcid} verified={!!p.orcid_verified}/>}
                   {p.twitter && (
                     <a href={`https://twitter.com/${p.twitter.replace('@','')}`} target="_blank" rel="noopener noreferrer"
                       style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{p.twitter} ↗</a>

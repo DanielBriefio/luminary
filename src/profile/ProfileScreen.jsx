@@ -17,6 +17,7 @@ import CvExportPanel from './CvExportPanel';
 import { useWindowSize } from '../lib/useWindowSize';
 import TopicInterestsPicker from '../components/TopicInterestsPicker';
 import ProfileCompletionMeter from '../components/ProfileCompletionMeter';
+import OrcidBadge from '../components/OrcidBadge';
 
 function EF({label,val,onChange,placeholder=""}) {
   return (
@@ -1108,7 +1109,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               <div style={{fontSize:13,color:T.mu,marginBottom:12,display:'flex',gap:12,flexWrap:'wrap'}}>
                 {profile?.institution&&<span>🏛️ {profile.institution}</span>}
                 {(() => { const loc = [profile?.location_city, profile?.location_country].filter(Boolean).join(', ') || profile?.location; return loc ? <span>📍 {loc}</span> : null; })()}
-                {profile?.orcid&&<a href={`https://orcid.org/${profile.orcid}`} target="_blank" rel="noopener noreferrer" style={{color:T.gr,textDecoration:'none',fontWeight:600}}>ORCID ↗</a>}
+                {profile?.orcid && <OrcidBadge orcid={profile.orcid} verified={!!profile.orcid_verified}/>}
               </div>
               {profile?.bio&&<div style={{marginBottom:14,maxWidth:620}}><ExpandableBio text={profile.bio}/></div>}
               {/* Clinical details block — clinician only */}
