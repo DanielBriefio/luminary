@@ -13,7 +13,25 @@
       "Bash(node:*)",
       "Bash(git commit:*)",
       "Bash(npx --yes react-scripts build --no-cache)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(npm list *)",
+      "Bash(curl -sL https://luminary.to/)",
+      "Bash(curl -sIL https://luminary.to/)",
+      "Bash(wait)",
+      "Bash(git ls-remote *)",
+      "Bash(npx eslint *)",
+      "Bash(BROWSER=none PORT=3456 npm start *)",
+      "Bash(curl -s -o /dev/null -w 'HTTP %{http_code} — %{size_download} bytes\\\\n' http://localhost:3456/__TRACKED_VAR__)",
+      "Bash(curl -s -I \"http://localhost:3456/legal/privacy.md\")",
+      "Bash(/usr/bin/curl --version)",
+      "Bash(/usr/bin/curl -s -o /dev/null -w 'HTTP %{http_code} — %{size_download} bytes\\\\n' http://localhost:3456/__TRACKED_VAR__)",
+      "Bash(/usr/bin/curl -s -o /tmp/legal_check.md -w \"HTTP %{http_code} — %{size_download} bytes\\\\n\" \"http://localhost:3456/legal/privacy.md\")",
+      "Bash(/usr/bin/head -3 /tmp/legal_check.md)",
+      "Bash(/usr/bin/curl -s -o /tmp/legal_check2.md -w \"HTTP %{http_code} — %{size_download} bytes\\\\n\" \"http://localhost:3456/legal/cookies.md\")",
+      "Bash(/usr/bin/head -3 /tmp/legal_check2.md)",
+      "Bash(curl -v https://luminary.to/)",
+      "Bash(grep -n \"^  return \\(\\\\|^    </div>$\\\\|^  \\);$\" /Users/daniel/luminary-prototype/src/groups/GroupProfile.jsx)",
+      "Read(//private/tmp/**)"
     ]
   }
 }
