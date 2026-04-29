@@ -25,7 +25,7 @@ declare
 begin
   -- Admin gate
   if not coalesce(
-    (select is_admin from profiles where id = auth.uid()),
+    (select is_admin from profiles where profiles.id = auth.uid()),
     false
   ) then
     raise exception 'admin only' using errcode = '42501';
@@ -127,7 +127,7 @@ set search_path = public
 as $$
 begin
   if not coalesce(
-    (select is_admin from profiles where id = auth.uid()),
+    (select is_admin from profiles where profiles.id = auth.uid()),
     false
   ) then
     raise exception 'admin only' using errcode = '42501';
@@ -152,7 +152,7 @@ set search_path = public
 as $$
 begin
   if not coalesce(
-    (select is_admin from profiles where id = auth.uid()),
+    (select is_admin from profiles where profiles.id = auth.uid()),
     false
   ) then
     raise exception 'admin only' using errcode = '42501';
