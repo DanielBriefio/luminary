@@ -10,18 +10,21 @@ export default function OverviewSection({ supabase, onNavigate }) {
   const [stats, setStats]           = useState(null);
   const [sparklines, setSparklines] = useState([]);
   const [alerts, setAlerts]         = useState(null);
+  const [waitlist, setWaitlist]     = useState(null);
   const [loading, setLoading]       = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const [statsRes, sparkRes, alertsRes] = await Promise.all([
+      const [statsRes, sparkRes, alertsRes, waitlistRes] = await Promise.all([
         supabase.rpc('get_platform_stats'),
         supabase.rpc('get_activity_sparklines'),
         supabase.rpc('get_at_risk_alerts'),
+        supabase.rpc('get_waitlist_count'),
       ]);
       setStats(statsRes.data);
       setSparklines(sparkRes.data || []);
       setAlerts(alertsRes.data);
+      setWaitlist(waitlistRes.data ?? 0);
       setLoading(false);
     };
     load();
@@ -48,14 +51,16 @@ export default function OverviewSection({ supabase, onNavigate }) {
       {/* Stat cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(5, 1fr)',
         gap: 12, marginBottom: 24,
       }}>
         {[
-          { label: 'Users',    value: stats?.users,    today: stats?.users_today,    color: T.v  },
-          { label: 'Posts',    value: stats?.posts,    today: stats?.posts_today,    color: T.gr },
-          { label: 'Groups',   value: stats?.groups,   today: stats?.groups_today,   color: T.bl },
-          { label: 'Projects', value: stats?.projects, today: stats?.projects_today, color: T.am },
+          { label: 'Users',    value: stats?.users,    today: stats?.users_today,    color: T.v   },
+          { label: 'Posts',    value: stats?.posts,    today: stats?.posts_today,    color: T.gr  },
+          { label: 'Groups',   value: stats?.groups,   today: stats?.groups_today,   color: T.bl  },
+          { label: 'Projects', value: stats?.projects, today: stats?.projects_today, color: T.am  },
+          { label: 'Waitlist', value: waitlist,                                        color: T.te,
+            onClick: () => onNavigate('waitlist') },
         ].map(card => (
           <StatCard key={card.label} {...card} />
         ))}
@@ -98,13 +103,17 @@ export default function OverviewSection({ supabase, onNavigate }) {
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, today, color }) {
+function StatCard({ label, value, today, color, onClick }) {
   return (
-    <div style={{
-      background: T.w, border: `1px solid ${T.bdr}`,
-      borderRadius: 12, padding: '18px 20px',
-      borderTop: `3px solid ${color}`,
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        background: T.w, border: `1px solid ${T.bdr}`,
+        borderRadius: 12, padding: '18px 20px',
+        borderTop: `3px solid ${color}`,
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
       <div style={{
         fontSize: 36, fontWeight: 700,
         fontFamily: "'DM Serif Display', serif",

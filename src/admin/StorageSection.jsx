@@ -299,6 +299,155 @@ export default function StorageSection({ supabase }) {
           );
         })}
       </div>
+
+      <DangerZone supabase={supabase} />
+    </div>
+  );
+}
+
+function DangerZone({ supabase }) {
+  const CONFIRM_PHRASE = 'WIPE PLATFORM';
+  const [open,    setOpen]    = useState(false);
+  const [phrase,  setPhrase]  = useState('');
+  const [running, setRunning] = useState(false);
+  const [result,  setResult]  = useState(null);  // { ok, message, sweptCount, sweptErrors }
+
+  const armed = phrase === CONFIRM_PHRASE;
+
+  const runWipe = async () => {
+    if (!armed) return;
+    setRunning(true);
+    setResult(null);
+    const { data: paths, error } = await supabase.rpc('admin_wipe_platform');
+    if (error) {
+      setRunning(false);
+      setResult({ ok: false, message: error.message });
+      return;
+    }
+
+    // Group paths by bucket and call storage.remove() for each
+    const byBucket = {};
+    (paths || []).forEach(p => {
+      if (!byBucket[p.bucket]) byBucket[p.bucket] = [];
+      byBucket[p.bucket].push(p.path);
+    });
+
+    let swept = 0;
+    const errors = [];
+    for (const [bucket, list] of Object.entries(byBucket)) {
+      // Supabase remove() handles arbitrary list lengths
+      const { data: removed, error: rmErr } = await supabase.storage.from(bucket).remove(list);
+      if (rmErr) errors.push(`${bucket}: ${rmErr.message}`);
+      else       swept += (removed?.length ?? list.length);
+    }
+
+    setRunning(false);
+    setResult({
+      ok: errors.length === 0,
+      message: errors.length === 0
+        ? `Wipe complete. ${swept} storage blobs removed across ${Object.keys(byBucket).length} bucket(s).`
+        : `DB wipe succeeded but storage sweep had errors:\n${errors.join('\n')}`,
+      sweptCount: swept,
+    });
+    setPhrase('');
+  };
+
+  return (
+    <div style={{
+      marginTop: 36,
+      background: T.w,
+      border: `1px solid ${T.ro}`,
+      borderRadius: 12,
+      overflow: 'hidden',
+    }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          padding: '14px 18px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: T.ro2,
+          borderBottom: open ? `1px solid ${T.ro}` : 'none',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.ro }}>
+            ⚠️ Danger zone
+          </div>
+          <div style={{ fontSize: 12.5, color: T.text, marginTop: 2 }}>
+            Reset the entire platform for fresh testing.
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: T.ro, fontWeight: 600 }}>
+          {open ? 'Hide' : 'Show'}
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ padding: '16px 18px' }}>
+          <div style={{ fontSize: 13, color: T.text, lineHeight: 1.55, marginBottom: 12 }}>
+            <b>Wipes everything except:</b> the Luminary Team bot account
+            (auth + profile + avatar) and platform admin config (storage
+            quota, paper of week, milestone template, founding-member cutoff).
+          </div>
+          <div style={{ fontSize: 12.5, color: T.mu, lineHeight: 1.55, marginBottom: 14 }}>
+            Deletes all other users, all posts, comments, conversations,
+            messages, groups, projects, library items, lumens, invite codes,
+            invite-code uses, waitlist signups, ORCID-pending bridge rows,
+            and every storage blob those users uploaded (plus the bot's
+            non-avatar uploads). DB cascade handles the rows; this UI sweeps
+            the actual storage objects after the RPC returns.
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>
+              Type <code style={{ background: T.s2, padding: '1px 6px', borderRadius: 4 }}>{CONFIRM_PHRASE}</code> to enable
+            </div>
+            <input
+              type="text"
+              value={phrase}
+              onChange={e => setPhrase(e.target.value)}
+              placeholder="WIPE PLATFORM"
+              style={{
+                width: 260, padding: '9px 12px', borderRadius: 8,
+                border: `1px solid ${armed ? T.ro : T.bdr}`,
+                fontSize: 13, fontFamily: 'inherit', outline: 'none',
+                letterSpacing: 0.4,
+              }}
+            />
+          </div>
+
+          <button
+            onClick={runWipe}
+            disabled={!armed || running}
+            style={{
+              padding: '10px 18px', borderRadius: 9,
+              background: !armed ? T.s3 : T.ro,
+              color: !armed ? T.mu : '#fff',
+              border: 'none', fontSize: 13, fontWeight: 700,
+              cursor: !armed || running ? 'default' : 'pointer',
+              fontFamily: 'inherit', opacity: running ? 0.6 : 1,
+              letterSpacing: 0.3,
+            }}
+          >
+            {running ? 'Wiping…' : '🔥 Wipe platform'}
+          </button>
+
+          {result && (
+            <div style={{
+              marginTop: 14,
+              padding: '10px 12px',
+              background: result.ok ? T.gr2 : T.ro2,
+              border: `1px solid ${result.ok ? T.gr : T.ro}`,
+              borderRadius: 8,
+              fontSize: 12.5,
+              color: result.ok ? T.gr : T.ro,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {result.message}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

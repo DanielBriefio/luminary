@@ -9,10 +9,12 @@ import ContentSection from './ContentSection';
 import InterventionsSection from './InterventionsSection';
 import StorageSection from './StorageSection';
 import AnalyticsSection from './AnalyticsSection';
+import WaitlistSection from './WaitlistSection';
 
 const NAV_ITEMS = [
   { id: 'overview',      label: 'Overview',      icon: '📊' },
   { id: 'users',         label: 'Users',         icon: '👥' },
+  { id: 'waitlist',      label: 'Waitlist',      icon: '📬' },
   { id: 'invites',       label: 'Invites',       icon: '🎟️' },
   { id: 'templates',     label: 'Templates',     icon: '📋' },
   { id: 'content',       label: 'Content',       icon: '🗂️' },
@@ -142,6 +144,8 @@ export default function AdminShell({ supabase, user, profile }) {
           ? <OverviewSection supabase={supabase} onNavigate={navigate} />
           : section === 'users'
           ? <UsersSection supabase={supabase} user={user} initialParams={sectionParams} />
+          : section === 'waitlist'
+          ? <WaitlistSection supabase={supabase} />
           : section === 'invites'
           ? <InvitesSection supabase={supabase} />
           : section === 'templates'
