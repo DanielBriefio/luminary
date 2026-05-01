@@ -41,7 +41,15 @@ begin
      where usf.user_id <> bot_id
         or usf.source_kind not in ('avatar', 'profile_cover');
 
-  -- 2. Delete every non-bot user. Cascade clears profiles + most content.
+  -- 2a. Pre-clean tables whose user_id FK to profiles is NOT ON DELETE CASCADE
+  --     (e.g. `reposts` from the original schema). Without these explicit
+  --     deletes, the auth.users → profiles cascade in step 2b throws
+  --     "violates foreign key constraint" and the whole wipe rolls back.
+  delete from reposts;
+  delete from likes;
+  delete from publications;
+
+  -- 2b. Delete every non-bot user. Cascade clears profiles + most content.
   delete from auth.users where id <> bot_id;
 
   -- 3. Sweep tombstoned rows (FKs that are SET NULL on delete, not CASCADE).
