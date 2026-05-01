@@ -20,7 +20,7 @@ const HEALTH_STYLES = {
 
 const POST_TYPES = ['text', 'paper'];
 
-const POSTS_GRID = '1fr 70px 90px 80px 70px 80px 90px 130px';
+const POSTS_GRID = '1fr 90px 90px 80px 70px 80px 90px 130px';
 
 export default function ContentSection({ supabase }) {
   const [tab, setTab] = useState('posts');
@@ -100,7 +100,6 @@ function PostsTab({ supabase }) {
       p_offset:   page * PAGE_SIZE,
       p_search:   search || null,
       p_type:     typeFilter || null,
-      p_featured: null,
       p_hidden:   hiddenFilter   === 'true'  ? true
                 : hiddenFilter   === 'false' ? false : null,
     });
@@ -124,7 +123,7 @@ function PostsTab({ supabase }) {
 
   const toggleHidden = async (post) => {
     setActing(post.id);
-    await supabase.from('posts').update({ is_hidden: !post.is_hidden }).eq('id', post.id);
+    await supabase.from('posts').update({ hidden: !post.hidden }).eq('id', post.id);
     setActing(null);
     load();
   };
@@ -198,7 +197,7 @@ function PostsTab({ supabase }) {
               alignItems: 'center',
             }}>
               <div>Post</div>
-              <div>Type</div>
+              <div>Context</div>
               <SortableHeader label="Date"     col="created_at"        sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
               <SortableHeader label="Comments" col="comment_count"     sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
               <SortableHeader label="Likes"    col="like_count"        sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
@@ -281,7 +280,7 @@ function PostRow({ post, isLast, acting, onToggleHidden, onDelete }) {
           <div style={{ fontSize: 12, color: T.mu, marginBottom: 2 }}>{post.author_name}</div>
           <div style={{ fontSize: 13, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {post.paper_title ||
-             post.link_title  ||
+             post.deep_dive_title ||
              post.content?.replace(/<[^>]+>/g, '').slice(0, 80) ||
              '(no content)'}
           </div>
@@ -295,9 +294,24 @@ function PostRow({ post, isLast, acting, onToggleHidden, onDelete }) {
         </div>
       </div>
 
-      {/* Type + deep-dive badge */}
+      {/* Context: Feed / Group / Project + deep-dive badge */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
-        <span style={{ fontSize: 12, color: T.mu }}>{post.post_type}</span>
+        <span style={{
+          fontSize: 10.5, fontWeight: 700, padding: '1px 7px',
+          borderRadius: 20,
+          background: post.context_kind === 'feed' ? T.s2 :
+                      post.context_kind === 'group' ? T.v2 :
+                      T.bl2,
+          color: post.context_kind === 'feed' ? T.mu :
+                 post.context_kind === 'group' ? T.v :
+                 T.bl,
+        }}>
+          {post.context_kind === 'feed' ? 'Feed' :
+           post.context_kind === 'group' ? 'Group' :
+           post.context_kind === 'project' ? 'Project' :
+           post.context_kind || '—'}
+        </span>
+        <span style={{ fontSize: 11, color: T.mu }}>{post.post_type}</span>
         {post.is_deep_dive && (
           <span style={{
             fontSize: 10, fontWeight: 700, padding: '1px 6px',
@@ -335,7 +349,7 @@ function PostRow({ post, isLast, acting, onToggleHidden, onDelete }) {
         <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: health.bg, color: health.color, alignSelf: 'flex-start' }}>
           {health.label}
         </span>
-        {post.is_hidden && (
+        {post.hidden && (
           <span style={{ fontSize: 10, color: T.mu, fontWeight: 600 }}>👁 Hidden</span>
         )}
       </div>
@@ -343,7 +357,7 @@ function PostRow({ post, isLast, acting, onToggleHidden, onDelete }) {
       {/* Actions */}
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
         <button onClick={onToggleHidden} disabled={acting} style={actionBtn(T.mu, acting)}>
-          {post.is_hidden ? 'Unhide' : 'Hide'}
+          {post.hidden ? 'Unhide' : 'Hide'}
         </button>
         <a href={`/s/${post.id}`} target="_blank" rel="noopener noreferrer"
           style={{ ...actionBtn(T.bl, false), textDecoration: 'none', display: 'inline-block' }}>
@@ -650,29 +664,24 @@ function ModerationTab({ supabase }) {
   useEffect(() => { load(); }, [load]);
 
   const updateReports = async (item, newStatus) => {
-    setActing(item.post_id || item.group_post_id);
-    const field = item.source === 'post' ? 'post_id' : 'group_post_id';
-    const id    = item.source === 'post' ? item.post_id : item.group_post_id;
-    await supabase.from('post_reports').update({ status: newStatus }).eq(field, id);
+    setActing(item.post_id);
+    await supabase.from('post_reports').update({ status: newStatus }).eq('post_id', item.post_id);
     setActing(null);
     load();
   };
 
   const deletePost = async (item) => {
     if (!window.confirm('Delete this post? This cannot be undone.')) return;
-    const id = item.post_id || item.group_post_id;
-    setActing(id);
-    const table = item.source === 'post' ? 'posts' : 'group_posts';
-    await supabase.from(table).delete().eq('id', id);
+    setActing(item.post_id);
+    await supabase.from('posts').delete().eq('id', item.post_id);
     await updateReports(item, 'actioned');
     setActing(null);
     load();
   };
 
   const hidePost = async (item) => {
-    if (item.source !== 'post') return;
     setActing(item.post_id);
-    await supabase.from('posts').update({ is_hidden: true }).eq('id', item.post_id);
+    await supabase.from('posts').update({ hidden: true }).eq('id', item.post_id);
     await updateReports(item, 'actioned');
     setActing(null);
     load();
@@ -700,7 +709,10 @@ function ModerationTab({ supabase }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {items.map(item => {
-            const id = item.post_id || item.group_post_id;
+            const id = item.post_id;
+            const ctxLabel = item.context_kind === 'group' ? 'Group post'
+                           : item.context_kind === 'project' ? 'Project post'
+                           : 'Feed post';
             return (
               <div key={id} style={{
                 background: T.w, border: `1.5px solid ${T.am}`,
@@ -720,7 +732,7 @@ function ModerationTab({ supabase }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <Av size={20} name={item.author_name} color={item.author_avatar_color} url="" />
                   <span style={{ fontSize: 12, color: T.mu }}>
-                    {item.author_name} · {item.source === 'group_post' ? 'Group post' : 'Public post'}
+                    {item.author_name} · {ctxLabel}
                     · {timeAgo(item.post_created_at)}
                   </span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: T.am, background: T.am2, padding: '2px 8px', borderRadius: 20, marginLeft: 'auto' }}>
@@ -752,7 +764,7 @@ function ModerationTab({ supabase }) {
                     >
                       Dismiss
                     </button>
-                    {item.source === 'post' && !item.is_hidden && (
+                    {!item.hidden && (
                       <button
                         onClick={() => hidePost(item)}
                         disabled={acting === id}

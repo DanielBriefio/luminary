@@ -272,9 +272,10 @@ export default function GroupsScreen({ user, profile, onGroupSelect }) {
           // If last_read_at is null the tracking column hasn't been set yet — show 0
           if (!r.last_read_at) { counts[r.groups.id] = 0; return; }
           const { count } = await supabase
-            .from('group_posts')
+            .from('posts')
             .select('id', { count: 'exact', head: true })
-            .eq('group_id', r.groups.id)
+            .eq('context_kind', 'group')
+            .eq('context_id', r.groups.id)
             .gt('created_at', r.last_read_at);
           counts[r.groups.id] = count || 0;
         })

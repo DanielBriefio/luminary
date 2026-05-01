@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { capture, captureLumensEarned } from '../lib/analytics';
-import { T, TIER1_LIST, getTier2, DISCUSSION_PROMPTS, ZERO_COMMENT_PROMPTS, getDiscussionPrompts, LUMENS_ENABLED } from '../lib/constants';
+import { T, TIER1_LIST, getTier2, ZERO_COMMENT_PROMPTS, getDiscussionPrompts, LUMENS_ENABLED } from '../lib/constants';
 import { timeAgo } from '../lib/utils';
 import { useWindowSize } from '../lib/useWindowSize';
 import Av from '../components/Av';
@@ -14,6 +14,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
+import LikersModal from './LikersModal';
 
 const TRUNCATE_CHAR_THRESHOLD = 400;
 const TRUNCATE_LINE_HEIGHT    = 6;
@@ -22,7 +23,6 @@ const DEEPDIVE_MIN_WORDS      = 50;
 // Awards Lumens for a comment: 2 to the commenter (creation), and 5 to the
 // post owner the first time each commenter comments on this post (engagement).
 // Self-comments earn no engagement Lumens. Best-effort — failures swallowed.
-// Gated on LUMENS_ENABLED so a missing RPC can never break the comment flow.
 async function awardLumensForComment(post, commenterId, commenterPrevLumens) {
   if (!LUMENS_ENABLED) return;
   try {
@@ -51,7 +51,6 @@ async function awardLumensForComment(post, commenterId, commenterPrevLumens) {
           p_category: 'engagement',
           p_meta:     { post_id: post.id, actor_id: commenterId },
         }).then(() => {}, () => {});
-        // Cross-user — no tier event from this session.
         captureLumensEarned({ reason: 'comment_received', amount: 10, meta: { post_id: post.id, actor_id: commenterId, recipient_id: post.user_id } });
       }
 
@@ -119,7 +118,7 @@ function GranularTags({ tags, onTagClick }) {
     <div style={{display:'flex', gap:4, flexWrap:'wrap', marginTop:3}}>
       {visible.map(tag => (
         <span key={tag} onClick={() => onTagClick && onTagClick(tag)}
-          style={{fontSize:10, color:T.mu, padding:'1px 7px', borderRadius:20, background:T.s2, border:`1px solid ${T.bdr}`, cursor:'pointer'}}>
+          style={{fontSize:10, color:T.mu, padding:'1px 7px', borderRadius:20, background:T.s2, border:`1px solid ${T.bdr}`, cursor:onTagClick?'pointer':'default'}}>
           #{tag}
         </span>
       ))}
@@ -133,8 +132,15 @@ function GranularTags({ tags, onTagClick }) {
   );
 }
 
-export default function PostCard({ post, currentUserId, currentProfile, onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails, onTagClick, onViewGroup, isSaved = false, onSaveToggled }) {
+export default function PostCard({
+  post, currentUserId, currentProfile,
+  onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails,
+  onTagClick, onViewGroup, onViewProject,
+  isSaved = false, onSaveToggled,
+}) {
   const { isMobile } = useWindowSize();
+  const ctx = post.context_kind || 'feed';
+
   const [liked,setLiked]             = useState(post.user_liked||false);
   const [likeCount,setLikeCount]     = useState(parseInt(post.like_count)||0);
   const [reposted,setReposted]       = useState(post.user_reposted||false);
@@ -152,6 +158,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   const [showComments,setShowComments]   = useState(false);
   const [showShare,setShowShare]         = useState(false);
   const [showReport,setShowReport]       = useState(false);
+  const [showLikers,setShowLikers]       = useState(false);
   const [expanded,setExpanded]           = useState(false);
 
   const [comments,  setComments]   = useState([]);
@@ -204,7 +211,8 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
   const isOwner = currentUserId && currentUserId === post.user_id;
 
-  // Milestone post — special celebration card, no social actions
+  // Milestone post — special celebration card, no social actions.
+  // Kept as-is from the original feed PostCard.
   if (post.post_type === 'milestone') {
     const slug = post.author_slug || currentProfile?.profile_slug;
     const cardUrl = slug ? `${window.location.origin}/c/${slug}` : null;
@@ -300,7 +308,6 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             p_category: 'recognition',
             p_meta:     { post_id: post.id, actor_id: currentUserId },
           }).then(() => {}, () => {});
-          // Cross-user — recipient is the post owner, no tier event from this session.
           captureLumensEarned({ reason: 'post_reposted', amount: 20, meta: { post_id: post.id, actor_id: currentUserId, recipient_id: post.user_id } });
         } catch {}
       }
@@ -322,7 +329,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
   const saveEdit = async () => {
     if(!editText.trim()) return;
     setEditSaving(true);
-    await supabase.from('posts').update({ content: editText.trim() }).eq('id', post.id);
+    await supabase.from('posts').update({ content: editText.trim(), edited_at: new Date().toISOString() }).eq('id', post.id);
     setEditSaving(false); setEditing(false); setMenuOpen(false);
     onRefresh && onRefresh();
   };
@@ -438,6 +445,14 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
   if (deleted) return null;
 
+  // Group / project chip hooks
+  const groupId      = ctx === 'group'   ? post.context_id : null;
+  const projectId    = ctx === 'project' ? post.context_id : null;
+  const groupClickable   = !!(groupId   && onViewGroup);
+  const projectClickable = !!(projectId && onViewProject);
+
+  const cardBg = post.bg_color || T.w;
+
   return (
     <div style={{
       borderLeft: post.is_admin_post ? `3px solid ${T.v}` : 'none',
@@ -450,7 +465,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       </div>
     )}
     <div style={{
-      background: post.bg_color || T.w,
+      background: cardBg,
       border: post.is_deep_dive ? `1.5px solid rgba(108,99,255,.25)` : `1px solid ${T.bdr}`,
       borderLeft: post.is_deep_dive ? `4px solid ${T.v}` : undefined,
       borderRadius: 14,
@@ -458,14 +473,25 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
       boxShadow: "0 2px 12px rgba(108,99,255,.07)",
     }}>
 
-      {/* Group source banner — entire row is clickable */}
-      {post.group_id && post.group_name && (
+      {/* Group context banner */}
+      {ctx === 'group' && post.group_name && (
         <div
-          onClick={e=>{ e.stopPropagation(); onViewGroup?.(post.group_id); }}
-          style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",background:T.v2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600,cursor:onViewGroup?"pointer":"default"}}
+          onClick={groupClickable ? (e)=>{ e.stopPropagation(); onViewGroup(groupId); } : undefined}
+          style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",background:T.v2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600,cursor:groupClickable?"pointer":"default"}}
         >
           🔬 Shared from <span style={{color:T.v,fontWeight:700}}>{post.group_name}</span>
-          {onViewGroup && <span style={{marginLeft:"auto",fontSize:10.5,color:T.v}}>Open group →</span>}
+          {groupClickable && <span style={{marginLeft:"auto",fontSize:10.5,color:T.v}}>Open group →</span>}
+        </div>
+      )}
+
+      {/* Project context banner */}
+      {ctx === 'project' && post.project_name && (
+        <div
+          onClick={projectClickable ? (e)=>{ e.stopPropagation(); onViewProject(projectId); } : undefined}
+          style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",background:T.v2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600,cursor:projectClickable?"pointer":"default"}}
+        >
+          {post.project_icon || '📁'} In project: <span style={{color:T.v,fontWeight:700}}>{post.project_name}</span>
+          {projectClickable && <span style={{marginLeft:"auto",fontSize:10.5,color:T.v}}>Open project →</span>}
         </div>
       )}
 
@@ -524,7 +550,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
                 <>
                   <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:9}}/>
                   <div style={{position:"absolute",right:0,top:32,background:T.w,border:`1px solid ${T.bdr}`,borderRadius:11,boxShadow:"0 4px 20px rgba(0,0,0,.12)",zIndex:10,minWidth:140,overflow:"hidden"}}>
-                    <button onClick={()=>{setShowReport(true);setMenuOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.text,textAlign:"left"}}>🚩 Report</button>
+                    <button onClick={()=>{setShowReport(true);setMenuOpen(false);}} style={menuItemStyle(T.text)}>🚩 Report</button>
                   </div>
                 </>
               )}
@@ -543,10 +569,10 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
                   <div style={{position:"absolute",right:0,top:32,background:T.w,border:`1px solid ${T.bdr}`,borderRadius:11,boxShadow:"0 4px 20px rgba(0,0,0,.12)",zIndex:10,minWidth:160,overflow:"hidden"}}>
                     {!confirmDelete?(
                       <>
-                        <button onClick={()=>{setEditing(true);setMenuOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.text,textAlign:"left"}}>✏️ Edit post</button>
-                        <button onClick={()=>{setEditingTags(true);setMenuOpen(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.text,textAlign:"left"}}>🏷️ Edit tags</button>
+                        <button onClick={()=>{setEditing(true);setMenuOpen(false);}} style={menuItemStyle(T.text)}>✏️ Edit post</button>
+                        <button onClick={()=>{setEditingTags(true);setMenuOpen(false);}} style={menuItemStyle(T.text)}>🏷️ Edit tags</button>
                         <div style={{height:1,background:T.bdr,margin:"0 10px"}}/>
-                        <button onClick={()=>setConfirmDelete(true)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.ro,textAlign:"left"}}>🗑️ Delete post</button>
+                        <button onClick={()=>setConfirmDelete(true)} style={menuItemStyle(T.ro)}>🗑️ Delete post</button>
                       </>
                     ):(
                       <div style={{padding:"14px 16px"}}>
@@ -591,18 +617,13 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
           const wordCount = plain ? plain.split(/\s+/).filter(Boolean).length : 0;
           const isDeepDive = post.is_deep_dive === true && wordCount >= DEEPDIVE_MIN_WORDS;
-          const cardBg = post.bg_color || T.w;
 
           // Deep dive — article card replaces the content render entirely.
           if (isDeepDive) {
-            // Prefer the explicit deep_dive_title; fall back to first-line
-            // extraction for posts written before the title field existed.
             const explicitTitle = (post.deep_dive_title || '').trim();
             const lines = plain.split('\n').filter(l => l.trim());
             const extractedTitle = !explicitTitle && lines[0] && lines[0].length < 120 ? lines[0] : null;
             const title = explicitTitle || extractedTitle || null;
-            // Strip the first line from the preview only when it was the
-            // implicit title source.
             const previewStart = extractedTitle ? plain.indexOf('\n') + 1 : 0;
             const remaining    = plain.slice(previewStart).trim();
             const previewText  = remaining.slice(0, 325).trim();
@@ -711,7 +732,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
               <div style={{display:'flex', gap:4, flexWrap:'wrap', marginBottom:4}}>
                 {post.tier2.map(t => (
                   <span key={t} onClick={() => onTagClick && onTagClick(t)}
-                    style={{fontSize:10.5, fontWeight:600, padding:'1px 8px', borderRadius:20, background:T.v2, color:T.v, border:`1px solid rgba(108,99,255,.15)`, cursor:'pointer'}}>
+                    style={{fontSize:10.5, fontWeight:600, padding:'1px 8px', borderRadius:20, background:T.v2, color:T.v, border:`1px solid rgba(108,99,255,.15)`, cursor:onTagClick?'pointer':'default'}}>
                     {t}
                   </span>
                 ))}
@@ -753,7 +774,7 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
           </div>
         )}
 
-        {/* Relevance hook — shown when post.tier1 matches viewer's field and there are comments */}
+        {/* Relevance hook */}
         {isRelevantToUser() && (
           <div style={{
             fontSize: 11.5, color: T.v, fontWeight: 600,
@@ -773,7 +794,15 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
             <svg width={isMobile?15:16} height={isMobile?15:16} viewBox="0 0 24 24" fill={liked?T.ro:'none'} stroke={liked?T.ro:T.mu} strokeWidth="1.8">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>
-            {(!isMobile || likeCount > 0) && <span>{likeCount}</span>}
+            {(!isMobile || likeCount > 0) && (
+              <span
+                onClick={e => { if (likeCount > 0) { e.stopPropagation(); setShowLikers(true); } }}
+                style={{ cursor: likeCount > 0 ? 'pointer' : 'default' }}
+                title={likeCount > 0 ? 'See who liked this' : ''}
+              >
+                {likeCount}
+              </span>
+            )}
           </button>
 
           {/* Comment button with stacked commenter avatars */}
@@ -997,7 +1026,12 @@ export default function PostCard({ post, currentUserId, currentProfile, onRefres
 
       {showShare && <ShareModal post={post} onClose={()=>setShowShare(false)}/>}
       {showReport && <ReportModal supabase={supabase} postId={post.id} onClose={()=>setShowReport(false)}/>}
+      {showLikers && <LikersModal postId={post.id} currentUserId={currentUserId} onClose={()=>setShowLikers(false)}/>}
     </div>
     </div>
   );
+}
+
+function menuItemStyle(color) {
+  return { display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color, textAlign: 'left' };
 }

@@ -36,29 +36,25 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
 
   const loadProjectPosts = async () => {
     setLoadingPosts(true);
-    const [{ data: fols }, { data: starterRows }] = await Promise.all([
+    const [{ data: fols }, { data: recent }] = await Promise.all([
       supabase.from('project_folders').select('id, name').eq('project_id', project.id).order('sort_order'),
-      supabase.from('project_posts').select('*').eq('project_id', project.id).eq('is_starter', true).order('created_at', { ascending: true }).limit(5),
+      // Unified posts: starter / sticky / folder_id no longer exist on the
+      // schema, so just take the project's earliest 5 posts as the template
+      // seed (they're the closest analogue to "starter posts").
+      supabase.from('posts').select('*')
+        .eq('context_kind', 'project').eq('context_id', project.id)
+        .order('created_at', { ascending: true }).limit(5),
     ]);
 
     const folderMap = {};
     (fols || []).forEach(f => { folderMap[f.id] = f.name; });
 
-    let posts = starterRows || [];
-    if (!posts.length) {
-      const { data: recent } = await supabase
-        .from('project_posts')
-        .select('*')
-        .eq('project_id', project.id)
-        .order('created_at', { ascending: true })
-        .limit(5);
-      posts = recent || [];
-    }
+    let posts = recent || [];
 
     setDraftPosts(posts.map(p => ({
       ...p,
-      folder_name:    folderMap[p.folder_id] || null,
-      _isSticky:      p.is_sticky || false,
+      folder_name:    null,
+      _isSticky:      false,
       _editedContent: p.content?.replace(/<[^>]+>/g, '') || '',
     })));
     setLoadingPosts(false);

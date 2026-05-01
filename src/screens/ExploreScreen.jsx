@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { T, TAXONOMY, TIER1_LIST, WORK_MODE_MAP } from '../lib/constants';
 import Spinner from '../components/Spinner';
-import PostCard from '../feed/PostCard';
+import PostCard from '../posts/PostCard';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
 import FollowBtn from '../components/FollowBtn';
@@ -360,8 +360,8 @@ export default function ExploreScreen({
     // Tags are stored WITH # prefix (e.g. "#family"), so tag search uses "#cleanQ"
     const tagQ = `#${cleanQ}`;
 
-    let textQ = supabase.from('posts_with_meta').select('*').order('created_at', { ascending: false }).limit(40);
-    let tagResQ = supabase.from('posts_with_meta').select('*').order('created_at', { ascending: false }).limit(40);
+    let textQ = supabase.from('posts_with_meta').select('*').eq('context_kind','feed').eq('hidden', false).order('created_at', { ascending: false }).limit(40);
+    let tagResQ = supabase.from('posts_with_meta').select('*').eq('context_kind','feed').eq('hidden', false).order('created_at', { ascending: false }).limit(40);
 
     if (cleanQ) {
       textQ  = textQ.or(`content.ilike.%${cleanQ}%,paper_title.ilike.%${cleanQ}%,paper_authors.ilike.%${cleanQ}%`);
@@ -445,6 +445,8 @@ export default function ExploreScreen({
         .select('*')
         .or(`content.ilike.%${cleanQ}%,paper_title.ilike.%${cleanQ}%,paper_authors.ilike.%${cleanQ}%`)
         .eq('post_type', 'paper')
+        .eq('context_kind', 'feed')
+        .eq('hidden', false)
         .order('created_at', { ascending: false })
         .limit(20),
 

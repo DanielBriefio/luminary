@@ -2,15 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
-import GroupPostCard from './GroupPostCard';
-import GroupNewPost from './GroupNewPost';
-import ProjectPostCard from '../projects/ProjectPostCard';
+import PostCard from '../posts/PostCard';
+import PostComposer from '../posts/PostComposer';
 
-export default function GroupFeed({ groupId, groupName, user, profile, myRole, onViewPaper, onMarkRead, savedGroupPostIds = new Set(), onSaveToggled }) {
+export default function GroupFeed({ groupId, groupName, groupIsPublic, user, profile, setProfile, myRole, onViewPaper, onViewGroup, onViewProject, onMarkRead, savedPostIds = new Set(), onSaveToggled }) {
   const [posts,         setPosts]         = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [showCompose,   setShowCompose]   = useState(false);
-  const [likedSet,      setLikedSet]      = useState(new Set());
   const [groupProjects, setGroupProjects] = useState([]);
   const [projectFilter, setProjectFilter] = useState(null);
 
@@ -25,39 +23,30 @@ export default function GroupFeed({ groupId, groupName, user, profile, myRole, o
     let rows = [];
 
     if (projectFilter) {
-      // Show project posts for the selected project
       const { data } = await supabase
-        .from('project_posts_with_meta')
+        .from('posts_with_meta')
         .select('*')
-        .eq('project_id', projectFilter)
-        .order('is_sticky', { ascending: false })
+        .eq('context_kind', 'project')
+        .eq('context_id', projectFilter)
+        .eq('hidden', false)
         .order('created_at', { ascending: false })
         .limit(50);
       rows = data || [];
     } else {
       const { data } = await supabase
-        .from('group_posts_with_meta')
+        .from('posts_with_meta')
         .select('*')
-        .eq('group_id', groupId)
-        .order('is_sticky', { ascending: false })
+        .eq('context_kind', 'group')
+        .eq('context_id', groupId)
+        .eq('hidden', false)
         .order('created_at', { ascending: false })
         .limit(50);
       rows = data || [];
     }
 
-    // Fetch user's likes for these posts
-    if (user && rows.length) {
-      const ids = rows.map(p => p.id);
-      const likeTable = projectFilter ? 'project_post_likes' : 'group_post_likes';
-      const { data: likes } = await supabase
-        .from(likeTable).select('post_id')
-        .eq('user_id', user.id).in('post_id', ids);
-      setLikedSet(new Set((likes || []).map(l => l.post_id)));
-    }
-
     setPosts(rows);
     setLoading(false);
-  }, [groupId, user, projectFilter]);
+  }, [groupId, projectFilter]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
@@ -128,11 +117,12 @@ export default function GroupFeed({ groupId, groupName, user, profile, myRole, o
 
       {showCompose && (
         <div style={{ marginBottom: 16 }}>
-          <GroupNewPost
-            groupId={groupId}
-            groupName={groupName}
+          <PostComposer
+            context={{ kind: 'group', groupId, groupName, groupIsPublic }}
             user={user}
-            onPostCreated={handlePostCreated}
+            profile={profile}
+            setProfile={setProfile}
+            onPublished={handlePostCreated}
             onCancel={() => setShowCompose(false)}
           />
         </div>
@@ -152,26 +142,17 @@ export default function GroupFeed({ groupId, groupName, user, profile, myRole, o
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {projectFilter ? posts.map(p => (
-            <ProjectPostCard
+          {posts.map(p => (
+            <PostCard
               key={p.id}
-              post={{ ...p, user_liked: likedSet.has(p.id) }}
-              currentUserId={user?.id}
-              myRole="member"
-              activeFolderId={null}
-              onRefresh={fetchPosts}
-            />
-          )) : posts.map(p => (
-            <GroupPostCard
-              key={p.id}
-              post={{ ...p, user_liked: likedSet.has(p.id) }}
+              post={p}
               currentUserId={user?.id}
               currentProfile={profile}
-              groupName={groupName}
-              myRole={myRole}
               onRefresh={fetchPosts}
               onViewPaper={onViewPaper}
-              isSaved={savedGroupPostIds.has(p.id)}
+              onViewGroup={onViewGroup}
+              onViewProject={onViewProject}
+              isSaved={savedPostIds.has(p.id)}
               onSaveToggled={onSaveToggled}
             />
           ))}

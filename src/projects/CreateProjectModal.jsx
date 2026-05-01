@@ -56,15 +56,17 @@ export default function CreateProjectModal({
     }
 
     if (starterPosts.length) {
-      await supabase.from('project_posts').insert(
+      // Phase 15: project posts live in unified posts table.
+      // is_starter / is_sticky / folder_id no longer exist on the unified
+      // schema; starter posts are plain text posts with context_kind='project'.
+      await supabase.from('posts').insert(
         starterPosts.map(sp => ({
-          project_id: projectId,
-          user_id:    user.id,
-          post_type:  'text',
-          is_starter: true,
-          is_sticky:  sp.is_sticky || false,
-          content:    sp.content || '',
-          folder_id:  sp.folder ? (folderIdMap[sp.folder] || null) : null,
+          context_kind: 'project',
+          context_id:   projectId,
+          user_id:      user.id,
+          post_type:    'text',
+          content:      sp.content || '',
+          visibility:   'members',
         }))
       );
     }
@@ -115,11 +117,17 @@ export default function CreateProjectModal({
         }
 
         if (posts.length) {
-          const toInsert = posts.map(p => {
-            const { _folderName, ...rest } = p;
-            return { ...rest, is_starter: true, folder_id: _folderName ? (folderIdMap[_folderName] || null) : null };
-          });
-          await supabase.from('project_posts').insert(toInsert);
+          // Unified posts: drop is_starter / is_sticky / folder_id from
+          // the template-built rows, attach context_kind/context_id.
+          const toInsert = posts.map(p => ({
+            context_kind: 'project',
+            context_id:   project.id,
+            user_id:      user.id,
+            post_type:    p.post_type || 'text',
+            content:      p.content || '',
+            visibility:   'members',
+          }));
+          await supabase.from('posts').insert(toInsert);
         }
       }
 

@@ -13,7 +13,7 @@ import ExploreScreen from './screens/ExploreScreen';
 import GroupsScreen from './groups/GroupsScreen';
 import GroupScreen from './groups/GroupScreen';
 import NotifsScreen from './screens/NotifsScreen';
-import NewPostScreen from './screens/NewPostScreen';
+import PostComposer from './posts/PostComposer';
 import ProfileScreen from './profile/ProfileScreen';
 import PublicProfilePage from './profile/PublicProfilePage';
 import PublicPostPage from './post/PublicPostPage';
@@ -129,7 +129,6 @@ export default function App() {
   const [joinToast,          setJoinToast]          = useState('');
   const [showDrawer,         setShowDrawer]         = useState(false);
   const [savedPostIds,       setSavedPostIds]       = useState(new Set());
-  const [savedGroupPostIds,  setSavedGroupPostIds]  = useState(new Set());
   const [showAuthScreen,     setShowAuthScreen]     = useState(false);
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
@@ -251,9 +250,10 @@ export default function App() {
     if (!memberships?.length) { setGroupUnreadCount(0); return; }
     let total = 0;
     for (const m of memberships) {
-      const { count } = await supabase.from('group_posts')
+      const { count } = await supabase.from('posts')
         .select('id', { count: 'exact', head: true })
-        .eq('group_id', m.group_id)
+        .eq('context_kind', 'group')
+        .eq('context_id', m.group_id)
         .gt('created_at', m.last_read_at || '1970-01-01');
       total += count || 0;
     }
@@ -272,10 +272,9 @@ export default function App() {
     if (!session?.user) return;
     const { data } = await supabase
       .from('saved_posts')
-      .select('post_id, group_post_id')
+      .select('post_id')
       .eq('user_id', session.user.id);
     setSavedPostIds(new Set((data||[]).map(r=>r.post_id).filter(Boolean)));
-    setSavedGroupPostIds(new Set((data||[]).map(r=>r.group_post_id).filter(Boolean)));
   }, [session]);
 
   useEffect(() => { fetchSavedIds(); }, [fetchSavedIds]);
@@ -581,12 +580,12 @@ export default function App() {
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
     library:      <LibraryScreen key={`lib-${libraryView}`} user={user} profile={profile} onSaveToggled={fetchSavedIds} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} onNavigateToPost={()=>setScreen('post')} defaultView={libraryView}/>,
     groups: activeGroupId
-      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedGroupPostIds={savedGroupPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')}/>
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     projects: <ProjectsScreen user={user}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
-    post:         <NewPostScreen user={user} profile={profile} setProfile={setProfile} onPostCreated={()=>setScreen('feed')}/>,
+    post:         <PostComposer context={{ kind: 'feed' }} user={user} profile={profile} setProfile={setProfile} onPublished={()=>setScreen('feed')} onCancel={()=>setScreen('feed')}/>,
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     lumens:       <LumensScreen supabase={supabase} user={user} profile={profile} onBack={()=>setScreen('feed')}/>,

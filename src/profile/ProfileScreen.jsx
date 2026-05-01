@@ -8,7 +8,7 @@ import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import ConflictResolverModal from '../components/ConflictResolverModal';
 import ExpandableBio from '../components/ExpandableBio';
-import PostCard from '../feed/PostCard';
+import PostCard from '../posts/PostCard';
 import LinkedInImporter from './LinkedInImporter';
 import OrcidImporter from './OrcidImporter';
 import PublicationsTab from './PublicationsTab';
@@ -568,7 +568,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       topic_interests:        profile.topic_interests        || [],
     });
   },[profile]);
-  useEffect(()=>{ if(!user) return; supabase.from('posts_with_meta').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).then(({data})=>setUserPosts(data||[])); },[user]);
+  useEffect(()=>{ if(!user) return; supabase.from('posts_with_meta').select('*').eq('user_id',user.id).eq('context_kind','feed').order('created_at',{ascending:false}).then(({data})=>setUserPosts(data||[])); },[user]);
   useEffect(()=>{
     if(!user) return;
     Promise.all([

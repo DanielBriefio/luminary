@@ -468,6 +468,7 @@ export default function PublicPostPage({ postId }) {
   const [author,        setAuthor]        = useState(null);
   const [loading,       setLoading]       = useState(true);
   const [notFound,      setNotFound]      = useState(false);
+  const [accessGated,   setAccessGated]   = useState(false);  // members-only and not authorized to view
   const [sharing,       setSharing]       = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   const commentsRef = useRef(null);
@@ -487,7 +488,6 @@ export default function PublicPostPage({ postId }) {
   useEffect(() => {
     if (!post) return;
 
-    const YT_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/;
     let ogTitle, ogDescription, ogImage;
 
     if (post.post_type === 'paper' && post.paper_title) {
@@ -495,11 +495,6 @@ export default function PublicPostPage({ postId }) {
       const byline   = [post.paper_authors, post.paper_journal, post.paper_year].filter(Boolean).join(' · ');
       const abstract = post.paper_abstract ? post.paper_abstract.slice(0, 250) : '';
       ogDescription  = [byline, abstract].filter(Boolean).join(' — ');
-    } else if (post.post_type === 'link' && post.link_title) {
-      ogTitle = post.link_title;
-      ogDescription = post.link_url || '';
-      const yt = post.link_url && YT_RE.exec(post.link_url);
-      if (yt) ogImage = `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
     } else {
       const html  = post.content || '';
       const first = html.split(/<br\s*\/?>|<\/p>|<\/div>/i)[0]
@@ -549,9 +544,30 @@ export default function PublicPostPage({ postId }) {
       setLoading(true);
 
       const { data: p } = await supabase
-        .from('posts_with_meta').select('*').eq('id', postId).single();
+        .from('posts_with_meta').select('*').eq('id', postId).maybeSingle();
       if (cancelled) return;
-      if (!p) { setNotFound(true); setLoading(false); return; }
+      if (!p) {
+        // RLS denied or genuinely missing. Friendly 404.
+        setNotFound(true); setLoading(false); return;
+      }
+
+      // Visibility branch (RLS already gated members/private at the row
+      // level; this layer enforces the page-render policy):
+      //   public  → render for anyone (auth or anon)
+      //   members → render only if the caller is signed in (RLS already
+      //             confirmed they can read the row); anon visitors get
+      //             the friendly access-gated CTA
+      //   private → 404 (or render if you're the author, since RLS would
+      //             have returned the row)
+      const { data: { session } } = await supabase.auth.getSession();
+      const callerId = session?.user?.id || null;
+
+      if (p.visibility === 'private' && p.user_id !== callerId) {
+        setNotFound(true); setLoading(false); return;
+      }
+      if (p.visibility === 'members' && !callerId) {
+        setAccessGated(true); setPost(p); setLoading(false); return;
+      }
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -592,6 +608,28 @@ export default function PublicPostPage({ postId }) {
       </a>
     </div>
   );
+
+  if (accessGated) {
+    const isProject = post?.context_kind === 'project';
+    const isGroup   = post?.context_kind === 'group';
+    return (
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+        height:'100vh', fontFamily:"'DM Sans',sans-serif", color:T.text, textAlign:'center', padding:'0 24px' }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>🔒</div>
+        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:24, marginBottom:8 }}>
+          {isProject ? 'Project members only' : isGroup ? 'Group members only' : 'Members only'}
+        </div>
+        <div style={{ fontSize:14, color:T.mu, marginBottom:24, maxWidth: 420 }}>
+          This post is in a {isProject ? 'project' : isGroup ? 'group' : 'private space'}.
+          Sign in to Luminary to view it{isGroup && post?.group_name ? ` — or request to join ${post.group_name}` : ''}.
+        </div>
+        <a href="/" style={{ color:'#fff', background:T.v, fontWeight:700, textDecoration:'none',
+          borderRadius:9, padding:'10px 22px', fontSize:14 }}>
+          Sign in to Luminary →
+        </a>
+      </div>
+    );
+  }
 
   const isDeepDive = post.is_deep_dive === true;
   const readMins   = calcReadMins(post.content);
