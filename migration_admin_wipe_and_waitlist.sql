@@ -51,6 +51,16 @@ begin
   delete from likes          where true;
   delete from publications   where true;
 
+  -- 2a'. Null out FKs in tables we PRESERVE that point to profiles being
+  --      deleted. admin_config is the canonical case — we keep its rows
+  --      (storage quota, paper-of-week, milestone template, founding
+  --      cutoff) but the updated_by column points to whichever admin
+  --      last touched them, who's about to be deleted.
+  update admin_config
+     set updated_by = null
+   where updated_by is not null
+     and updated_by <> bot_id;
+
   -- 2b. Delete every non-bot user. Cascade clears profiles + most content.
   delete from auth.users where id <> bot_id;
 
