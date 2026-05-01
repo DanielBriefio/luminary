@@ -691,8 +691,6 @@ export function applyTemplate(template, projectName, projectId, userId) {
     project_id:  projectId,
     user_id:     userId,
     post_type:   'text',
-    is_starter:  true,
-    is_sticky:   sp.is_sticky || false,
     content:     sp.content.replace(/\{projectName\}/g, projectName),
     _folderName: sp.folder,
   }));
