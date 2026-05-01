@@ -13,7 +13,10 @@ export default function SafeHtml({ html, tags, onTagClick }) {
           .rc h2 { font-size:17px; font-weight:700; margin:10px 0 5px; line-height:1.3; font-family:'DM Serif Display',serif; display:block; }
           .rc h3 { font-size:14.5px; font-weight:700; margin:8px 0 4px; line-height:1.3; display:block; }
           .rc h4 { font-size:13.5px; font-weight:700; margin:8px 0 3px; line-height:1.3; display:block; }
-          .rc img { max-width:100%; height:auto; border-radius:8px; margin:8px 0; display:block; }
+          .rc img { max-width:100%; height:auto; border-radius:8px; margin:8px auto; display:block; }
+          .rc img[data-size="small"]  { max-width:33% !important; }
+          .rc img[data-size="medium"] { max-width:60% !important; }
+          .rc img[data-size="large"]  { max-width:85% !important; }
           .rc iframe { max-width:100%; width:100%; aspect-ratio:16/9; height:auto; border-radius:8px; margin:8px 0; display:block; border:0; }
           .rc p  { margin:3px 0; display:block; }
           .rc div{ margin:2px 0; display:block; }
