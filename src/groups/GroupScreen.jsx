@@ -219,10 +219,10 @@ export default function GroupScreen({ groupId, user, profile, setProfile, onBack
   const isAlumni = myRole === 'alumni';
   const tabs = [
     ...(!isAlumni ? [{ id: 'feed',     icon: '📋', label: 'Feed' }] : []),
+    { id: 'projects', icon: '🚀', label: 'Projects' },
+    { id: 'library',  icon: '📚', label: 'Library' },
     { id: 'members',  icon: '👥', label: 'Members' },
     { id: 'profile',  icon: '🏛️', label: 'Profile' },
-    { id: 'library',  icon: '📚', label: 'Library' },
-    { id: 'projects', icon: '🚀', label: 'Projects' },
   ];
 
   const activeMemberCount = stats?.active_member_count || 0;
