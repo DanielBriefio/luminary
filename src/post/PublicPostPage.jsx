@@ -211,9 +211,11 @@ function ArticleBody({ post, isDeepDive }) {
           max-width: 100%; height: auto; border-radius: 8px;
           margin: 20px auto; display: block;
         }
-        .article-body img[data-size="small"]  { max-width: 33%; }
-        .article-body img[data-size="medium"] { max-width: 60%; }
-        .article-body img[data-size="large"]  { max-width: 85%; }
+        /* !important guards against any leftover inline style="max-width:100%"
+           on legacy posts created before the inline-style strip on insertion. */
+        .article-body img[data-size="small"]  { max-width: 33% !important; }
+        .article-body img[data-size="medium"] { max-width: 60% !important; }
+        .article-body img[data-size="large"]  { max-width: 85% !important; }
         .article-body iframe {
           width: 100%; max-width: 100%;
           aspect-ratio: 16/9; height: auto;
