@@ -54,9 +54,22 @@ drop function if exists get_quiet_champions(int)                                
 drop function if exists get_signup_method_breakdown(int)                        cascade;
 drop function if exists get_work_mode_stats(int)                                cascade;
 drop function if exists get_at_risk_alerts()                                    cascade;
-drop function if exists send_admin_post(text, text, uuid, text, text, text, text, text, text, text[], uuid, uuid) cascade;
-drop function if exists send_admin_post(text, text, uuid, text, text, text, text, text, text, text[], uuid)       cascade;
-drop function if exists send_admin_post(text, text, uuid)                       cascade;
+-- send_admin_post has accreted overloads over time (different paper_year
+-- types, optional bg_color, etc.). Drop ALL overloads programmatically so
+-- the CREATE OR REPLACE later in this migration installs a single
+-- canonical version. Otherwise PostgREST can't disambiguate.
+do $$
+declare r record;
+begin
+  for r in
+    select pg_get_function_identity_arguments(p.oid) as args
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'send_admin_post'
+  loop
+    execute 'drop function send_admin_post(' || r.args || ') cascade';
+  end loop;
+end $$;
 drop function if exists get_post_likers(uuid, int, int)                         cascade;
 drop function if exists can_see_post(uuid)                                      cascade;
 -- Storage RPCs that hardcoded the group_posts branch
