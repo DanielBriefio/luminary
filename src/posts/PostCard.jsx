@@ -12,6 +12,7 @@ import FilePreview from '../components/FilePreview';
 import PaperPreview from '../components/PaperPreview';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
+import { htmlToPlain } from '../lib/htmlUtils';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
 import LikersModal from './LikersModal';
@@ -623,7 +624,10 @@ export default function PostCard({
             </div>
           </div>
         ) : (() => {
-          const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
+          // Use htmlToPlain so HTML entities (&nbsp;, &amp;, etc.) are
+          // decoded — pasted-from-web HTML often carries them and a plain
+          // tag-strip leaves the entity codes as literal text in the preview.
+          const plain = htmlToPlain(post.content || '');
           const wordCount = plain ? plain.split(/\s+/).filter(Boolean).length : 0;
           const isDeepDive = post.is_deep_dive === true && wordCount >= DEEPDIVE_MIN_WORDS;
 
@@ -901,7 +905,7 @@ export default function PostCard({
                 overflow: 'hidden', display: '-webkit-box',
                 WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
               }}>
-                {topComment.content?.replace(/<[^>]+>/g, '')}
+                {htmlToPlain(topComment.content || '')}
               </span>
             </div>
             {commCount > 1 && (

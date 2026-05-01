@@ -57,6 +57,17 @@ export function sanitiseHtml(html) {
   return tmp.innerHTML;
 }
 
+// Strip HTML tags AND decode HTML entities (&nbsp;, &amp;, etc.) so that
+// a preview generated from HTML reads cleanly. Plain regex strip leaves
+// entity codes as literal text — use this instead of `.replace(/<[^>]+>/g, '')`
+// anywhere a preview/excerpt is rendered.
+export function htmlToPlain(html) {
+  if (!html) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return (tmp.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
 export function isHtml(str) {
   return /<(b|strong|i|em|u|h1|h2|h3|h4|ul|ol|li|br|p|div|img|iframe|blockquote)[\s\/>]/i.test(str||'');
 }

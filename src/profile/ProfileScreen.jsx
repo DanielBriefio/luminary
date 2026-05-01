@@ -21,12 +21,23 @@ import OrcidBadge from '../components/OrcidBadge';
 import AvatarCropModal from '../components/AvatarCropModal';
 import CoverRepositioner from '../components/CoverRepositioner';
 
-function EF({label,val,onChange,placeholder=""}) {
+function EF({label,val,onChange,placeholder="",multiline=false}) {
+  const inputStyle = {
+    width:"100%",background:T.s2,border:"1.5px solid "+T.bdr,borderRadius:8,
+    padding:"7px 11px",fontSize:12.5,fontFamily:"inherit",outline:"none",
+    boxSizing:"border-box",
+  };
   return (
     <div style={{marginBottom:9}}>
       <label style={{display:"block",fontSize:11,fontWeight:600,color:T.mu,marginBottom:3}}>{label}</label>
-      <input value={val} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-        style={{width:"100%",background:T.s2,border:"1.5px solid "+T.bdr,borderRadius:8,padding:"7px 11px",fontSize:12.5,fontFamily:"inherit",outline:"none"}}/>
+      {multiline ? (
+        <textarea value={val} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+          rows={3}
+          style={{...inputStyle,resize:"vertical",lineHeight:1.5,minHeight:60}}/>
+      ) : (
+        <input value={val} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+          style={inputStyle}/>
+      )}
     </div>
   );
 }
@@ -773,13 +784,23 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       <div style={{background:T.v2,border:"1.5px solid "+T.v,borderRadius:12,padding:"14px 16px",marginTop:8}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}><span style={{fontSize:18}}>{logo}</span><span style={{fontSize:13,fontWeight:700,color:T.v}}>Add new entry</span></div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-          {fields.map(([key,label,ph])=>(
-            <div key={key} style={{gridColumn:key==="description"?"span 2":"span 1"}}>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.mu,marginBottom:3}}>{label}</label>
-              <input value={form[key]||""} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))} placeholder={ph}
-                style={{width:"100%",background:"rgba(255,255,255,.8)",border:"1.5px solid "+T.bdr,borderRadius:8,padding:"7px 11px",fontSize:12.5,fontFamily:"inherit",outline:"none"}}/>
-            </div>
-          ))}
+          {fields.map(([key,label,ph])=>{
+            const baseStyle = {width:"100%",background:"rgba(255,255,255,.8)",border:"1.5px solid "+T.bdr,borderRadius:8,padding:"7px 11px",fontSize:12.5,fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
+            const isDesc = key === "description";
+            return (
+              <div key={key} style={{gridColumn:isDesc?"span 2":"span 1"}}>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.mu,marginBottom:3}}>{label}</label>
+                {isDesc ? (
+                  <textarea value={form[key]||""} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))} placeholder={ph}
+                    rows={3}
+                    style={{...baseStyle,resize:"vertical",lineHeight:1.5,minHeight:60}}/>
+                ) : (
+                  <input value={form[key]||""} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))} placeholder={ph}
+                    style={baseStyle}/>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12}}>
           <Btn onClick={()=>{setOpen(false);setForm({});}}>Cancel</Btn>
@@ -1438,7 +1459,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                           <EF label="Location" val={f.location||''} onChange={v=>set({location:v})} placeholder="Tokyo, Japan"/>
                           <EF label="Started (YYYY-MM)" val={f.start||''} onChange={v=>set({start:v})} placeholder="2021-04"/>
                           <EF label="Ended (YYYY-MM or blank)" val={f.end||''} onChange={v=>set({end:v})} placeholder="2024-01"/>
-                          <div style={{gridColumn:'span 2'}}><EF label="Description" val={f.description||''} onChange={v=>set({description:v})} placeholder="Brief description of role..."/></div>
+                          <div style={{gridColumn:'span 2'}}><EF label="Description" val={f.description||''} onChange={v=>set({description:v})} placeholder="Brief description of role..." multiline/></div>
                         </div>
                       )}/>
                   ))}
