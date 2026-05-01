@@ -48,7 +48,7 @@ begin
       select array_agg(id order by created_at)
         into v_post_ids
         from (
-          select id
+          select id, created_at
             from posts
            where context_kind = 'project'
              and context_id  = v_project.id
