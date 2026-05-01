@@ -249,24 +249,29 @@ create policy posts_select_own on posts
   using (user_id = auth.uid());
 
 -- Feed posts: visible to anyone authenticated unless targeted at someone else.
--- 'public' visibility surfaces in /s/:id without auth too — that's enforced
--- in the route, not at RLS, because anon can't pass any policy here.
+-- visibility='private' is enforced here — only the author (via
+-- posts_select_own) and admins (via posts_select_admin) can see them.
+-- 'public' visibility additionally surfaces in /s/:id without auth, but
+-- that's enforced in the route, not at RLS, since anon can't pass any
+-- policy here.
 create policy posts_select_feed on posts
   for select
   using (
     context_kind = 'feed'
     and not hidden
+    and visibility <> 'private'
     and (target_user_id is null or target_user_id = auth.uid())
   );
 
 -- Group posts: members of the group OR anyone (authed) if group is public.
--- Uses the existing SECURITY DEFINER helper get_my_group_ids() to avoid the
--- group_members RLS round-trip from inside this policy.
+-- visibility='private' would mean author-only even within the group; honor
+-- it here.
 create policy posts_select_group on posts
   for select
   using (
     context_kind = 'group'
     and not hidden
+    and visibility <> 'private'
     and (
       context_id in (select get_my_group_ids())
       or context_id in (select id from groups where is_public = true)
@@ -275,11 +280,13 @@ create policy posts_select_group on posts
 
 -- Project posts: project members OR group members of the parent group
 -- (the "user-guide group containing user-guide projects" pattern).
+-- visibility='private' would mean author-only even within the project.
 create policy posts_select_project on posts
   for select
   using (
     context_kind = 'project'
     and not hidden
+    and visibility <> 'private'
     and (
       context_id in (select project_id from project_members where user_id = auth.uid())
       or context_id in (
@@ -1258,32 +1265,38 @@ as $$
 declare
   caller uuid := auth.uid();
 begin
-  -- Visibility check via the SECURITY INVOKER helper. If the caller can't
-  -- SELECT the post via RLS, return nothing.
+  -- Visibility check inlined (SECURITY DEFINER bypasses RLS so we can't
+  -- just rely on the policies). Mirrors the four select-policies plus the
+  -- visibility='private' gate.
   if not exists (
     select 1
       from posts p
      where p.id = p_post_id
        and (
-         -- inline the four-policy logic so this RPC works as SECURITY DEFINER
          p.user_id = caller
-         or (p.context_kind = 'feed' and not p.hidden
-             and (p.target_user_id is null or p.target_user_id = caller))
-         or (p.context_kind = 'group' and not p.hidden
-             and (
-               p.context_id in (select group_id from group_members where user_id = caller)
-               or p.context_id in (select id from groups where is_public = true)
-             ))
-         or (p.context_kind = 'project' and not p.hidden
-             and (
-               p.context_id in (select project_id from project_members where user_id = caller)
-               or p.context_id in (
-                 select pj.id from projects pj
-                   join group_members gm on gm.group_id = pj.group_id
-                  where gm.user_id = caller
-               )
-             ))
          or coalesce((select is_admin from profiles where profiles.id = caller), false)
+         or (
+           not p.hidden
+           and p.visibility <> 'private'
+           and (
+             (p.context_kind = 'feed'
+                and (p.target_user_id is null or p.target_user_id = caller))
+             or (p.context_kind = 'group'
+                and (
+                  p.context_id in (select group_id from group_members where user_id = caller)
+                  or p.context_id in (select id from groups where is_public = true)
+                ))
+             or (p.context_kind = 'project'
+                and (
+                  p.context_id in (select project_id from project_members where user_id = caller)
+                  or p.context_id in (
+                    select pj.id from projects pj
+                      join group_members gm on gm.group_id = pj.group_id
+                     where gm.user_id = caller
+                  )
+                ))
+           )
+         )
        )
   ) then
     return;
