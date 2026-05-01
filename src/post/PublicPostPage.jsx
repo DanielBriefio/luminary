@@ -209,8 +209,11 @@ function ArticleBody({ post, isDeepDive }) {
         .article-body a { color: ${T.v}; text-decoration: underline; }
         .article-body img {
           max-width: 100%; height: auto; border-radius: 8px;
-          margin: 20px 0; display: block;
+          margin: 20px auto; display: block;
         }
+        .article-body img[data-size="small"]  { max-width: 33%; }
+        .article-body img[data-size="medium"] { max-width: 60%; }
+        .article-body img[data-size="large"]  { max-width: 85%; }
         .article-body iframe {
           width: 100%; max-width: 100%;
           aspect-ratio: 16/9; height: auto;

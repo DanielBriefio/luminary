@@ -23,8 +23,9 @@ export function sanitiseHtml(html) {
       el.setAttribute('target', '_blank');
       el.setAttribute('rel', 'noopener noreferrer');
     } else if (tag === 'img') {
-      const src = el.getAttribute('src') || '';
-      const alt = el.getAttribute('alt') || '';
+      const src     = el.getAttribute('src') || '';
+      const alt     = el.getAttribute('alt') || '';
+      const dataSize = el.getAttribute('data-size') || '';
       [...el.attributes].forEach(a => el.removeAttribute(a.name));
       if (!/^https:\/\//i.test(src)) {
         el.replaceWith(document.createTextNode(''));
@@ -33,6 +34,11 @@ export function sanitiseHtml(html) {
       el.setAttribute('src', src);
       if (alt) el.setAttribute('alt', alt);
       el.setAttribute('loading', 'lazy');
+      // Only one of small | medium | large is honoured. 'full' is the
+      // default render and doesn't need an attribute.
+      if (['small', 'medium', 'large'].includes(dataSize)) {
+        el.setAttribute('data-size', dataSize);
+      }
     } else if (tag === 'iframe') {
       const src = el.getAttribute('src') || '';
       [...el.attributes].forEach(a => el.removeAttribute(a.name));

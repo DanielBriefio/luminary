@@ -84,12 +84,67 @@ export default function RichTextEditor({
   const [videoUrl,     setVideoUrl]     = useState('');
   const [videoError,   setVideoError]   = useState('');
   const [imgUploading, setImgUploading] = useState(false);
+  const [imgToolbar,   setImgToolbar]   = useState(null);
+    // { el, size, top, left } — the currently selected inline image and
+    // the position to place the resize toolbar at. Cleared on outside click.
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || '';
     }
   }, []); // eslint-disable-line
+
+  // Close the image toolbar on outside clicks / scroll / Escape.
+  useEffect(() => {
+    if (!imgToolbar) return;
+    const onDoc = (e) => {
+      if (e.target.tagName === 'IMG') return;            // image click handled by editor handler
+      if (e.target.closest('[data-img-toolbar]')) return; // toolbar click
+      setImgToolbar(null);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setImgToolbar(null); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [imgToolbar]);
+
+  // Position the toolbar above the clicked image, anchored to the editor.
+  const handleEditorClick = (e) => {
+    if (!isDeepDive) return;
+    if (e.target.tagName !== 'IMG') {
+      setImgToolbar(null);
+      return;
+    }
+    const img    = e.target;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const editorRect = editor.getBoundingClientRect();
+    const imgRect    = img.getBoundingClientRect();
+    setImgToolbar({
+      el:   img,
+      size: img.getAttribute('data-size') || 'full',
+      top:  imgRect.top  - editorRect.top - 36,
+      left: imgRect.left - editorRect.left + 4,
+    });
+  };
+
+  const setImageSize = (newSize) => {
+    if (!imgToolbar?.el) return;
+    if (newSize === 'full') imgToolbar.el.removeAttribute('data-size');
+    else                    imgToolbar.el.setAttribute('data-size', newSize);
+    setImgToolbar(t => t ? { ...t, size: newSize } : t);
+    syncContent();
+  };
+
+  const removeImage = () => {
+    if (!imgToolbar?.el) return;
+    imgToolbar.el.remove();
+    setImgToolbar(null);
+    syncContent();
+  };
 
   const exec = (cmd, val=null) => {
     editorRef.current?.focus();
@@ -458,6 +513,7 @@ export default function RichTextEditor({
         onMouseUp={updateActiveFormats}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
+        onClick={handleEditorClick}
         data-placeholder={placeholder}
         {...(isDeepDive ? {'data-deep-dive': 'true'} : {})}
         style={{
@@ -478,6 +534,57 @@ export default function RichTextEditor({
           cursor: "text",
         }}
       />
+
+      {/* Image resize toolbar — floats above the selected inline image */}
+      {imgToolbar && (
+        <div
+          data-img-toolbar="1"
+          onMouseDown={e => e.preventDefault()}
+          style={{
+            position: 'absolute', zIndex: 50,
+            top: imgToolbar.top, left: imgToolbar.left,
+            background: T.w, border: `1.5px solid ${T.v}`,
+            borderRadius: 8, padding: '4px 6px',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+            display: 'flex', alignItems: 'center', gap: 2,
+            fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
+          }}
+        >
+          {[
+            { v: 'small',  label: 'S'    },
+            { v: 'medium', label: 'M'    },
+            { v: 'large',  label: 'L'    },
+            { v: 'full',   label: 'Full' },
+          ].map(opt => (
+            <button
+              key={opt.v}
+              onClick={() => setImageSize(opt.v)}
+              style={{
+                padding: '4px 8px', borderRadius: 5, border: 'none',
+                background: imgToolbar.size === opt.v ? T.v2 : 'transparent',
+                color: imgToolbar.size === opt.v ? T.v : T.text,
+                cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 11.5, fontWeight: 700,
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <div style={{ width: 1, height: 14, background: T.bdr, margin: '0 2px' }}/>
+          <button
+            onClick={removeImage}
+            title="Remove image"
+            style={{
+              padding: '4px 6px', borderRadius: 5, border: 'none',
+              background: 'transparent', color: T.ro,
+              cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 12, fontWeight: 700,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Link popover */}
       {showLink && (
@@ -609,7 +716,10 @@ export default function RichTextEditor({
         [data-deep-dive] ul { list-style-type:disc !important; padding-left:26px !important; margin:0 0 22px; }
         [data-deep-dive] ol { list-style-type:decimal !important; padding-left:26px !important; margin:0 0 22px; }
         [data-deep-dive] li { display:list-item !important; margin:6px 0; }
-        [data-deep-dive] img { max-width:100%; height:auto; border-radius:8px; margin:20px 0; display:block; }
+        [data-deep-dive] img { max-width:100%; height:auto; border-radius:8px; margin:20px auto; display:block; cursor:pointer; }
+        [data-deep-dive] img[data-size="small"]  { max-width:33%; }
+        [data-deep-dive] img[data-size="medium"] { max-width:60%; }
+        [data-deep-dive] img[data-size="large"]  { max-width:85%; }
         [data-deep-dive] iframe { max-width:100%; width:100%; aspect-ratio:16/9; border:0; border-radius:8px; margin:20px 0; display:block; }
         [data-deep-dive] a  { color:${T.v}; text-decoration:underline; }
         [data-deep-dive] blockquote {
