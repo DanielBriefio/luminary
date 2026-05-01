@@ -45,9 +45,11 @@ begin
   --     (e.g. `reposts` from the original schema). Without these explicit
   --     deletes, the auth.users → profiles cascade in step 2b throws
   --     "violates foreign key constraint" and the whole wipe rolls back.
-  delete from reposts;
-  delete from likes;
-  delete from publications;
+  --     `where true` clauses satisfy Supabase's pg_safeupdate guard, which
+  --     rejects unqualified DELETE/UPDATE statements.
+  delete from reposts        where true;
+  delete from likes          where true;
+  delete from publications   where true;
 
   -- 2b. Delete every non-bot user. Cascade clears profiles + most content.
   delete from auth.users where id <> bot_id;
@@ -55,11 +57,11 @@ begin
   -- 3. Sweep tombstoned rows (FKs that are SET NULL on delete, not CASCADE).
   --    These would otherwise leave "Deleted user" comments / empty DM
   --    threads behind.
-  delete from messages;
-  delete from conversations;
-  delete from comments;
-  delete from group_post_comments;
-  delete from project_post_comments;
+  delete from messages              where true;
+  delete from conversations         where true;
+  delete from comments              where true;
+  delete from group_post_comments   where true;
+  delete from project_post_comments where true;
 
   -- 4. Wipe any remaining bot-authored content. Bot account + profile + avatar
   --    stay; everything else the bot has touched goes.
@@ -88,9 +90,9 @@ begin
 
   -- 5. Anything still standing in groups / projects belongs to the bot or is
   --    orphaned — nuke it so we start with zero.
-  delete from groups;
-  delete from projects;
-  delete from community_templates;
+  delete from groups             where true;
+  delete from projects           where true;
+  delete from community_templates where true;
 
   -- 6. Reset the bot's gamification counters in case it accumulated any.
   update profiles
@@ -101,11 +103,11 @@ begin
    where id = bot_id;
 
   -- 7. Clear admin / auth scaffolding so signups and the waitlist start fresh.
-  delete from invite_code_uses;
-  delete from invite_codes;
-  delete from invite_rate_limits;
-  delete from waitlist;
-  delete from orcid_pending;
+  delete from invite_code_uses    where true;
+  delete from invite_codes        where true;
+  delete from invite_rate_limits  where true;
+  delete from waitlist            where true;
+  delete from orcid_pending       where true;
 
   -- 8. Return the captured storage paths for the client to sweep.
   return query select p.bucket, p.path from _wipe_paths p;
