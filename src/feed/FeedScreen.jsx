@@ -7,7 +7,7 @@ import Spinner from '../components/Spinner';
 import PostCard from '../posts/PostCard';
 import { useWindowSize } from '../lib/useWindowSize';
 
-export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup, onViewProject, savedPostIds = new Set(), onSaveToggled, unreadNotifs = 0, onOpenNotifs, onCompose }) {
+export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup, onViewProject, onEditPost, savedPostIds = new Set(), onSaveToggled, unreadNotifs = 0, onOpenNotifs, onCompose }) {
   const { isMobile } = useWindowSize();
   const [posts,setPosts]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -515,7 +515,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                     <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                   </div>
                 )
-              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} onViewProject={onViewProject} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
+              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} onViewProject={onViewProject} onEditPost={onEditPost} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
             </div>
             {!isMobile && (
               <div>

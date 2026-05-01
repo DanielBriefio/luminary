@@ -6,6 +6,7 @@ import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import CreateProjectModal from './CreateProjectModal';
 import ProjectScreen from './ProjectScreen';
+import ProjectEditModal from './ProjectEditModal';
 import TemplateGallery from './TemplateGallery';
 import SaveAsTemplateModal from './SaveAsTemplateModal';
 
@@ -52,7 +53,7 @@ async function fetchLastActivity(projectList) {
   return activity;
 }
 
-export default function ProjectsScreen({ user }) {
+export default function ProjectsScreen({ user, onEditPost }) {
   const [projects,              setProjects]              = useState([]);
   const [archivedProjects,      setArchivedProjects]      = useState([]);
   const [showArchived,          setShowArchived]          = useState(false);
@@ -65,6 +66,7 @@ export default function ProjectsScreen({ user }) {
   const [unreadCounts,          setUnreadCounts]          = useState({});
   const [lastActivityMap,       setLastActivityMap]       = useState({});
   const [saveAsTemplateProject, setSaveAsTemplateProject] = useState(null);
+  const [editingProject,        setEditingProject]        = useState(null);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -118,6 +120,7 @@ export default function ProjectsScreen({ user }) {
         projectId={activeProject}
         user={user}
         onBack={() => { setActiveProject(null); fetchProjects(); }}
+        onEditPost={onEditPost}
       />
     );
   }
@@ -162,6 +165,14 @@ export default function ProjectsScreen({ user }) {
         />
       )}
 
+      {editingProject && (
+        <ProjectEditModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onSaved={() => { setEditingProject(null); fetchProjects(); }}
+        />
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24 }}>Projects</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -195,6 +206,7 @@ export default function ProjectsScreen({ user }) {
                   onTogglePin={togglePin}
                   onArchive={archiveProject}
                   onSaveAsTemplate={proj => setSaveAsTemplateProject(proj)}
+                  onEdit={proj => setEditingProject(proj)}
                   unreadCount={unreadCounts[p.id] || 0}
                   lastActivity={lastActivityMap[p.id] || null}
                   isOwner={true}
@@ -237,7 +249,7 @@ export default function ProjectsScreen({ user }) {
   );
 }
 
-function ProjectBadgeCard({ project, onClick, onTogglePin, onArchive, onSaveAsTemplate, unreadCount, lastActivity, isOwner }) {
+function ProjectBadgeCard({ project, onClick, onTogglePin, onArchive, onSaveAsTemplate, onEdit, unreadCount, lastActivity, isOwner }) {
   const [showMenu, setShowMenu] = useState(false);
   const nudgeKey = `luminary_project_nudge_${project.id}`;
   const [nudgeDismissed, setNudgeDismissed] = useState(() => {
@@ -303,6 +315,9 @@ function ProjectBadgeCard({ project, onClick, onTogglePin, onArchive, onSaveAsTe
                         borderRadius: 10, zIndex: 10, boxShadow: '0 4px 20px rgba(0,0,0,.12)',
                         border: `1px solid ${T.bdr}`, minWidth: 160, overflow: 'hidden',
                       }}>
+                        <button onClick={() => { onEdit(project); setShowMenu(false); }} style={{ ...menuBtnStyle, color: T.v, fontWeight: 600 }}>
+                          ✎ Edit project
+                        </button>
                         <button onClick={() => { onTogglePin(project); setShowMenu(false); }} style={menuBtnStyle}>
                           {project.is_pinned ? '📌 Unpin' : '📌 Pin to top'}
                         </button>

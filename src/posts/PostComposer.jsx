@@ -131,11 +131,16 @@ export default function PostComposer({
   context = { kind: 'feed' },
   user, profile, setProfile,
   onPublished, onCancel,
+  editPost = null,
+    // When set, the composer pre-fills from this post and saves with
+    // UPDATE instead of INSERT. Currently used for deep-dive edits from
+    // the post menu — non-deep-dive edits still happen inline in PostCard.
 }) {
   const { isMobile } = useWindowSize();
   const ctx = context.kind || 'feed';
-  const [postType,setPostType]           = useState('text');
-  const [content,setContent]             = useState('');
+  const isEditMode = !!editPost;
+  const [postType,setPostType]           = useState(editPost?.post_type || 'text');
+  const [content,setContent]             = useState(editPost?.content || '');
 
   const [composerPrompt] = useState(() => {
     const prompts = COMPOSER_PROMPTS[profile?.work_mode || 'researcher'];
@@ -143,13 +148,13 @@ export default function PostComposer({
   });
 
   // Paper fields
-  const [paperTitle,setPaperTitle]       = useState('');
-  const [paperJournal,setPaperJournal]   = useState('');
-  const [paperDoi,setPaperDoi]           = useState('');
-  const [paperAbstract,setPaperAbstract] = useState('');
-  const [paperAuthors,setPaperAuthors]   = useState('');
-  const [paperYear,setPaperYear]         = useState('');
-  const [paperCitation,setPaperCitation] = useState('');
+  const [paperTitle,setPaperTitle]       = useState(editPost?.paper_title    || '');
+  const [paperJournal,setPaperJournal]   = useState(editPost?.paper_journal  || '');
+  const [paperDoi,setPaperDoi]           = useState(editPost?.paper_doi      || '');
+  const [paperAbstract,setPaperAbstract] = useState(editPost?.paper_abstract || '');
+  const [paperAuthors,setPaperAuthors]   = useState(editPost?.paper_authors  || '');
+  const [paperYear,setPaperYear]         = useState(editPost?.paper_year     || '');
+  const [paperCitation,setPaperCitation] = useState(editPost?.paper_citation || '');
   const [doiFetching,setDoiFetching]     = useState(false);
   const [doiFetched,setDoiFetched]       = useState(false);
   const [paperInputMode,setPaperInputMode] = useState('search');
@@ -178,16 +183,19 @@ export default function PostComposer({
   const [uploadCategory,setUploadCategory] = useState('');
   const [uploading,setUploading]         = useState(false);
 
-  const [isDeepDive, setIsDeepDive]       = useState(false);
-  const [deepDiveTitle,    setDeepDiveTitle]    = useState('');
-  const [coverUrl,         setCoverUrl]         = useState('');
+  const [isDeepDive, setIsDeepDive]       = useState(!!editPost?.is_deep_dive);
+  const [deepDiveTitle,    setDeepDiveTitle]    = useState(editPost?.deep_dive_title || '');
+  const [coverUrl,         setCoverUrl]         = useState(editPost?.deep_dive_cover_url || '');
   const [coverPath,        setCoverPath]        = useState('');
   const [coverFileMeta,    setCoverFileMeta]    = useState(null);
   const [coverUploading,   setCoverUploading]   = useState(false);
-  const [coverY,           setCoverY]           = useState(50);
+  const [coverY,           setCoverY]           = useState(() => {
+    const m = (editPost?.deep_dive_cover_position || '').match(/(\d+)\s*%\s*$/);
+    return m ? parseInt(m[1], 10) : 50;
+  });
   const coverInputRef = useRef(null);
-  const [tags,setTags]                   = useState('');
-  const [visibility,setVisibility]       = useState(() => defaultVisibility(context));
+  const [tags,setTags]                   = useState(() => (editPost?.tags || []).join(', '));
+  const [visibility,setVisibility]       = useState(() => editPost?.visibility || defaultVisibility(context));
   const [loading,setLoading]             = useState(false);
   const [success,setSuccess]             = useState(false);
   const [error,setError]                 = useState('');
@@ -431,7 +439,6 @@ export default function PostComposer({
     const manualTags = tags.split(/[\s,]+/).filter(t=>t.trim()).map(t=>t.startsWith('#')?t:`#${t}`);
 
     const payload = {
-      user_id:       user.id,
       content:       content.trim(),
       post_type:     resolvedPostType,
       paper_title:   paperTitle.trim(),
@@ -441,28 +448,47 @@ export default function PostComposer({
       paper_authors: paperAuthors.trim(),
       paper_year:     paperYear.trim(),
       paper_citation: paperCitation.trim(),
-      image_url:      fileUrl,
-      file_type:      uploadCategory,
-      file_name:      uploadFile?.name || '',
       tags:           manualTags.slice(0, 10),
-      tier1:          '',
-      tier2:          [],
       visibility,
       is_deep_dive:   isDeepDive,
       deep_dive_title:          isDeepDive ? deepDiveTitle.trim() : '',
       deep_dive_cover_url:      isDeepDive ? coverUrl : '',
       deep_dive_cover_position: (isDeepDive && coverUrl) ? `50% ${Math.round(coverY)}%` : '50% 50%',
-      context_kind: ctx,
-      context_id:   ctx === 'feed' ? null
-                   : ctx === 'group'   ? context.groupId
-                   : ctx === 'project' ? context.projectId
-                   : null,
     };
 
-    const { data: newPost, error: insertErr } = await supabase.from('posts').insert(payload)
-      .select('id').single();
+    // Edit mode: don't touch user_id / context_* / file_*. Only touch
+    // image_url/file_name/file_type when the user uploaded a new file.
+    if (!isEditMode) {
+      payload.user_id      = user.id;
+      payload.image_url    = fileUrl;
+      payload.file_type    = uploadCategory;
+      payload.file_name    = uploadFile?.name || '';
+      payload.tier1        = '';
+      payload.tier2        = [];
+      payload.context_kind = ctx;
+      payload.context_id   = ctx === 'feed' ? null
+                            : ctx === 'group'   ? context.groupId
+                            : ctx === 'project' ? context.projectId
+                            : null;
+    } else if (uploadFile) {
+      // Edit + new attachment uploaded → replace existing
+      payload.image_url = fileUrl;
+      payload.file_type = uploadCategory;
+      payload.file_name = uploadFile?.name || '';
+    }
+
+    let newPost, mutErr;
+    if (isEditMode) {
+      const r = await supabase.from('posts').update(payload).eq('id', editPost.id).select('id').single();
+      newPost = r.data;
+      mutErr  = r.error;
+    } else {
+      const r = await supabase.from('posts').insert(payload).select('id').single();
+      newPost = r.data;
+      mutErr  = r.error;
+    }
     setLoading(false);
-    if(insertErr) { setError(insertErr.message); return; }
+    if(mutErr) { setError(mutErr.message); return; }
 
     // Storage tracking — every post upload uses source_kind='post'
     if (uploadFile && uploadedPath && newPost?.id) {
@@ -504,8 +530,8 @@ export default function PostComposer({
       pendingImagesRef.current = [];
     }
 
-    // Lumens — +5 for post creation
-    if (LUMENS_ENABLED && newPost?.id) {
+    // Lumens — +5 for post creation. Skip in edit mode (re-saving doesn't earn).
+    if (!isEditMode && LUMENS_ENABLED && newPost?.id) {
       try {
         const prevLumens = profile?.lumens_current_period || 0;
         supabase.rpc('award_lumens', {
@@ -552,7 +578,8 @@ export default function PostComposer({
       } catch {}
     }
 
-    if (AUTO_TAG_ENABLED && newPost?.id) {
+    // Auto-tag only on creation — preserve user's manual tag edits.
+    if (!isEditMode && AUTO_TAG_ENABLED && newPost?.id) {
       smartAutoTag({
         postId:        newPost.id,
         postType:      resolvedPostType,
@@ -565,20 +592,20 @@ export default function PostComposer({
       }).catch(console.warn);
     }
 
-    // Group post: notify members
-    if (ctx === 'group' && newPost?.id && context.groupId) {
+    // Group post: notify members — only on initial create, not edits.
+    if (!isEditMode && ctx === 'group' && newPost?.id && context.groupId) {
       notifyGroupMembers(context.groupId, context.groupName, user.id, newPost.id).catch(() => {});
     }
 
-    capture('post_created', {
+    capture(isEditMode ? 'post_edited' : 'post_created', {
       post_type: resolvedPostType,
       has_tags:  tags.trim().length > 0,
       context_kind: ctx,
     });
-    if (resolvedPostType === 'paper') capture('paper_shared', { has_doi: !!paperDoi.trim(), context_kind: ctx });
+    if (!isEditMode && resolvedPostType === 'paper') capture('paper_shared', { has_doi: !!paperDoi.trim(), context_kind: ctx });
 
     setSuccess(true);
-    setContent(''); resetDoi(); clearAttachment(); setTags('');
+    if (!isEditMode) { setContent(''); resetDoi(); clearAttachment(); setTags(''); }
     setTimeout(() => { setSuccess(false); onPublished?.(newPost); }, 1500);
   };
 
@@ -644,7 +671,7 @@ export default function PostComposer({
           </div>
         )}
 
-        {success && <div style={{background:T.gr2,border:`1px solid ${T.gr}`,borderRadius:10,padding:"10px 16px",marginBottom:16,color:T.gr,fontWeight:700}}>✅ Published!</div>}
+        {success && <div style={{background:T.gr2,border:`1px solid ${T.gr}`,borderRadius:10,padding:"10px 16px",marginBottom:16,color:T.gr,fontWeight:700}}>{isEditMode ? '✅ Saved!' : '✅ Published!'}</div>}
         {error   && <div style={{background:T.ro2,border:`1px solid ${T.ro}`,borderRadius:10,padding:"10px 16px",marginBottom:16,color:T.ro,fontWeight:600}}>⚠️ {error}</div>}
 
         {/* Post type selector */}
@@ -1062,7 +1089,7 @@ export default function PostComposer({
             {onCancel && <Btn onClick={onCancel}>Cancel</Btn>}
             <Btn onClick={()=>{setContent('');setError('');clearAttachment();}}>Clear</Btn>
             <Btn variant="s" onClick={publish} disabled={loading||uploading} style={{padding:"9px 24px",fontSize:13}}>
-              {uploading?"Uploading...":loading?"Publishing...":"Publish →"}
+              {uploading?"Uploading...":loading?(isEditMode?"Saving...":"Publishing..."):(isEditMode?"Save changes":"Publish →")}
             </Btn>
           </div>
         </div>

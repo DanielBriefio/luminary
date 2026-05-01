@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import PostCard from '../posts/PostCard';
 import PostComposer from '../posts/PostComposer';
 
-export default function ProjectFeed({ project, user, profile, setProfile, myRole, activeFolderId, folders, onViewPaper, onViewGroup, onViewProject, savedPostIds = new Set(), onSaveToggled }) {
+export default function ProjectFeed({ project, user, profile, setProfile, myRole, activeFolderId, folders, onViewPaper, onViewGroup, onViewProject, onEditPost, savedPostIds = new Set(), onSaveToggled }) {
   const [posts,       setPosts]       = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [showCompose, setShowCompose] = useState(false);
@@ -127,6 +127,7 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
                 onViewPaper={onViewPaper}
                 onViewGroup={onViewGroup}
                 onViewProject={onViewProject}
+                onEditPost={onEditPost}
                 isSaved={savedPostIds.has(p.id)}
                 onSaveToggled={onSaveToggled}
               />

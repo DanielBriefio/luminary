@@ -119,7 +119,7 @@ function GranularTags({ tags, onTagClick }) {
       {visible.map(tag => (
         <span key={tag} onClick={() => onTagClick && onTagClick(tag)}
           style={{fontSize:10, color:T.mu, padding:'1px 7px', borderRadius:20, background:T.s2, border:`1px solid ${T.bdr}`, cursor:onTagClick?'pointer':'default'}}>
-          #{tag}
+          {tag}
         </span>
       ))}
       {!expanded && hidden > 0 && (
@@ -135,7 +135,7 @@ function GranularTags({ tags, onTagClick }) {
 export default function PostCard({
   post, currentUserId, currentProfile,
   onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails,
-  onTagClick, onViewGroup, onViewProject,
+  onTagClick, onViewGroup, onViewProject, onEditPost,
   isSaved = false, onSaveToggled,
 }) {
   const { isMobile } = useWindowSize();
@@ -572,7 +572,13 @@ export default function PostCard({
                   <div style={{position:"absolute",right:0,top:32,background:T.w,border:`1px solid ${T.bdr}`,borderRadius:11,boxShadow:"0 4px 20px rgba(0,0,0,.12)",zIndex:10,minWidth:160,overflow:"hidden"}}>
                     {!confirmDelete?(
                       <>
-                        <button onClick={()=>{setEditing(true);setMenuOpen(false);}} style={menuItemStyle(T.text)}>✏️ Edit post</button>
+                        <button onClick={()=>{
+                          // Deep dives open the full composer (cover, image insert, title, etc.).
+                          // Regular posts use the inline editor.
+                          if (post.is_deep_dive && onEditPost) { onEditPost(post); }
+                          else                                  { setEditing(true); }
+                          setMenuOpen(false);
+                        }} style={menuItemStyle(T.text)}>✏️ Edit post</button>
                         <button onClick={()=>{setEditingTags(true);setMenuOpen(false);}} style={menuItemStyle(T.text)}>🏷️ Edit tags</button>
                         <div style={{height:1,background:T.bdr,margin:"0 10px"}}/>
                         <button onClick={()=>setConfirmDelete(true)} style={menuItemStyle(T.ro)}>🗑️ Delete post</button>

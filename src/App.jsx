@@ -117,6 +117,9 @@ export default function App() {
   const [invitesRemaining,setInvitesRemaining]=useState(0);
   const [copiedCode,setCopiedCode]=useState(null);
   const [showSettings,setShowSettings]=useState(false);
+  const [editingPost, setEditingPost] = useState(null);
+    // When set, the 'post' screen mounts PostComposer in edit mode for this
+    // post (currently used for deep-dive edits triggered from PostCard menu).
   const [libraryView, setLibraryView] = useState('library'); // 'library' | 'bookmarks' | 'files'
   const [activeGroupId,setActiveGroupId]=useState(null);
   const [groupUnreadCount,setGroupUnreadCount]=useState(0);
@@ -574,18 +577,24 @@ export default function App() {
   }
 
   const screens={
-    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} unreadNotifs={unreadNotifs} onOpenNotifs={()=>{ setUnreadNotifs(0); setScreen('notifs'); capturePageview('notifs'); }} onCompose={()=>setScreen('post')}/>,
+    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} unreadNotifs={unreadNotifs} onOpenNotifs={()=>{ setUnreadNotifs(0); setScreen('notifs'); capturePageview('notifs'); }} onCompose={()=>setScreen('post')} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }}/>,
     explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
     library:      <LibraryScreen key={`lib-${libraryView}`} user={user} profile={profile} onSaveToggled={fetchSavedIds} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} onNavigateToPost={()=>setScreen('post')} defaultView={libraryView}/>,
     groups: activeGroupId
-      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')}/>
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
-    projects: <ProjectsScreen user={user}/>,
+    projects: <ProjectsScreen user={user} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
-    post:         <PostComposer context={{ kind: 'feed' }} user={user} profile={profile} setProfile={setProfile} onPublished={()=>setScreen('feed')} onCancel={()=>setScreen('feed')}/>,
+    post:         <PostComposer
+                    context={{ kind: 'feed' }}
+                    editPost={editingPost}
+                    user={user} profile={profile} setProfile={setProfile}
+                    onPublished={()=>{ setEditingPost(null); setScreen('feed'); }}
+                    onCancel={()=>{ setEditingPost(null); setScreen('feed'); }}
+                  />,
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
     lumens:       <LumensScreen supabase={supabase} user={user} profile={profile} onBack={()=>setScreen('feed')}/>,
