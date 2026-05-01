@@ -56,9 +56,9 @@ export default function CreateProjectModal({
     }
 
     if (starterPosts.length) {
-      // Phase 15: project posts live in unified posts table.
-      // is_starter / is_sticky / folder_id no longer exist on the unified
-      // schema; starter posts are plain text posts with context_kind='project'.
+      // Resolve each community-template starter post's folder name to a
+      // real folder_id via folderIdMap so the template's folder structure
+      // survives. sp.folder is the portable name from the saved template.
       await supabase.from('posts').insert(
         starterPosts.map(sp => ({
           context_kind: 'project',
@@ -67,6 +67,7 @@ export default function CreateProjectModal({
           post_type:    'text',
           content:      sp.content || '',
           visibility:   'members',
+          folder_id:    sp.folder ? folderIdMap[sp.folder] || null : null,
         }))
       );
     }
