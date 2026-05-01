@@ -9,8 +9,10 @@
 -- SET NULL — deleting a folder unscopes the posts (they fall back to
 -- "All posts" view), it doesn't lose them.
 --
--- posts_with_meta uses `select p.*` so the new column flows through
--- the view automatically; no DROP+CREATE needed.
+-- posts_with_meta uses `select p.*` BUT view column lists are frozen
+-- at creation time — adding a column to posts doesn't propagate. The
+-- view must be DROP+CREATE'd. See migration_phase15_folder_id_view_refresh.sql
+-- (extracted into its own file for users who already applied this one).
 
 alter table posts
   add column if not exists folder_id uuid references project_folders(id) on delete set null;
