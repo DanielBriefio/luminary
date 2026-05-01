@@ -5,6 +5,7 @@ import { useWindowSize } from '../lib/useWindowSize';
 import Spinner from '../components/Spinner';
 import ProjectFeed from './ProjectFeed';
 import ProjectMembers from './ProjectMembers';
+import ProjectEditModal from './ProjectEditModal';
 
 function SidebarItem({ label, active, onClick, onDelete }) {
   return (
@@ -40,6 +41,7 @@ export default function ProjectScreen({ projectId, user, profile, setProfile, on
   const [loading,        setLoading]        = useState(true);
   const [confirmDel,     setConfirmDel]     = useState(false);
   const [deleting,       setDeleting]       = useState(false);
+  const [editing,        setEditing]        = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -233,12 +235,20 @@ export default function ProjectScreen({ projectId, user, profile, setProfile, on
         </div>
 
         {renderContent()}
+
+        {editing && (
+          <ProjectEditModal
+            project={project}
+            onClose={() => setEditing(false)}
+            onSaved={updated => setProject(p => ({ ...p, ...updated }))}
+          />
+        )}
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
 
       {/* Sidebar */}
       <div style={{
@@ -350,6 +360,10 @@ export default function ProjectScreen({ projectId, user, profile, setProfile, on
         <div style={{ marginTop: 'auto', padding: '10px 14px', borderTop: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {isOwner && !confirmDel && (
             <>
+              <button onClick={() => setEditing(true)} style={{
+                fontSize: 12, color: T.v, border: 'none', background: 'transparent',
+                cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: '3px 0', fontWeight: 600,
+              }}>✎ Edit project</button>
               <button onClick={archiveProject} style={{
                 fontSize: 12, color: T.mu, border: 'none', background: 'transparent',
                 cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: '3px 0',
@@ -381,6 +395,14 @@ export default function ProjectScreen({ projectId, user, profile, setProfile, on
       </div>
 
       {renderContent()}
+
+      {editing && (
+        <ProjectEditModal
+          project={project}
+          onClose={() => setEditing(false)}
+          onSaved={updated => setProject(p => ({ ...p, ...updated }))}
+        />
+      )}
     </div>
   );
 }
