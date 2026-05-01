@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-04-28 (rev 23)_
+_Last updated: 2026-05-01 (rev 24)_
 
 ## What exists and works
 
@@ -16,7 +16,7 @@ _Last updated: 2026-04-28 (rev 23)_
 - **GroupsScreen (overview)**: tabs `My Groups | Discover` over a 2-column grid of `CompactGroupCard` (no avatar, no chips — just name, topic, member count, 🌐/🔒 indicator, plus join action on Discover). Desktop unchanged (full-width tabs + sectioned Discover, see Groups below).
 - **LibraryScreen**: 220px folder sidebar hidden on mobile; header gets a "≡ &lt;current folder&gt;" button that slides in the existing `LibraryFolderSidebar` as a 85%-width drawer. Selecting a folder closes the drawer. Static sidebar still on desktop.
 - **PublicPostPage**: title size shrinks (42 → 30), padding tightens (32/24 → 20/16) on mobile.
-- **NewPostScreen**: Deep Dive toggle hidden on mobile (long-form composition isn't a phone use-case); composer otherwise unchanged.
+- **PostComposer**: Deep Dive toggle hidden on mobile (long-form composition isn't a phone use-case); composer otherwise unchanged.
 - **FeedScreen filter bar**: tighter padding + gap on mobile; mode pills horizontal-scroll, Sort dropdown hidden, Filter button stays.
 - **UserProfileScreen**: shorter banner (120 → 86), tighter padding, stats grid collapses to 2 cols when more than 2 stats.
 - **MessagesScreen**: list-vs-thread two-panel collapses to single panel on mobile (already shipped earlier).
@@ -38,20 +38,23 @@ _Last updated: 2026-04-28 (rev 23)_
 - Sort modes (Personalised / Chronological) and mode pills (All / My Field / Researcher) on a single header row alongside the Filter button
 - All / Papers content-type tabs live **inside** the Filter panel (not as a separate row) and are tracked separately from tier filters: client-side post filter only fires when tier filters are set, so `Papers` is server-side only
 - Bell icon (with unread badge) sits next to the reload icon at the top of the feed; reload icon enlarged
-- Compose card at top: dashed-border "Share your thoughts…" button that opens NewPostScreen
+- Compose card at top: dashed-border "Share your thoughts…" button that opens PostComposer (`src/posts/PostComposer.jsx`)
 - Post types: `text` (rich text, with live link preview) and `paper` (DOI or EPMC lookup); file attachments (image/video/audio/PDF/CSV/file) can be added to text posts and set the stored `post_type` to the upload category
 - Like, comment (threaded, inline), edit, delete, repost
+- **Likes-list modal** (`src/posts/LikersModal.jsx`): clicking the like count on any post opens a paginated list of users who liked it (avatar, name, work-mode chip, Follow button). Loads 50 at a time via `get_post_likers(p_post_id, p_limit, p_offset)`. Visible to anyone who can see the post.
 - Quick-reply input on PostCard hides whenever the inline comment thread is open — no double-input UI
-- **Long-post truncation**: text posts > 400 chars clip to ~6 lines with a gradient fade and inline Read more / Show less. Paper posts and admin posts are never truncated. Same behaviour in `GroupPostCard` and `ProjectPostCard`.
+- **Long-post truncation**: text posts > 400 chars clip to ~6 lines with a gradient fade and inline Read more / Show less. Paper posts and admin posts are never truncated. Implemented once in the unified `src/posts/PostCard.jsx` for all three contexts (feed, group, project).
 - **Deep-dive article card** (PostCard only): when `is_deep_dive` and content has ≥50 words, the body is replaced with a compact preview — optional cover image (full-width 200px, `object-fit:cover`, `object-position` from `deep_dive_cover_position` so the author's chosen crop is honoured, rounded top corners), explicit `deep_dive_title` (or first-line extraction for old posts), ~325-char preview, read-time, and "Continue reading →" linking to `/s/:postId`.
 - AI auto-tagging via `auto-tag` edge function; manual hashtags; visibility (Everyone / Followers only)
 - Right sidebar: Paper of the Week (config-driven — `most_discussed` total posts, `most_commented` total comments, or admin manual DOI pick; uses `get_paper_stats_public()` RPC; min engagement filter ≥2 posts OR ≥1 comment) + Founding Fellows banner
 - `FeedTipCard` / Luminary Board: shows admin-configured board message (title, message, optional CTA) when `admin_config.luminary_board.enabled = true`; falls back to cycling `FEED_TIPS` from constants.js when board is off or unconfigured
 
-### Rich-text editor (NewPostScreen, PostCard edit, ComposeTab, project + group composers)
+### Rich-text editor (PostComposer for create + edit, PostCard inline edit, ComposeTab)
 - Shared component `RichTextEditor`. Default mode: bold / italic / underline / lists / Style dropdown (Paragraph / Heading / Subheading) / link
-- **Deep-dive mode** (`isDeepDive=true`): WYSIWYG body matching the published `PublicPostPage` typography (Source Serif 4 20px / 1.7, h1-h4 + blockquote + img + iframe), Style dropdown extended to H1-H4, plus ❝ blockquote, ─ divider, 📄 Cite, 🖼️ image, ▶ video. **Sticky toolbar** stays pinned to the top of the viewport while scrolling long articles. NewPostScreen also surfaces a serif **Title input** + **Cover image uploader with drag-to-reposition** above the editor when deep-dive is on (saved to `posts.deep_dive_title` / `posts.deep_dive_cover_url` / `posts.deep_dive_cover_position`). The 200px-tall reposition preview matches the PostCard feed crop, so the author can pick exactly what's visible there.
-- **Inline images** (deep-dive): file picker → uploads to `post-files` bucket → inserts `<img>`. Storage tracking handled per the convention: pass `postId` to record immediately, or `onPendingImage` to defer (NewPostScreen flushes via `pendingImagesRef` after the post insert). Cover image follows the same deferred-record flow.
+- **Deep-dive mode** (`isDeepDive=true`): WYSIWYG body matching the published `PublicPostPage` typography (Source Serif 4 20px / 1.7, h1-h4 + blockquote + img + iframe), Style dropdown extended to H1-H4, plus ❝ blockquote, ─ divider, 📄 Cite, 🖼️ image, ▶ video. **Sticky toolbar** with z-index 50 + soft shadow stays pinned at the top of the viewport while scrolling long articles. PostComposer also surfaces a serif **Title input** + **Cover image uploader with drag-to-reposition** above the editor when deep-dive is on (saved to `posts.deep_dive_title` / `posts.deep_dive_cover_url` / `posts.deep_dive_cover_position`). The 200px-tall reposition preview matches the PostCard feed crop, so the author can pick exactly what's visible there.
+- **Inline images** (deep-dive): file picker → uploads to `post-files` bucket → inserts `<img>` (no inline `style` attribute — editor + reader CSS handle layout). Storage tracking handled per the convention: pass `postId` to record immediately, or `onPendingImage` to defer (PostComposer flushes via `pendingImagesRef` after the post insert). Cover image follows the same deferred-record flow.
+- **Inline image resize** (deep-dive): clicking an inline image opens a small floating toolbar with `S | M | L | Full | ✕` buttons. Stores the choice as `data-size="small|medium|large"` on the `<img>` (`full` removes the attribute). The selection toolbar dismisses on outside click, scroll, or Escape. The sanitiser preserves `data-size` on `<img>` only when it's one of the three valid values; reader CSS in PublicPostPage applies `max-width: 33% / 60% / 85%` accordingly. Selecting a new size also strips any leftover inline `style` attribute so the data-size CSS rule wins on render.
+- **Edit deep-dive in composer**: clicking Edit on a deep-dive post in PostCard's ⋯ menu navigates to PostComposer with the post pre-loaded (content, title, cover URL + position, tags, visibility, paper fields). Save runs `UPDATE` instead of `INSERT`; Lumens awarding, group-member notifications, auto-tag, and the inviter +100 reward are all suppressed. Non-deep-dive posts still use the lightweight inline editor in PostCard. Plumbed via an `onEditPost` prop threaded through `FeedScreen` → PostCard, `GroupScreen` → `GroupFeed` → PostCard, and `ProjectsScreen` → `ProjectScreen` → `ProjectFeed` → PostCard.
 - **Video embeds** (deep-dive): YouTube / Vimeo URL → normalised through `toEmbedUrl()` into the canonical `/embed/` form → inserted as a sandboxed `<iframe>` (sanitiser rejects any other iframe src)
 - **DOI cite** (deep-dive): inserts `<sup>(N)</sup>` at cursor + appends a Vancouver-style numbered reference at the bottom; deep-link to `https://doi.org/<doi>`
 - **Pasted HTML** (Word / Docs / web pages): runs through `normalisePastedHtml()` first — converts style-encoded `font-weight`/`font-style`/`text-decoration` spans into `<strong>` / `<em>` / `<u>`, strips `<xml>` blocks, conditional comments, and `o:`/`w:`/`m:`/`v:` namespaced Word elements — then through `sanitiseHtml()` to the allow-list. Bold / italic / headings / lists from Word and Docs survive cleanly.
@@ -73,8 +76,8 @@ _Last updated: 2026-04-28 (rev 23)_
 - **`GroupBadgeCard` business-card upgrade**: when `groups.cover_url` is set, the card renders a 96px banner (object-cover honouring `cover_position`) instead of the gradient strip. Gradient stays as the no-cover fallback.
 - Create public or closed groups (name, description, research_topic)
 - **GroupScreen**: 200px sidebar + Feed / Members / Library / Projects / Profile tabs
-- **GroupFeed**: sticky posts first; post types text/paper; file uploads; auto-tag; notifies all members
-- **GroupPostCard**: like, comment, edit, delete, sticky toggle, repost to public feed
+- **GroupFeed**: queries unified `posts_with_meta` filtered by `context_kind = 'group' and context_id = $groupId`; post types text/paper; file uploads; auto-tag; notifies all members. Uses the same `PostCard` and `PostComposer` as feed/projects.
+- **Group post UX**: like, comment, edit, delete, repost — all from the unified `PostCard`. The legacy `is_sticky` / `is_announcement` UI dropped in Phase 15 (columns no longer in the unified `posts` schema).
 - **GroupMembers**: admin list + member list; promote/demote/remove; join requests with approve/reject; closed groups show JoinRequestPanel; public groups show PublicJoinPanel
 - **GroupLibrary**: Search PMC, DOI, upload, .ris/.bib import, ClinicalTrials.gov search; 3-dot menu (move/remove); "Share this paper"
 - **GroupProjects**: same template gallery + archiving/pinning flow as personal projects (admin/member only)
@@ -150,25 +153,30 @@ _Last updated: 2026-04-28 (rev 23)_
 - **Add options per folder**: Search PMC, Enter DOI, Upload file, Import .ris/.bib, Search ClinicalTrials.gov
 - **ClinicalTrials.gov search** (`LibraryClinicalTrialSearch`): ClinicalTrials.gov API v2, returns study cards for import
 - **LibraryRisImporter**: parse client-side, preview 5 items, folder picker (existing or auto-create "Import YYYY-MM-DD"), bulk insert
-- **LibraryItemCard**: 3-dot menu (rename / move to folder / remove); "Share this paper" → prefills NewPostScreen. Inline rename edits `library_items.title` (Enter saves, Esc cancels) — useful for cryptic filenames after upload.
+- **LibraryItemCard**: 3-dot menu (rename / move to folder / remove); "Share this paper" → prefills PostComposer via `sessionStorage.prefill_paper`. Inline rename edits `library_items.title` (Enter saves, Esc cancels) — useful for cryptic filenames after upload.
 - **Unsorted view**: inline "Move to folder" select per item
 - **Bookmarks main view**: card list filtered by selected folder (or "All"); per-card folder dropdown moves a bookmark; "All bookmarks" view shows each item's current folder name as a tag.
 
 ### Projects
-- **ProjectsScreen**: card grid with unread badge, "Last post X ago", 🟢 Active / ⚪ Quiet indicator; quiet nudge (dismissible, localStorage, 5-day threshold); 📌 on pinned cards; "📦 Archived (N)" collapsed section at bottom
-- **ProjectScreen**: folder sidebar + ProjectFeed; read-only amber banner when archived; archive/unarchive from ··· menu; ProjectMembers tab
-- **ProjectFeed**: updates `last_read_at` on mount; like, comment, sticky on posts
-- **ProjectPostCard**: like, comment, edit, delete, sticky
-- **ProjectMembers**: member list; owner can add from group members or remove
-- **CreateProjectModal**: step 1 = fast-4 template picker + "Browse all" link; step 2 = name + description; handles built-in and community template types
-- **TemplateGallery**: ⭐ Curated tab (filter chips: All/Research/Clinical/Industry/Collaboration) + 👥 Community tab; community empty state; pending templates shown with amber badge to submitter
-- **Built-in templates**: fast-4 (conference, journal_club, weekly_team_meeting, clinical_training) + 7 gallery-only (research_project, grant_application, advisory_board, literature_review, lab_onboarding, product_launch, regulatory_submission)
-- **Community templates**: user-submitted via SaveAsTemplateModal (2-step: metadata + review starter posts); status='pending' until approved via SQL; CommunityTemplateCard shows submitter + 👍 rating
-- **GroupProjects**: same flow in group context (admin/member only)
+- **ProjectsScreen**: card grid with unread badge, "Last post X ago", 🟢 Active / ⚪ Quiet indicator; quiet nudge (dismissible, localStorage, 5-day threshold); 📌 on pinned cards; "📦 Archived (N)" collapsed section at bottom. Each card has a ⋯ menu with `✎ Edit project` / `📌 Pin to top` / `📦 Archive` / `🗂️ Save as template` for owners.
+- **ProjectScreen**: folder sidebar + ProjectFeed; read-only amber banner when archived; archive/unarchive from ⋯ menu; sidebar footer has `✎ Edit project` for owners (same modal as the list ⋯ menu); ProjectMembers tab.
+- **ProjectFeed**: queries unified `posts_with_meta` filtered by `context_kind = 'project' and context_id = $projectId`; updates `last_read_at` on mount; uses the unified `PostCard` and `PostComposer`. Deep dives intentionally available in projects so group-owned projects can host user-guide articles. RLS allows project members AND members of the project's parent group (when `projects.group_id` is set) to read posts.
+- **ProjectEditModal** (`src/projects/ProjectEditModal.jsx`): owner-only modal with name / icon (emoji) / description / accent-color picker. Triggered from the project sidebar footer in ProjectScreen and the ⋯ menus in both ProjectsScreen (personal projects) and GroupProjects (group-owned projects, group admins only). Project cover image is intentionally NOT supported — the schema has `cover_color` only.
+- **ProjectMembers**: member list; owner can add from group members or remove.
+- **CreateProjectModal**: step 1 = fast-4 template picker + "Browse all" link; step 2 = name + description; handles built-in and community template types.
+- **TemplateGallery**: ⭐ Curated tab (filter chips: All/Research/Clinical/Industry/Collaboration) + 👥 Community tab; community empty state; pending templates shown with amber badge to submitter.
+- **Built-in templates**: fast-4 (conference, journal_club, weekly_team_meeting, clinical_training) + 7 gallery-only (research_project, grant_application, advisory_board, literature_review, lab_onboarding, product_launch, regulatory_submission).
+- **Community templates**: user-submitted via SaveAsTemplateModal (2-step: metadata + review starter posts); status='pending' until approved via SQL; CommunityTemplateCard shows submitter + 👍 rating.
+- **GroupProjects** (project list inside a group): same template gallery + archiving/pinning flow as personal projects (admin/member only). `GroupProjectCard` ⋯ menu shows `✎ Edit project` + `📌 Pin to top` for group admins.
 
 ### Admin Panel (`/admin`)
-- Gated via `is_admin = true` on `profiles`; non-admins hit NotFoundScreen
-- Left nav (220px): Overview / Users / Invites / Templates / Content / Interventions / Storage / Inbox / Analytics — all fully implemented
+- Gated via `is_admin = true` on `profiles`; non-admins hit NotFoundScreen. **Phase 14**: a `block_self_admin` BEFORE UPDATE trigger on `profiles` rejects client-side `is_admin` flips — only the dashboard SQL editor / service role (where `auth.uid() IS NULL`) can promote. Closes the hole where a non-admin user could promote themselves via devtools.
+- Left nav (220px): Overview / Users / Waitlist / Invites / Templates / Content / Interventions / Storage / Inbox / Analytics — all fully implemented
+
+**Waitlist** (Phase 14.1, fully implemented):
+- New section showing landing-page waitlist signups: search + priority filter + CSV export ("luminary-waitlist-YYYY-MM-DD.csv")
+- Stat cards: Total / Priority counts
+- Backed by `get_waitlist()` RPC (admin-only); count surfaced on Overview as a 5th stat card via `get_waitlist_count()`
 
 **Invite management** (fully implemented):
 - Full invite code table loaded via `get_invite_codes_with_stats()` RPC
@@ -196,23 +204,27 @@ _Last updated: 2026-04-28 (rev 23)_
 - Overview at-risk alert "Review templates →" links directly to this section
 
 **Content** (fully implemented):
-- Posts tab: paginated table (50/page), search + type/hidden filters, reported posts highlighted amber; Hide/Unhide, Delete, View actions
+- Posts tab: paginated table (50/page), search + type/hidden filters, reported posts highlighted amber, context-kind chip on each row (Feed / Group / Project); Hide/Unhide, Delete, View actions
 - Groups tab: health table (🟢 Active / 🟡 Quiet / 🔴 Dead); member count, posts/week, last active; filter by health
 - Projects tab: same as groups for active projects
-- Moderation tab: reported posts queue with Dismiss / Hide / Delete actions; status filter (pending/dismissed/actioned)
+- Moderation tab: reported posts queue with Dismiss / Hide / Delete actions; status filter (pending/dismissed/actioned). Single `post_reports.post_id` column covers all contexts post-Phase-15.
 
 **Post reporting** (user-facing, fully implemented):
-- Non-owner ··· menu in PostCard and GroupPostCard includes 🚩 Report option
+- Non-owner ⋯ menu in the unified PostCard includes 🚩 Report option (works in feed / group / project)
 - ReportModal: 5 reason options, optional note, duplicate detection
 - Admin report badge on PostCard (visible to admins only)
 - Admin posts (`is_admin_post = true`): violet left border + ✦ FROM LUMINARY TEAM header in PostCard
-- Targeted posts (`target_user_id`): filtered client-side — only the recipient sees them in their feed
+- Targeted posts (`target_user_id`): filtered server-side via RLS — feed posts are gated on `target_user_id is null or target_user_id = auth.uid()`
 
 **Interventions** (fully implemented):
-- **Compose tab**: broadcast / targeted / group post composer; text or paper (DOI lookup via CrossRef); sent as Luminary Team bot via `send_admin_post` RPC
+- **Compose tab**: broadcast / targeted / group post composer; text or paper (DOI lookup via CrossRef); deep-dive support (title + cover URL + image_url); sent as Luminary Team bot via the post-15 `send_admin_post(p_mode, p_content, p_bot_user_id, p_post_type, p_paper_*, p_tags, p_group_id, p_target_user_ids, p_is_deep_dive, p_deep_dive_title, p_deep_dive_cover_url, p_image_url)` RPC. Broadcast → public feed post (visibility=public). Targeted → per-user feed post with `target_user_id` set + `account_deletion_scheduled`-style notification. Group → unified `posts` row with `context_kind='group'` + visibility derived from `groups.is_public`.
 - **Luminary Board tab**: enable/disable + edit the sidebar board card (title, message, optional CTA URL/label); takes effect on next feed load
 - **Paper of Week tab**: algorithm mode (most_discussed or most_commented) or manual DOI pick; saved to `admin_config`
 - **Milestone post tab**: edit the heading/message/CTA labels used in the profile-completion milestone post; affects future milestone posts only
+
+**Storage** (fully implemented):
+- Per-user storage breakdown via `get_admin_storage_usage()` + drill-down via `get_admin_user_storage_files(p_user_id)`. Quota config (default 50 MB) editable from this section.
+- **Danger zone — platform wipe** (Phase 14.1): destructive reset for fresh testing. Type `WIPE PLATFORM` to arm, click 🔥 to fire `admin_wipe_platform()` RPC. Deletes every user except the Luminary Team bot, sweeps tombstoned rows (messages, conversations, comments), wipes bot-authored content while preserving the bot's account + avatar, clears invite codes / waitlist / orcid_pending, nulls `admin_config.updated_by` for non-bot rows; preserves `admin_config` values themselves. Returns `(bucket, path)[]` for the client to sweep storage blobs via `supabase.storage.remove()`.
 
 **Inbox** (fully implemented):
 - Shows all conversations where the Luminary Team bot is a participant
@@ -228,8 +240,8 @@ _Last updated: 2026-04-28 (rev 23)_
 - Account remains hidden from the feed during the grace window — `posts_with_meta` view filters `where pr.deletion_scheduled_at is null`. Profile / group lookups also hide pending-delete users.
 - Recovery: opening any URL while signed in surfaces the modal; the email contains a `?recover_account=1` deep link. `cancel_account_deletion()` RPC clears the timestamp.
 - After 30 days, `purge_deleted_accounts()` (pg_cron daily 03:17 UTC) hard-deletes the account: removes tracked storage blobs, then `auth.users` (cascade does the rest).
-- **What survives the purge** (Phases 12.2 + 12.4): DM threads + every message stay (`conversations.user_id_a/b` and `messages.sender_id` are SET NULL); comments on others' posts stay (`comments` / `group_post_comments` / `project_post_comments` user_id SET NULL). Frontend renders "Deleted user" + greyed avatar across MessagesScreen, PostCard / GroupPostCard / ProjectPostCard comments, and the PublicPostPage CommentsSection. Compose area in MessagesScreen is replaced with a polite "replies aren't possible" banner.
-- **What gets removed** (right-to-be-forgotten): authored posts (text + group + project), profile, library, bookmarks, lumens, likes, reposts, follows, publications, storage blobs.
+- **What survives the purge** (Phases 12.2 + 12.4 + 15): DM threads + every message stay (`conversations.user_id_a/b` and `messages.sender_id` are SET NULL); comments on others' posts stay (unified `comments.user_id` is SET NULL). Frontend renders "Deleted user" + greyed avatar across MessagesScreen, the unified PostCard comments, and the PublicPostPage CommentsSection. Compose area in MessagesScreen is replaced with a polite "replies aren't possible" banner.
+- **What gets removed** (right-to-be-forgotten): authored posts (all contexts — feed, group, project — single unified table), profile, library, bookmarks, lumens, likes, reposts, follows, publications, storage blobs.
 - Email is wired through the existing `send-email-notification` edge function. `account_deletion_scheduled` is a critical type — it bypasses the master `email_notifications` toggle so the user always sees the recovery option.
 
 ### Storage management
@@ -237,7 +249,7 @@ _Last updated: 2026-04-28 (rev 23)_
 - **Library → Files** (`LibraryFilesView`, surfaced as the third sidebar section in LibraryScreen alongside Bookmarks and Library Folders): full-width manager grouped by source kind (Post attachments / Group post attachments / Library files / Profile photo / Profile cover / Group avatars / Group covers / Other). Totals strip + per-bucket chips at the top. Each row shows the linked context (paper title or content excerpt / library title / group name), size, date, a `View ↗` deep link (`/s/:postId` for posts, `/g/:slug` for group items), and a Delete button where deletable. Mobile collapses the four-column row into two — name+meta+size on the left, View+Delete on the right.
 - **Account Settings → Storage**: violet total card with bytes + per-bucket chips and an `Open Library → Files` button that navigates to LibraryScreen with `defaultView='files'`. Lightweight summary inside the drawer; the actual manager lives in Library.
 - **Settings → Library navigation glue** (App.jsx): a `libraryView` state ('library' | 'bookmarks' | 'files') feeds LibraryScreen's `defaultView` prop. The Settings button sets it to 'files' before `setScreen('library')`. A `useEffect` resets it to 'library' whenever the user navigates away, so the next non-Settings entry into Library lands on the default Library Folders view. The LibraryScreen instance carries a `key={lib-${libraryView}}` to remount cleanly when the view changes via deep link.
-- **Soft-delete attachments**: deleting a post / group post attachment sets `file_deleted_at = now()` on the row + nulls `image_url` / `file_name` / `file_type`. PostCard / GroupPostCard / ProjectPostCard / PublicPostPage render `📎 File removed by author` placeholder; the post body stays. Library deletions remove the `library_items` row entirely. Avatars, profile covers, and group images cannot be deleted — only replaced via the regular upload flow.
+- **Soft-delete attachments**: deleting a post attachment (any context — feed, group, project) sets `file_deleted_at = now()` on the unified `posts` row + nulls `image_url` / `file_name` / `file_type`. The unified PostCard / PublicPostPage render a `📎 File removed by author` placeholder; the post body stays. Library deletions remove the `library_items` row entirely. Avatars, profile covers, and group images cannot be deleted — only replaced via the regular upload flow. (Post-Phase-15 only `source_kind='post'` is used for any post upload — the legacy `'group_post'` kind is dead code.)
 - **Deep-dive cover delete**: `delete_user_file` detects whether the file path matches `posts.image_url` or `posts.deep_dive_cover_url` and updates the right column. Cover deletes clear `deep_dive_cover_url` + reset `deep_dive_cover_position` without setting `file_deleted_at` (the rest of the article stays intact). Inline images embedded in the deep-dive content HTML are not stripped — the storage blob delete leaves a broken-image icon and the user must edit the post via the composer to remove them cleanly.
 - **Replace-on-upload orphan cleanup**: avatar / profile cover / group avatar / group cover uploads use the file's actual extension in the path (`<id>/avatar.<ext>`), so a `.jpg → .png` swap writes to a different path and would otherwise leave the old blob + tracking row behind. After every record_storage_file call at the four upload sites, the client calls `cleanup_replaced_storage_files(p_source_kind, p_source_id, p_keep_path)` to delete the orphan rows and sweeps the matching storage blobs via `supabase.storage.remove()`.
 - **Admin Storage section** (`/admin → Storage`): global total, per-bucket totals, sortable per-user roll-up. Click any user row to expand; lazy-fetches that user's enriched file list via `get_admin_user_storage_files(p_user_id)` and renders inline. Read-only — admins moderate via existing tools (hide / delete post).
@@ -248,7 +260,7 @@ _Last updated: 2026-04-28 (rev 23)_
 ### Lumens / Gamification
 - **Lumens** are points awarded for contributing to the community. Live system, gated behind `LUMENS_ENABLED` feature flag in constants.js.
 - Four tiers (computed from `lumens_current_period`): **Catalyst** 0–499 / **Pioneer** 500–1999 / **Beacon** 2000–4999 / **Luminary** 5000+. Only the Luminary tier carries any visible decoration: a 2px gold (#C9A961) ring on the avatar (via the optional `tier` prop on `Av`).
-- **Earning hooks** (frontend, fire-and-forget RPC, all `try/catch`-wrapped): `post_created` +5 (NewPostScreen), `comment_posted` +2 (PostCard, commenter), `comment_received` +10 (PostCard, post owner — deduped to first comment per commenter via `lumen_transactions` lookup), `post_reposted` +20 (PostCard, post owner — skip self), `discussion_threshold` +50 (PostCard, post owner when distinct commenter count first hits 3, deduped), `invited_user_active` +100 (NewPostScreen, on inviter's first post — looks up `invite_codes.created_by`)
+- **Earning hooks** (frontend, fire-and-forget RPC via `.then(() => {}, () => {})`): `post_created` +5 (PostComposer, suppressed in edit mode), `comment_posted` +2 (PostCard, commenter), `comment_received` +10 (PostCard, post owner — deduped to first comment per commenter via `lumen_transactions` lookup), `post_reposted` +20 (PostCard, post owner — skip self), `discussion_threshold` +50 (PostCard, post owner when distinct commenter count first hits 3, deduped), `invited_user_active` +100 (PostComposer, on inviter's first post only — looks up `invite_codes.created_by`)
 - **Sidebar widget**: Lumens count + tier name merged into the profile box (avatar + first name + tier line); top bar removed entirely. Settings gear moved to the sidebar header next to the QR icon.
 - **LumensScreen** (`screen === 'lumens'`): tier hero card with progress bar to next tier, "Recent earnings" list (timestamps include date+time, post excerpts hydrated from `tx.meta.post_id`), tier ladder, and earning rules table.
 - **Cross-user sync**: `award_lumens` runs server-side, so App.jsx subscribes to a realtime UPDATE on the user's own `profiles` row to keep the sidebar count in sync. Optimistic `setProfile` bump applied locally for snappier UX.
@@ -276,7 +288,7 @@ _Last updated: 2026-04-28 (rev 23)_
 
 ## Known gaps / not yet built
 
-- **Mobile layout (in-app)**: Tier-1 screens have been adapted (Feed, NewPostScreen, PublicPostPage, ProfileScreen, UserProfileScreen, MessagesScreen, GroupScreen, ProjectScreen, GroupsScreen, LibraryScreen — including the new Files view). Still desktop-only: NetworkScreen detail views, the Admin Panel (deferred — admin-on-phone is rare), LumensScreen.
+- **Mobile layout (in-app)**: Tier-1 screens have been adapted (Feed, PostComposer, PublicPostPage, ProfileScreen, UserProfileScreen, MessagesScreen, GroupScreen, ProjectScreen, GroupsScreen, LibraryScreen — including the new Files view). Still desktop-only: NetworkScreen detail views, the Admin Panel (deferred — admin-on-phone is rare), LumensScreen, ProjectEditModal trigger (intentional — parity with GroupProfile which is also desktop-edit-only).
 - **Push notifications / email digests**: Transactional emails ship (Resend, six event types + welcome). No push, no weekly digest.
 - **Admin Inbox** is fully implemented but not in the left nav — reachable only via direct `section` state.
 - **PWA / offline**: Not configured.
@@ -287,10 +299,6 @@ _Last updated: 2026-04-28 (rev 23)_
 
 ## Pending migrations (not yet run in production)
 
-- **`migration_storage_replace_cleanup.sql`**: adds `cleanup_replaced_storage_files(source_kind, source_id, keep_path)` for orphan sweeps when avatars/covers are replaced with a different-extension upload, and extends `delete_user_file` so deep-dive cover deletes clear `posts.deep_dive_cover_url` + `deep_dive_cover_position` instead of `image_url`.
-- **`migration_storage_quotas.sql`**: seeds `admin_config.storage_quota_mb = 50` (admin-editable via `/admin → Storage`) and adds `get_storage_quota_mb()` for any authenticated user to read their own quota. Backs the upload-time enforcement in `src/lib/storageQuota.js`.
-- **`migration_protect_is_admin.sql`** (Phase 14): BEFORE UPDATE trigger on `profiles` that rejects `is_admin` changes unless the caller is already admin. `auth.uid() IS NULL` (dashboard SQL / service role) bypasses, so promotion via the SQL editor still works. Closes the hole where any authenticated user could promote themselves from devtools.
-- **`migration_admin_wipe_and_waitlist.sql`** (Phase 14.1): adds `admin_wipe_platform()` (admin-only destructive reset — deletes every user except the Luminary Team bot, sweeps tombstoned rows, clears bot-authored content while keeping the bot's account + avatar, clears invite codes / invite-code uses / invite-rate-limits / waitlist / orcid_pending, and returns the storage paths the client must sweep via `supabase.storage.remove`; preserves `admin_config`), plus `get_waitlist()` and `get_waitlist_count()` for the new admin Waitlist section + Overview count card. Wipe button lives in `/admin → Storage → Danger zone` and is gated by typing `WIPE PLATFORM`.
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
 
 ## Recently shipped migrations
@@ -311,8 +319,13 @@ _Last updated: 2026-04-28 (rev 23)_
 - **`migration_handoff_groups.sql`** (Phase 12.3): adds `get_my_admin_groups_for_handoff()` RPC — returns groups where the caller is the sole admin, used by the schedule-delete confirm flow to prompt for a successor.
 - **`migration_tombstone_comments.sql`** (Phase 12.4): switches `comments` / `group_post_comments` / `project_post_comments` `user_id` from CASCADE to SET NULL so threads keep their structure when an author is purged. Frontend renders "Deleted user" + greyed avatar in place of the missing author across all four comment surfaces (PostCard top + thread, GroupPostCard top + thread, ProjectPostCard, PublicPostPage CommentsSection).
 - **`migration_group_cover_position.sql`** (Phase 12.5): adds `groups.cover_position` (text, default `'50% 50%'`) for the drag-to-reposition group cover.
-- **`migration_admin_analytics.sql`** (Phase 13): adds 17 admin-gated SECURITY DEFINER RPCs powering the four-tab analytics dashboard — `get_retention_cohorts`, `get_weekly_signups`, `get_daily_active_users`, `get_signup_method_breakdown(p_days)`, `get_work_mode_stats(p_days)`, `get_tier_distribution`, `get_top_inviters(p_limit)`, `get_feature_adoption`, `get_content_performance(p_days)`, `get_lumens_histogram`, `get_profile_completeness`, `get_consent_rates`, `get_hot_papers(p_limit)`, `get_power_posters(p_days, p_limit)`, `get_power_commenters(p_days, p_limit)`, `get_at_risk_users(p_limit)`, `get_quiet_champions(p_limit)`. All exclude the Luminary Team bot account and skip legacy post types where applicable.
+- **`migration_admin_analytics.sql`** (Phase 13): adds 17 admin-gated SECURITY DEFINER RPCs powering the four-tab analytics dashboard — `get_retention_cohorts`, `get_weekly_signups`, `get_daily_active_users`, `get_signup_method_breakdown(p_days)`, `get_work_mode_stats(p_days)`, `get_tier_distribution`, `get_top_inviters(p_limit)`, `get_feature_adoption`, `get_content_performance(p_days)`, `get_lumens_histogram`, `get_profile_completeness`, `get_consent_rates`, `get_hot_papers(p_limit)`, `get_power_posters(p_days, p_limit)`, `get_power_commenters(p_days, p_limit)`, `get_at_risk_users(p_limit)`, `get_quiet_champions(p_limit)`. All exclude the Luminary Team bot account.
 - **`migration_groups_select_open.sql`**: drops any existing SELECT policy on `groups` and re-applies the open one (`auth.uid() IS NOT NULL`). A more restrictive policy had been layered on in production at some point, hiding closed groups from non-members in Discover. Group contents (posts, members) stay protected by per-table RLS; only the row metadata (name, topic, member counts) is now visible to authenticated users.
+- **`migration_storage_replace_cleanup.sql`**: adds `cleanup_replaced_storage_files(source_kind, source_id, keep_path)` for orphan sweeps when avatars/covers are replaced with a different-extension upload, and extends `delete_user_file` so deep-dive cover deletes clear `posts.deep_dive_cover_url` + `deep_dive_cover_position` instead of `image_url`.
+- **`migration_storage_quotas.sql`**: seeds `admin_config.storage_quota_mb = 50` (admin-editable via `/admin → Storage`) and adds `get_storage_quota_mb()` for any authenticated user to read their own quota. Backs the upload-time enforcement in `src/lib/storageQuota.js`.
+- **`migration_protect_is_admin.sql`** (Phase 14): BEFORE UPDATE trigger on `profiles` that rejects `is_admin` changes unless the caller is already admin. `auth.uid() IS NULL` (dashboard SQL / service role) bypasses, so promotion via the SQL editor still works. Closes the hole where any authenticated user could promote themselves from devtools.
+- **`migration_admin_wipe_and_waitlist.sql`** (Phase 14.1): adds `admin_wipe_platform()` (admin-only destructive reset — see Storage section above for the exact list; nulls `admin_config.updated_by` for non-bot rows before deleting profiles, casts `bot_id::text` for the polymorphic `follows.target_id`, satisfies pg_safeupdate with `where true` clauses, and uses `library_items.added_by` rather than the non-existent `library_items.user_id`). Plus `get_waitlist()` and `get_waitlist_count()` for the new admin Waitlist section + Overview count card.
+- **`migration_phase15_unified_posts.sql`** (Phase 15): collapses `posts` / `group_posts` / `project_posts` into a single `posts` table keyed on `context_kind` ('feed' | 'group' | 'project') + `context_id` (null for feed; `groups.id` or `projects.id` otherwise) with explicit `visibility` ('public' | 'members' | 'private') gating public-URL access. Single unified `likes`, `comments`, `posts_with_meta` view, and `post_reports.post_id` (drops the old group_post_id / exclusive CHECK). Adds `get_post_likers(p_post_id, p_limit, p_offset)` for the new likes-list modal. Five RLS policies on `posts` (own / feed / group / project / admin) all enforcing `visibility != 'private'` for non-author / non-admin reads; group + project policies use `get_my_group_ids()` for performance. Group-owned project posts are also visible to parent-group members (the user-guide-articles-in-projects pattern). Rewrites every RPC that referenced an old table: `get_admin_posts` (drops `p_featured` arg + `link_*` columns), `get_content_health`, `get_moderation_queue`, `get_paper_stats_public`, `get_hot_papers`, `get_content_performance`, `get_power_posters`, `get_power_commenters`, `get_at_risk_users`, `get_quiet_champions`, `get_signup_method_breakdown`, `get_work_mode_stats`, `get_at_risk_alerts`, `delete_user_file`, `get_my_storage_usage`, `get_admin_user_storage_files`, and `send_admin_post` (new signature with deep-dive + image_url args; uses a DO-block to drop all prior overloads since paper_year-as-int + bg_color variants accreted over time). Drops `posts.is_featured` / `featured_until` / `featured_at` (unused). Updates `saved_posts` to drop `group_post_id`. Adds `block_self_admin` trigger from Phase 14 if not already in place.
 
 ## Storage RLS policy required
 
