@@ -23,6 +23,7 @@ import MessagesScreen, { startConversation } from './screens/MessagesScreen';
 import PaperDetailPage from './paper/PaperDetailPage';
 import OnboardingScreen from './screens/OnboardingScreen';
 import CardQROverlay from './components/CardQROverlay';
+import PostContentStyles from './components/PostContentStyles';
 import CardPage from './profile/CardPage';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
@@ -480,23 +481,24 @@ export default function App() {
   const signOut=async()=>{ optOutAndReset(); await supabase.auth.signOut(); setScreen('feed'); };
 
   const fonts = <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet"/>;
+  const globalStyles = <><PostContentStyles/></>;
 
   // Public pages — no auth required
-  if(publicSlug)      return <>{fonts}<PublicProfilePage slug={publicSlug}/></>;
-  if(publicPostId)    return <>{fonts}<PublicPostPage postId={publicPostId}/></>;
-  if(publicPaperDoi)  return <>{fonts}<PaperDetailPage doi={publicPaperDoi} isPublicPage={true}/></>;
-  if(publicCardSlug)  return <>{fonts}<CardPage slug={publicCardSlug}/></>;
-  if(publicGroupSlug) return <>{fonts}<PublicGroupProfileScreen slug={publicGroupSlug}/></>;
-  if(legalDoc)        return <>{fonts}<LegalPage doc={legalDoc}/></>;
+  if(publicSlug)      return <>{fonts}{globalStyles}<PublicProfilePage slug={publicSlug}/></>;
+  if(publicPostId)    return <>{fonts}{globalStyles}<PublicPostPage postId={publicPostId}/></>;
+  if(publicPaperDoi)  return <>{fonts}{globalStyles}<PaperDetailPage doi={publicPaperDoi} isPublicPage={true}/></>;
+  if(publicCardSlug)  return <>{fonts}{globalStyles}<CardPage slug={publicCardSlug}/></>;
+  if(publicGroupSlug) return <>{fonts}{globalStyles}<PublicGroupProfileScreen slug={publicGroupSlug}/></>;
+  if(legalDoc)        return <>{fonts}{globalStyles}<LegalPage doc={legalDoc}/></>;
 
-  if(isPasswordRecovery) return <>{fonts}<ResetPasswordScreen onDone={()=>setIsPasswordRecovery(false)}/></>;
+  if(isPasswordRecovery) return <>{fonts}{globalStyles}<ResetPasswordScreen onDone={()=>setIsPasswordRecovery(false)}/></>;
   if(!authChecked) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;
   if(!session) {
     const showLanding = !showAuthScreen && !isAdminRoute && !showOrcidEmailForm && !orcidAuthError;
     if (showLanding) {
-      return <>{fonts}<LandingScreen supabase={supabase} onShowAuth={()=>setShowAuthScreen(true)}/></>;
+      return <>{fonts}{globalStyles}<LandingScreen supabase={supabase} onShowAuth={()=>setShowAuthScreen(true)}/></>;
     }
-    return <>{fonts}<AuthScreen onAuth={()=>setScreen('feed')}
+    return <>{fonts}{globalStyles}<AuthScreen onAuth={()=>setScreen('feed')}
       orcidPendingToken={orcidPendingToken}
       orcidPendingName={orcidPendingName}
       showOrcidEmailForm={showOrcidEmailForm}
@@ -517,6 +519,7 @@ export default function App() {
     return (
       <>
         {fonts}
+        {globalStyles}
         <div style={{
           position:'fixed', inset:0, background:'rgba(27,29,54,.6)',
           display:'flex', alignItems:'center', justifyContent:'center',
@@ -572,8 +575,8 @@ export default function App() {
   // Admin route: gate on profile.is_admin
   if (isAdminRoute) {
     if (!profile) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:"'DM Sans',sans-serif"}}><Spinner/></div>;
-    if (!profile.is_admin) return <>{fonts}<NotFoundScreen /></>;
-    return <>{fonts}<AdminShell supabase={supabase} user={user} profile={profile} /></>;
+    if (!profile.is_admin) return <>{fonts}{globalStyles}<NotFoundScreen /></>;
+    return <>{fonts}{globalStyles}<AdminShell supabase={supabase} user={user} profile={profile} /></>;
   }
 
   const screens={
@@ -603,6 +606,7 @@ export default function App() {
   return (
     <>
       {fonts}
+      {globalStyles}
       {showCardQR && profile && <CardQROverlay profile={profile} onClose={()=>setShowCardQR(false)}/>}
       {joinToast && (
         <div style={{

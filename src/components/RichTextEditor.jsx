@@ -728,9 +728,7 @@ export default function RichTextEditor({
         [data-deep-dive] ol { list-style-type:decimal !important; padding-left:26px !important; margin:0 0 22px; }
         [data-deep-dive] li { display:list-item !important; margin:6px 0; }
         [data-deep-dive] img { max-width:100%; height:auto; border-radius:8px; margin:20px auto; display:block; cursor:pointer; }
-        [data-deep-dive] img[data-size="small"]  { max-width:33% !important; }
-        [data-deep-dive] img[data-size="medium"] { max-width:60% !important; }
-        [data-deep-dive] img[data-size="large"]  { max-width:85% !important; }
+        /* img[data-size] resize rules live in PostContentStyles (mounted globally in App.jsx) */
         [data-deep-dive] iframe { max-width:100%; width:100%; aspect-ratio:16/9; border:0; border-radius:8px; margin:20px 0; display:block; }
         [data-deep-dive] a  { color:${T.v}; text-decoration:underline; }
         [data-deep-dive] blockquote {
