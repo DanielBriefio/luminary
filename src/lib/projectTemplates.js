@@ -38,6 +38,11 @@ export const PROJECT_TEMPLATES = {
 <p>What was the most interesting talk or conversation today? Even rough bullet points help the team stay aligned.</p>`,
       },
       {
+        folder:  'Papers Shared',
+        content: `<p>📄 <strong>Share a paper from the programme</strong></p>
+<p>Use the paper post type (DOI or Europe PMC) to add papers that came up in talks. Note the session it was cited in.</p>`,
+      },
+      {
         folder:  'Action Items',
         content: `<p>✅ <strong>People to follow up with</strong></p>
 <p>Add contacts you met and what you discussed. Include their email or institution if you have it.</p>`,
@@ -62,23 +67,29 @@ export const PROJECT_TEMPLATES = {
       {
         folder:    "This Week's Paper",
         is_sticky: true,
-        content: `<p>📄 <strong>Add this week's paper</strong></p>
-<p>Share the paper you're discussing this session using the paper post type — paste the DOI or search Europe PMC. Add a one-line reason why you chose it.</p>`,
+        content: `<h3>📖 Welcome to {projectName}</h3>
+<p>Each week, one folder gets the new paper. Discussion happens before and after the session, takeaways get archived for later.</p>
+<ul>
+<li>Post the paper for the week in <em>This Week's Paper</em> using the paper post type</li>
+<li>Share initial reactions and questions in <em>Discussion</em></li>
+<li>Capture the single most important learning in <em>Key Takeaways</em></li>
+<li>Archive completed sessions in <em>Past Sessions</em> so you can search them later</li>
+</ul>`,
       },
       {
         folder:  'Discussion',
-        content: `<p>💬 <strong>What's your initial take?</strong></p>
-<p>Before the session, share one thought on the paper — the methodology, the findings, or what surprised you. Doesn't need to be polished.</p>`,
-      },
-      {
-        folder:  'Discussion',
-        content: `<p>❓ <strong>Questions to discuss</strong></p>
-<p>Add questions you want the group to tackle during the session. Others can add theirs too.</p>`,
+        content: `<p>💬 <strong>Pre- and post-session discussion</strong></p>
+<p>Before the session, share one thought on the paper — methodology, findings, or what surprised you. After the session, post questions you want the group to keep tackling.</p>`,
       },
       {
         folder:  'Key Takeaways',
         content: `<p>🏆 <strong>Share your single most important learning</strong></p>
 <p>After the session — what's the one thing you're taking away? One sentence is enough.</p>`,
+      },
+      {
+        folder:  'Past Sessions',
+        content: `<p>🗂 <strong>Archive of past sessions</strong></p>
+<p>Once a paper has been discussed, summarise the outcome here with the paper title, date, and the takeaways the group landed on. Useful when someone joins later.</p>`,
       },
     ],
   },
@@ -105,12 +116,18 @@ export const PROJECT_TEMPLATES = {
 <p><strong>Current status:</strong> [update this]</p>
 <p><strong>Target journal:</strong> [add journal name]</p>
 <p><strong>Submission deadline:</strong> [add date]</p>
-<p><strong>Co-authors:</strong> [tag them here]</p>`,
+<p><strong>Co-authors:</strong> [tag them here]</p>
+<p>Post drafts as they evolve, share figures and data separately, and use <em>Reviews</em> for round-by-round feedback.</p>`,
       },
       {
-        folder:  'Drafts',
-        content: `<p>📝 <strong>Open questions before we start writing</strong></p>
-<p>What do we need to agree on before drafting? List them here so co-authors can weigh in.</p>`,
+        folder:  'Figures & Data',
+        content: `<p>📊 <strong>Figures and underlying data</strong></p>
+<p>Share figures (PNG/PDF) and the data files behind them here. Note the manuscript section each figure belongs to. Co-authors can comment with revision requests.</p>`,
+      },
+      {
+        folder:  'References',
+        content: `<p>📚 <strong>Reference list and key citations</strong></p>
+<p>Use the paper post type (DOI lookup) to add the papers you'll cite. Group by manuscript section or theme so the bibliography is easy to assemble.</p>`,
       },
       {
         folder:  'Reviews',
@@ -168,18 +185,13 @@ export const PROJECT_TEMPLATES = {
         folder:    'Agenda',
         is_sticky: true,
         content: `<h3>📅 Welcome to {projectName}</h3>
-<p>Use this space to prepare for and document your weekly meetings.</p>
+<p>Use this space to prepare for and document your weekly meetings. Anyone can contribute agenda items, raise cases, and capture decisions.</p>
 <ul>
 <li>Post this week's agenda items in <em>Agenda</em></li>
 <li>Add cases you want to discuss in <em>Case Discussions</em></li>
 <li>Capture follow-ups in <em>Action Items</em></li>
 <li>Record key decisions in <em>Decisions Made</em></li>
 </ul>`,
-      },
-      {
-        folder:  'Agenda',
-        content: `<p>📋 <strong>This week's agenda</strong></p>
-<p>Add agenda items here before the meeting. Anyone can contribute.</p>`,
       },
       {
         folder:  'Case Discussions',
@@ -190,6 +202,11 @@ export const PROJECT_TEMPLATES = {
         folder:  'Action Items',
         content: `<p>✅ <strong>Follow-up from last meeting</strong></p>
 <p>List action items with owners and deadlines. Update status as things are completed.</p>`,
+      },
+      {
+        folder:  'Decisions Made',
+        content: `<p>📌 <strong>Decisions log</strong></p>
+<p>Record each decision the team makes — what was decided, by whom, and the reasoning. Useful when someone asks "why are we doing it this way?" three months later.</p>`,
       },
     ],
   },
@@ -219,18 +236,13 @@ export const PROJECT_TEMPLATES = {
         folder:    'Background Reading',
         is_sticky: true,
         content: `<h3>🎓 Welcome to {projectName}</h3>
-<p>Use this space to organise your training — from background reading to hands-on practice.</p>
+<p>Use this space to organise your training — from background reading to hands-on practice. Add foundational papers and resources here using the paper post type with DOI.</p>
 <ul>
 <li>Share key papers and resources in <em>Background Reading</em></li>
 <li>Document the protocol or steps in <em>Protocol & Steps</em></li>
 <li>Track progress and sessions in <em>Training Log</em></li>
 <li>Capture questions and insights in <em>Questions & Notes</em></li>
 </ul>`,
-      },
-      {
-        folder:  'Background Reading',
-        content: `<p>📄 <strong>Key papers and resources</strong></p>
-<p>Share the papers, guidelines or resources everyone should read before starting. Use the paper post type to add them with DOI.</p>`,
       },
       {
         folder:  'Protocol & Steps',
@@ -272,18 +284,13 @@ export const PROJECT_TEMPLATES = {
         folder:    'Hypothesis & Background',
         is_sticky: true,
         content: `<h3>🔬 Welcome to {projectName}</h3>
-<p>Use this project to track your research from first idea to final manuscript.</p>
+<p>Use this project to track your research from first idea to final manuscript. State the hypothesis clearly here — what are we testing, and why does it matter? Team members can comment and refine before any methods are written.</p>
 <ul>
-<li>Define your hypothesis and background in this folder</li>
-<li>Document methods as you develop them</li>
-<li>Share results and data as they come in</li>
-<li>Build toward your manuscript draft together</li>
+<li>Pin the hypothesis and background here</li>
+<li>Document <em>Methods</em> as you develop them</li>
+<li>Share <em>Results & Data</em> as they come in</li>
+<li>Build <em>Analysis</em> together, then move into the <em>Manuscript Draft</em></li>
 </ul>`,
-      },
-      {
-        folder:  'Hypothesis & Background',
-        content: `<p>💡 <strong>Our research question</strong></p>
-<p>State the hypothesis clearly here. What are we testing, and why does it matter? Team members can comment and refine.</p>`,
       },
       {
         folder:  'Methods',
@@ -294,6 +301,16 @@ export const PROJECT_TEMPLATES = {
         folder:  'Results & Data',
         content: `<p>📊 <strong>First results</strong></p>
 <p>Share your initial findings here — even preliminary or unexpected ones. Early discussion often changes the direction of the analysis.</p>`,
+      },
+      {
+        folder:  'Analysis',
+        content: `<p>🧪 <strong>Analysis and interpretation</strong></p>
+<p>Statistical models, sensitivity analyses, and interpretation. Note which decisions are pre-specified vs exploratory so the manuscript can be transparent about it.</p>`,
+      },
+      {
+        folder:  'Manuscript Draft',
+        content: `<p>✍️ <strong>Manuscript drafts</strong></p>
+<p>Once the analysis is settled, share the working manuscript here for co-author review. Mark sections that need attention; keep version numbers in the post title.</p>`,
       },
     ],
     previewPosts: [
@@ -329,17 +346,27 @@ export const PROJECT_TEMPLATES = {
 <p><strong>Submission deadline:</strong> [add date]</p>
 <p><strong>Requested amount:</strong> [add here]</p>
 <p><strong>PI:</strong> [add name]</p>
-<p>Use the folders to coordinate each section of the application.</p>`,
+<p>The Specific Aims page is the most important page of the grant. Share your draft here early — team feedback at this stage saves weeks later.</p>`,
       },
       {
-        folder:  'Specific Aims',
-        content: `<p>📝 <strong>Specific Aims — draft v1</strong></p>
-<p>The Specific Aims page is the most important page of the grant. Share your draft here early — team feedback at this stage saves weeks later.</p>`,
+        folder:  'Background & Significance',
+        content: `<p>📚 <strong>Background and significance</strong></p>
+<p>What's the problem, why now, and what's missing from the field? Cite the key papers (paper post type with DOI) and flag the strongest evidence gap your work addresses.</p>`,
       },
       {
         folder:  'Research Strategy',
         content: `<p>🔍 <strong>Open questions before we write</strong></p>
 <p>What methodological or conceptual gaps do we need to address before drafting the Research Strategy? Flag them here.</p>`,
+      },
+      {
+        folder:  'Budget',
+        content: `<p>💰 <strong>Budget and justification</strong></p>
+<p>Track personnel, supplies, equipment, and core-facility costs. Include the rationale for each line item — reviewers question costs that aren't justified.</p>`,
+      },
+      {
+        folder:  'Biosketches',
+        content: `<p>👥 <strong>Co-investigator biosketches</strong></p>
+<p>Each contributing investigator drops their biosketch here, ideally in the agency's required format. Track who's done and who still needs to submit.</p>`,
       },
       {
         folder:  'Submission',
@@ -378,17 +405,22 @@ export const PROJECT_TEMPLATES = {
 <p><strong>Meeting date:</strong> [add date]</p>
 <p><strong>Format:</strong> [in-person / virtual / hybrid]</p>
 <p><strong>Location / platform:</strong> [add details]</p>
-<p>Use this project to coordinate before, during, and after the meeting.</p>`,
-      },
-      {
-        folder:  'Agenda',
-        content: `<p>📋 <strong>Draft agenda</strong></p>
 <p>Share the agenda here for internal review before it goes to advisors. Include timing for each topic and which team member owns each session.</p>`,
       },
       {
         folder:  'Pre-reads',
         content: `<p>📄 <strong>Materials for advisors</strong></p>
 <p>Upload or link the pre-read package here. Note which materials are essential vs background, and any specific questions you want advisors to come prepared to discuss.</p>`,
+      },
+      {
+        folder:  'Member Profiles',
+        content: `<p>👤 <strong>Advisor profiles</strong></p>
+<p>One post per advisor: institution, expertise, past collaborations, and any conflicts of interest declared. Useful for the team during prep and as a reference between meetings.</p>`,
+      },
+      {
+        folder:  'Meeting Notes',
+        content: `<p>📝 <strong>Meeting notes</strong></p>
+<p>Capture key insights, agreements, and quotes during the session. Tag with the agenda item they relate to so they're easy to find later.</p>`,
       },
       {
         folder:  'Action Items',
@@ -427,17 +459,23 @@ export const PROJECT_TEMPLATES = {
 <p><strong>Review question:</strong> [PICO or equivalent]</p>
 <p><strong>Databases to search:</strong> Europe PMC, PubMed, Cochrane, [add others]</p>
 <p><strong>Date range:</strong> [add]</p>
-<p><strong>Target journal:</strong> [add if known]</p>`,
-      },
-      {
-        folder:  'Search Strategy',
-        content: `<p>🔍 <strong>Search strings</strong></p>
+<p><strong>Target journal:</strong> [add if known]</p>
 <p>Document the exact search strings used in each database here so the review is reproducible. Include the date each search was run.</p>`,
       },
       {
         folder:  'Included Papers',
-        content: `<p>✓ <strong>Inclusion criteria</strong></p>
-<p>Document what makes a paper eligible for inclusion. Post papers you're unsure about here for team discussion before final decision.</p>`,
+        content: `<p>✓ <strong>Inclusion criteria and included papers</strong></p>
+<p>Document what makes a paper eligible for inclusion. Add each included paper as a paper post (DOI) so it's searchable. Borderline papers go here for team discussion before final decision.</p>`,
+      },
+      {
+        folder:  'Excluded Papers',
+        content: `<p>✗ <strong>Excluded papers and reasons</strong></p>
+<p>List papers that came up in the search but didn't make the final inclusion list — with the specific reason for exclusion. Reviewers and PRISMA flow diagrams need this trail.</p>`,
+      },
+      {
+        folder:  'Data Extraction',
+        content: `<p>📋 <strong>Data extraction sheet</strong></p>
+<p>One post per included paper with the structured fields you're extracting (sample size, design, outcomes, effect size). Standardise the format so synthesis is easier later.</p>`,
       },
       {
         folder:  'Summary',
@@ -477,18 +515,24 @@ export const PROJECT_TEMPLATES = {
 <li>Start in <em>Welcome & Orientation</em> for context on the team and its work</li>
 <li>Read the <em>Key Papers</em> that underpin what we do</li>
 <li>Review <em>Protocols & Methods</em> before your first experiment</li>
-<li>Check <em>First Tasks</em> for what to tackle in your first two weeks</li>
+<li>Check <em>Tools & Resources</em> for software, accounts, and shared spaces</li>
+<li>Pick up your <em>First Tasks</em> for the first two weeks</li>
 </ul>`,
-      },
-      {
-        folder:  'Welcome & Orientation',
-        content: `<p>🏢 <strong>About our team</strong></p>
-<p>Introduce the team, the research focus, and how we work together. What are the current active projects? What's the overall goal we're working toward?</p>`,
       },
       {
         folder:  'Key Papers',
         content: `<p>📄 <strong>The 5 papers everyone on this team has read</strong></p>
 <p>Add the foundational papers for your work using the paper post type. These are the papers that explain why we do what we do.</p>`,
+      },
+      {
+        folder:  'Protocols & Methods',
+        content: `<p>🧪 <strong>Standard protocols and methods</strong></p>
+<p>The protocols every team member uses — bench techniques, analysis pipelines, data handling. Link to the lab manual or shared protocol repository where applicable.</p>`,
+      },
+      {
+        folder:  'Tools & Resources',
+        content: `<p>🛠 <strong>Software, accounts, and shared spaces</strong></p>
+<p>List the tools the team uses — analysis software, electronic lab notebook, shared storage, slack channels — and how to get access. Save the new hire from hunting for logins.</p>`,
       },
       {
         folder:  'First Tasks',
@@ -541,6 +585,16 @@ export const PROJECT_TEMPLATES = {
 <p>Post working versions of the Quality Overall Summary (QOS), Nonclinical Overview, and Clinical Overview here for team review. Note the version number and any sections still pending sign-off.</p>`,
       },
       {
+        folder:  'Module 3: Quality',
+        content: `<p>🧪 <strong>Quality / CMC documentation</strong></p>
+<p>Drug substance, drug product, manufacturing, and stability sections. Track which CMC sub-sections are draft, under QA review, or final. Flag stability data gaps that could delay filing.</p>`,
+      },
+      {
+        folder:  'Module 4: Nonclinical',
+        content: `<p>🔬 <strong>Nonclinical study reports</strong></p>
+<p>Pharmacology, PK, and toxicology study reports here — reference the GLP study numbers and the section of Module 2.4 they support. Note any discrepancies between species findings flagged for the Nonclinical Overview.</p>`,
+      },
+      {
         folder:  'Module 5: Clinical',
         content: `<p>📄 <strong>Clinical study reports</strong></p>
 <p>Add the key studies supporting the submission here using the paper post type. Include the CSR reference number, study phase, and whether the study is pivotal or supportive.</p>`,
@@ -583,17 +637,22 @@ export const PROJECT_TEMPLATES = {
 <p><strong>Indication:</strong> [add]</p>
 <p><strong>Target launch date:</strong> [add]</p>
 <p><strong>Key markets:</strong> [add]</p>
-<p>Use this project to coordinate the cross-functional launch team.</p>`,
-      },
-      {
-        folder:  'Scientific Platform',
-        content: `<p>🔬 <strong>Scientific platform — draft</strong></p>
 <p>The scientific narrative that underpins all launch materials. Share the draft here for cross-functional review — Medical Affairs, Market Access, and Commercial should all align on this before anything else is written.</p>`,
       },
       {
         folder:  'Key Messages',
         content: `<p>💬 <strong>Core messages by audience</strong></p>
 <p>Document the key messages for each stakeholder group: HCPs, payers, patients. Flag any message where Medical Affairs and Commercial have different perspectives — better to resolve early.</p>`,
+      },
+      {
+        folder:  'Publication Plan',
+        content: `<p>📑 <strong>Publication plan</strong></p>
+<p>List the planned publications, congress abstracts, and real-world-evidence outputs supporting launch. Track each by status (draft / submitted / accepted / published) and the gap they're addressing.</p>`,
+      },
+      {
+        folder:  'Stakeholder Materials',
+        content: `<p>📦 <strong>Stakeholder-facing materials</strong></p>
+<p>HCP detail aids, payer dossiers, patient education materials, training decks. Note which audience each piece is for and where it sits in the medical/legal/regulatory review cycle.</p>`,
       },
       {
         folder:  'Launch Checklist',
