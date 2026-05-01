@@ -470,6 +470,9 @@ export default function PostComposer({
                             : ctx === 'group'   ? context.groupId
                             : ctx === 'project' ? context.projectId
                             : null;
+      // Project posts get scoped to a folder when one is active. "All
+      // posts" view (folderId null) leaves the post folder-less.
+      if (ctx === 'project' && context.folderId) payload.folder_id = context.folderId;
     } else if (uploadFile) {
       // Edit + new attachment uploaded → replace existing
       payload.image_url = fileUrl;

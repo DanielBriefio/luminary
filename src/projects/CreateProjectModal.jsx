@@ -117,8 +117,11 @@ export default function CreateProjectModal({
         }
 
         if (posts.length) {
-          // Unified posts: drop is_starter / is_sticky / folder_id from
-          // the template-built rows, attach context_kind/context_id.
+          // Unified posts: drop is_starter / is_sticky from the template-
+          // built rows, attach context_kind/context_id, and resolve the
+          // template's `_folderName` to a real folder_id via folderIdMap
+          // so the conference / journal-club / paper-draft templates'
+          // folder structure survives.
           const toInsert = posts.map(p => ({
             context_kind: 'project',
             context_id:   project.id,
@@ -126,6 +129,7 @@ export default function CreateProjectModal({
             post_type:    p.post_type || 'text',
             content:      p.content || '',
             visibility:   'members',
+            folder_id:    p._folderName ? folderIdMap[p._folderName] || null : null,
           }));
           await supabase.from('posts').insert(toInsert);
         }

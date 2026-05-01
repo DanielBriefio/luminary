@@ -27,14 +27,19 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
       .select('*')
       .eq('context_kind', 'project')
       .eq('context_id', project.id)
-      .eq('hidden', false)
+      .eq('hidden', false);
+
+    // Folder filter: when a specific folder is selected, only show posts
+    // tagged with that folder_id. "All posts" (activeFolderId === null)
+    // shows every post across the project.
+    if (activeFolderId) query = query.eq('folder_id', activeFolderId);
+
+    const { data } = await query
       .order('created_at', { ascending: false })
       .limit(50);
-
-    const { data } = await query;
     setPosts(data || []);
     setLoading(false);
-  }, [project.id]);
+  }, [project.id, activeFolderId]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
@@ -92,6 +97,8 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
                 projectName:      project.name,
                 projectGroupId:   project.group_id || null,
                 projectGroupName: parentGroupName || null,
+                folderId:         activeFolderId || null,
+                folderName:       activeFolder?.name || null,
               }}
               user={user}
               profile={profile}

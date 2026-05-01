@@ -38,9 +38,8 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
     setLoadingPosts(true);
     const [{ data: fols }, { data: recent }] = await Promise.all([
       supabase.from('project_folders').select('id, name').eq('project_id', project.id).order('sort_order'),
-      // Unified posts: starter / sticky / folder_id no longer exist on the
-      // schema, so just take the project's earliest 5 posts as the template
-      // seed (they're the closest analogue to "starter posts").
+      // Take the project's earliest 5 posts as the template seed (the
+      // closest analogue to the legacy "starter posts" concept).
       supabase.from('posts').select('*')
         .eq('context_kind', 'project').eq('context_id', project.id)
         .order('created_at', { ascending: true }).limit(5),
@@ -53,7 +52,9 @@ export default function SaveAsTemplateModal({ project, user, onClose }) {
 
     setDraftPosts(posts.map(p => ({
       ...p,
-      folder_name:    null,
+      // Resolve folder_id → folder name via the lookup so the template
+      // exporter can store a portable name (Phase 15.1).
+      folder_name:    p.folder_id ? folderMap[p.folder_id] || null : null,
       _isSticky:      false,
       _editedContent: p.content?.replace(/<[^>]+>/g, '') || '',
     })));
