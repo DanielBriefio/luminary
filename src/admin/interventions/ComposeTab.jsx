@@ -17,15 +17,6 @@ const POST_TYPES = [
   { id: 'paper', label: '📄 Paper' },
 ];
 
-const BG_COLORS = [
-  { hex: null,      label: 'White'  },
-  { hex: '#eeecff', label: 'Violet' },
-  { hex: '#f0f9ff', label: 'Teal'   },
-  { hex: '#ecfdf5', label: 'Green'  },
-  { hex: '#fef3c7', label: 'Amber'  },
-  { hex: '#e8f0fe', label: 'Blue'   },
-];
-
 // Strip HTML tags to check for actual content
 const hasText = (html) => (html || '').replace(/<[^>]+>/g, '').trim().length > 0;
 
@@ -34,7 +25,6 @@ export default function ComposeTab({ supabase, user }) {
   const [postType, setPostType] = useState('text');
   const [content, setContent]   = useState('');
   const [isDeepDive, setIsDeepDive] = useState(false);
-  const [bgColor, setBgColor]   = useState(null);
 
   const [users, setUsers]                     = useState([]);
   const [groups, setGroups]                   = useState([]);
@@ -116,13 +106,15 @@ export default function ComposeTab({ supabase, user }) {
     if (!canSend()) return;
     setSending(true); setSendError('');
 
+    // Phase 15 unified send_admin_post signature: drops bg_color/link_*,
+    // adds image_url + deep_dive_title + deep_dive_cover_url. Only the args
+    // that map to columns on the unified posts table are accepted.
     const payload = {
       p_mode:         mode,
       p_content:      content.trim(),
       p_bot_user_id:  LUMINARY_TEAM_USER_ID,
       p_post_type:    postType,
       p_is_deep_dive: isDeepDive,
-      p_bg_color:     bgColor || null,
     };
     if (mode === 'targeted') payload.p_target_user_ids = Array.from(selectedUserIds);
     if (mode === 'group')    payload.p_group_id = selectedGroupId;
@@ -132,7 +124,7 @@ export default function ComposeTab({ supabase, user }) {
       payload.p_paper_journal  = paperData.journal;
       payload.p_paper_authors  = paperData.authors;
       payload.p_paper_abstract = paperData.abstract;
-      payload.p_paper_year     = paperData.year;
+      payload.p_paper_year     = paperData.year ? String(paperData.year) : null;
       payload.p_paper_citation = paperData.citation;
     }
 
@@ -144,7 +136,6 @@ export default function ComposeTab({ supabase, user }) {
       mode,
       post_type:       postType,
       is_deep_dive:    isDeepDive,
-      has_bg_color:    !!bgColor,
       recipient_count: mode === 'targeted' ? selectedUserIds.size : 1,
     });
 
@@ -152,7 +143,7 @@ export default function ComposeTab({ supabase, user }) {
     setTimeout(() => {
       setSent(false); setContent(''); setPaperData(null);
       setDoi(''); setSelectedUserIds(new Set()); setSelectedGroupId('');
-      setIsDeepDive(false); setBgColor(null);
+      setIsDeepDive(false);
     }, 2000);
   };
 
@@ -321,27 +312,6 @@ export default function ComposeTab({ supabase, user }) {
             )}
           </div>
         )}
-
-        {/* Background color */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: T.mu }}>Card background</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {BG_COLORS.map(c => (
-              <div key={String(c.hex)} onClick={() => setBgColor(c.hex)}
-                title={c.label}
-                style={{
-                  width: 20, height: 20, borderRadius: '50%',
-                  background: c.hex || '#ffffff',
-                  border: `2px solid ${bgColor === c.hex ? T.v : '#d0d3e8'}`,
-                  cursor: 'pointer',
-                  boxShadow: bgColor === c.hex ? `0 0 0 2px rgba(108,99,255,.3)` : 'none',
-                  transition: 'all .15s',
-                  outline: c.hex === null ? `1px solid ${T.bdr}` : 'none',
-                }}
-              />
-            ))}
-          </div>
-        </div>
 
         {/* Delivery summary */}
         <div style={{ fontSize: 12, color: T.mu, marginBottom: 14, padding: '8px 12px', background: T.s2, borderRadius: 8, border: `1px solid ${T.bdr}` }}>

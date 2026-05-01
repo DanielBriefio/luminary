@@ -103,18 +103,14 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
   };
 
   const fetchBookmarks = async () => {
-    // posts has two FKs to profiles (user_id + target_user_id) so PostgREST
-    // can't auto-resolve `profiles(...)` without a hint — disambiguate via
-    // the FK column name (returns PGRST201 / 300 Multiple Choices otherwise).
-    // group_posts only has user_id → profiles, so no hint needed there.
+    // Unified posts schema: saved_posts has only post_id now. Posts has two
+    // FKs to profiles (user_id + target_user_id) so disambiguate via FK name.
     const { data } = await supabase
       .from('saved_posts')
       .select(`
-        id, saved_at, post_id, group_post_id, folder_id,
-        post:posts(id, content, paper_title, created_at,
-          profiles!posts_user_id_fkey(name, avatar_url, avatar_color)),
-        group_post:group_posts(id, content, paper_title, group_id, created_at,
-          profiles(name, avatar_url, avatar_color))
+        id, saved_at, post_id, folder_id,
+        post:posts(id, content, paper_title, context_kind, context_id, created_at,
+          profiles!posts_user_id_fkey(name, avatar_url, avatar_color))
       `)
       .eq('user_id', user.id)
       .order('saved_at', { ascending: false });
@@ -265,8 +261,6 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
   const openBookmark = (sp) => {
     if (sp.post_id) {
       window.open(`/s/${sp.post_id}`, '_blank', 'noopener,noreferrer');
-    } else if (sp.group_post?.group_id && onViewGroup) {
-      onViewGroup(sp.group_post.group_id);
     }
   };
 
@@ -487,11 +481,12 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
                   </div>
                 </div>
               ) : visibleBookmarks.map(sp => {
-                const p = sp.post || sp.group_post;
+                const p = sp.post;
                 if (!p) return null;
-                const isGroup = !!sp.group_post_id;
+                const isGroup = p.context_kind === 'group';
+                const isProject = p.context_kind === 'project';
                 const text = (p.content || '').replace(/<[^>]+>/g,'').slice(0, 220);
-                const canOpen = sp.post_id || (sp.group_post?.group_id && onViewGroup);
+                const canOpen = !!sp.post_id;
                 return (
                   <div key={sp.id}
                     style={{
@@ -512,10 +507,10 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
                         </div>
                         <div style={{fontSize:11, color:T.mu}}>{timeAgo(sp.saved_at)}</div>
                       </div>
-                      {isGroup && (
+                      {(isGroup || isProject) && (
                         <span style={{fontSize:9.5, fontWeight:700, color:T.v,
                           background:T.v2, padding:'1px 6px', borderRadius:20, flexShrink:0}}>
-                          Group
+                          {isGroup ? 'Group' : 'Project'}
                         </span>
                       )}
                       <button
@@ -563,7 +558,7 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
                           style={{marginLeft:'auto', fontSize:11.5, color:T.v,
                             fontWeight:600, cursor:'pointer'}}
                         >
-                          {isGroup ? 'Open group →' : 'Read post →'}
+                          Read post →
                         </span>
                       )}
                     </div>

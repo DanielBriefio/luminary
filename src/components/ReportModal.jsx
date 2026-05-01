@@ -12,8 +12,7 @@ const REASONS = [
 
 export default function ReportModal({
   supabase,
-  postId,        // uuid — set for public posts
-  groupPostId,   // uuid — set for group posts
+  postId,        // uuid — unified posts.id (feed/group/project)
   onClose,
 }) {
   const [reason, setReason]         = useState('');
@@ -37,9 +36,8 @@ export default function ReportModal({
       reporter_id: user.id,
       reason,
       note: note.trim() || null,
+      post_id: postId,
     };
-    if (postId)      payload.post_id       = postId;
-    if (groupPostId) payload.group_post_id = groupPostId;
 
     const { error: insertErr } = await supabase
       .from('post_reports')

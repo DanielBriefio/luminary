@@ -155,7 +155,7 @@ function GroupAvatar({ group, size = 48 }) {
   );
 }
 
-export default function GroupScreen({ groupId, user, profile, onBack, onViewPaper, onViewGroup, onMarkRead, savedGroupPostIds = new Set(), onSaveToggled, onNavigateToPost }) {
+export default function GroupScreen({ groupId, user, profile, setProfile, onBack, onViewPaper, onViewGroup, onViewProject, onMarkRead, savedPostIds = new Set(), onSaveToggled, onNavigateToPost }) {
   const { isMobile } = useWindowSize();
   const [group,           setGroup]           = useState(null);
   const [myRole,          setMyRole]          = useState(null);
@@ -248,12 +248,16 @@ export default function GroupScreen({ groupId, user, profile, onBack, onViewPape
         <GroupFeed
           groupId={groupId}
           groupName={group.name}
+          groupIsPublic={group.is_public}
           user={user}
           profile={profile}
+          setProfile={setProfile}
           myRole={myRole}
           onViewPaper={onViewPaper}
+          onViewGroup={onViewGroup}
+          onViewProject={onViewProject}
           onMarkRead={onMarkRead}
-          savedGroupPostIds={savedGroupPostIds}
+          savedPostIds={savedPostIds}
           onSaveToggled={onSaveToggled}
         />
       )}

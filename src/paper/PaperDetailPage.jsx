@@ -3,7 +3,7 @@ import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import FollowBtn from '../components/FollowBtn';
-import PostCard from '../feed/PostCard';
+import PostCard from '../posts/PostCard';
 
 async function fetchCrossRef(doi) {
   try {
@@ -55,6 +55,7 @@ export default function PaperDetailPage({
         .from('posts_with_meta')
         .select('*')
         .eq('paper_doi', doi)
+        .eq('hidden', false)
         .order('created_at', { ascending: false })
         .limit(50),
       supabase

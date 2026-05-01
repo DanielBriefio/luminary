@@ -58,10 +58,12 @@ export default function PublicGroupProfileScreen({ slug }) {
 
       if (grp.public_show_posts) {
         const { data: gp } = await supabase
-          .from('group_posts_with_meta')
+          .from('posts_with_meta')
           .select('*')
-          .eq('group_id', grp.id)
-          .eq('is_reposted_public', true)
+          .eq('context_kind', 'group')
+          .eq('context_id', grp.id)
+          .eq('visibility', 'public')
+          .eq('hidden', false)
           .order('created_at', { ascending: false })
           .limit(6);
         if (!cancelled) setPosts(gp || []);

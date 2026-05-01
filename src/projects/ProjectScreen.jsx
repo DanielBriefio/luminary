@@ -28,7 +28,7 @@ function SidebarItem({ label, active, onClick, onDelete }) {
   );
 }
 
-export default function ProjectScreen({ projectId, user, onBack, group, onBackToGroup }) {
+export default function ProjectScreen({ projectId, user, profile, setProfile, onBack, group, onBackToGroup, onViewPaper, onViewGroup, onViewProject, savedPostIds, onSaveToggled }) {
   const { isMobile } = useWindowSize();
   const [project,        setProject]        = useState(null);
   const [folders,        setFolders]        = useState([]);
@@ -71,8 +71,9 @@ export default function ProjectScreen({ projectId, user, onBack, group, onBackTo
   };
 
   const deleteFolder = async (folder) => {
-    if (!window.confirm(`Delete "${folder.name}"? Posts in it will move to All Posts.`)) return;
-    await supabase.from('project_posts').update({ folder_id: null }).eq('folder_id', folder.id);
+    if (!window.confirm(`Delete "${folder.name}"?`)) return;
+    // Phase 15: posts no longer reference folders, so deleting a folder
+    // doesn't reassign anything — it just removes the folder row.
     await supabase.from('project_folders').delete().eq('id', folder.id);
     setFolders(f => f.filter(x => x.id !== folder.id));
     if (activeFolderId === folder.id) setActiveFolderId(null);
@@ -134,9 +135,16 @@ export default function ProjectScreen({ projectId, user, onBack, group, onBackTo
         <ProjectFeed
           project={project}
           user={user}
+          profile={profile}
+          setProfile={setProfile}
           myRole={myRole}
           activeFolderId={activeFolderId}
           folders={folders}
+          onViewPaper={onViewPaper}
+          onViewGroup={onViewGroup}
+          onViewProject={onViewProject}
+          savedPostIds={savedPostIds}
+          onSaveToggled={onSaveToggled}
         />
       )}
       {activeSection === 'members' && (

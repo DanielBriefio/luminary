@@ -5,7 +5,7 @@ import Av from '../components/Av';
 import FollowBtn from '../components/FollowBtn';
 import ExpandableBio from '../components/ExpandableBio';
 import Spinner from '../components/Spinner';
-import PostCard from '../feed/PostCard';
+import PostCard from '../posts/PostCard';
 import OrcidBadge from '../components/OrcidBadge';
 import { formatDateRange } from '../lib/linkedInUtils';
 import { useWindowSize } from '../lib/useWindowSize';
@@ -28,6 +28,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
         supabase.from('publications').select('*').eq('user_id', userId)
           .order('year', { ascending: false }).order('created_at', { ascending: false }),
         supabase.from('posts_with_meta').select('*').eq('user_id', userId)
+          .eq('context_kind', 'feed')
           .order('created_at', { ascending: false }).limit(50),
       ]);
       if (cancelled) return;
@@ -51,7 +52,8 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
 
   const refreshPosts = useCallback(async () => {
     const { data } = await supabase.from('posts_with_meta').select('*')
-      .eq('user_id', userId).order('created_at', { ascending: false }).limit(50);
+      .eq('user_id', userId).eq('context_kind', 'feed')
+      .order('created_at', { ascending: false }).limit(50);
     let postsData = data || [];
     if (currentUserId && postsData.length) {
       const ids = postsData.map(p => p.id);

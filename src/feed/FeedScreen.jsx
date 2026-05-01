@@ -4,10 +4,10 @@ import { T, TIER1_LIST, getTier2, WORK_MODE_MAP } from '../lib/constants';
 import FeedTipCard from '../components/FeedTipCard';
 
 import Spinner from '../components/Spinner';
-import PostCard from './PostCard';
+import PostCard from '../posts/PostCard';
 import { useWindowSize } from '../lib/useWindowSize';
 
-export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup, savedPostIds = new Set(), onSaveToggled, unreadNotifs = 0, onOpenNotifs, onCompose }) {
+export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onGoToProfile, onTagClick, onViewGroup, onViewProject, savedPostIds = new Set(), onSaveToggled, unreadNotifs = 0, onOpenNotifs, onCompose }) {
   const { isMobile } = useWindowSize();
   const [posts,setPosts]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -18,7 +18,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     if(saved) return saved;
     return (profile?.topic_interests?.length>0)?'personalised':'chronological';
   });
-  const [potw, setPotw] = useState(null); // { title, journal, year, doi, discussCount }
+  const [potw, setPotw] = useState(null);
   const [filterTier1,  setFilterTier1]  = useState([]);
   const [filterTier2,  setFilterTier2]  = useState([]);
   const [showFilter,   setShowFilter]   = useState(false);
@@ -34,12 +34,10 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
 
   useEffect(() => {
     const fetchPotw = async () => {
-      // Fetch admin config for Paper of the Week settings
       const { data: configData } = await supabase.rpc('get_admin_config', { p_key: 'paper_of_week' });
       const config = configData || { mode: 'algorithm', algorithm: 'most_discussed' };
 
       if (config.mode === 'manual' && config.manual_doi) {
-        // Manual pick: look up the post with this DOI
         const { data: post } = await supabase
           .from('posts_with_meta')
           .select('paper_doi, paper_title, paper_journal, paper_year')
@@ -60,7 +58,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         return;
       }
 
-      // Algorithm mode: use get_paper_stats_public so counts match exactly what admin sees
       const algorithm = config.algorithm || 'most_discussed';
       const { data: papers } = await supabase.rpc('get_paper_stats_public');
 
@@ -90,10 +87,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   const applyModeFilter = useCallback((posts, filter, userWorkMode) => {
     if (filter === 'all') return posts;
     if (filter === 'myfield') {
-      // Sort field-matching posts above non-matching, but keep date order
-      // within each group. Admin posts integrate chronologically — they're
-      // not pinned to top here, so a fresh user post pushes the Luminary
-      // Team announcement down.
       return [...posts].sort((a, b) => {
         const aMatch = a.author_work_mode === userWorkMode || userWorkMode === 'clinician_scientist';
         const bMatch = b.author_work_mode === userWorkMode || userWorkMode === 'clinician_scientist';
@@ -111,40 +104,53 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     return posts.filter(p => p.is_admin_post || !p.author_work_mode || allowed.includes(p.author_work_mode));
   }, []);
 
-  const withSlugs = useCallback(async (data) => {
-    if (!data?.length) return data || [];
-    const ids = [...new Set(data.map(p => p.user_id).filter(Boolean))];
-    if (!ids.length) return data;
-    const { data: sd } = await supabase.from('profiles').select('id, profile_slug').in('id', ids);
-    const slugMap = {};
-    (sd || []).forEach(p => { slugMap[p.id] = p.profile_slug; });
-    return data.map(p => ({ ...p, author_slug: slugMap[p.user_id] || null }));
-  }, []);
-
   const fetchPosts = useCallback(async () => {
     setLoading(true);
 
     // ── 1. Resolve follows once ──────────────────────────────────────────
-    let followedUserIds = [], followedPaperIds = [];
-    if (fp === 'fol' && user) {
+    let followedUserIds = [], followedPaperIds = [], followedGroupIds = [];
+    if (user) {
       const { data: fols } = await supabase
         .from('follows').select('target_type, target_id').eq('follower_id', user.id);
       followedUserIds  = (fols||[]).filter(f=>f.target_type==='user').map(f=>f.target_id);
       followedPaperIds = (fols||[]).filter(f=>f.target_type==='paper').map(f=>f.target_id);
-      if (!followedUserIds.length && !followedPaperIds.length) {
-        setPosts([]); setLoading(false); return;
-      }
+      followedGroupIds = (fols||[]).filter(f=>f.target_type==='group').map(f=>f.target_id);
+    }
+    if (fp === 'fol' && !followedUserIds.length && !followedPaperIds.length && !followedGroupIds.length) {
+      setPosts([]); setLoading(false); return;
     }
 
-    // ── 2. Regular posts ─────────────────────────────────────────────────
-    let postQ = supabase.from('posts_with_meta').select('*').eq('is_hidden', false).order('created_at',{ascending:false}).limit(30);
+    // ── 2. Main feed query: context_kind = 'feed' ────────────────────────
+    let postQ = supabase.from('posts_with_meta')
+      .select('*')
+      .eq('context_kind', 'feed')
+      .eq('hidden', false)
+      .order('created_at',{ascending:false})
+      .limit(30);
     if (fp === 'fol') {
       const orParts = [];
       if (followedUserIds.length)  orParts.push(`user_id.in.(${followedUserIds.join(',')})`);
       if (followedPaperIds.length) orParts.push(`paper_doi.in.(${followedPaperIds.join(',')})`);
-      postQ = postQ.or(orParts.join(','));
+      if (orParts.length) postQ = postQ.or(orParts.join(','));
+      else                postQ = postQ.eq('id', '00000000-0000-0000-0000-000000000000'); // empty
     }
     if (tab === 'papers') postQ = postQ.eq('post_type','paper');
+
+    // ── 2b. Group posts from open groups followed (overlay) ──────────────
+    let groupOverlayPromise = Promise.resolve({ data: [] });
+    if (tab !== 'papers') {
+      const overlayGroupIds = fp === 'fol' ? followedGroupIds : [];
+      if (overlayGroupIds.length > 0) {
+        groupOverlayPromise = supabase.from('posts_with_meta')
+          .select('*')
+          .eq('context_kind', 'group')
+          .in('context_id', overlayGroupIds)
+          .eq('visibility', 'public')
+          .eq('hidden', false)
+          .order('created_at', { ascending: false })
+          .limit(20);
+      }
+    }
 
     // ── 3. Repost items (All tab only) ───────────────────────────────────
     let repostPromise = Promise.resolve([]);
@@ -159,7 +165,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
           const { data: reposts } = await rq;
           if (!reposts?.length) return [];
 
-          // Reposter profiles + original posts in parallel
           const reposterIds = [...new Set(reposts.map(r=>r.user_id))];
           const origIds     = [...new Set(reposts.map(r=>r.post_id))];
           const [{ data: profs }, { data: origPosts }] = await Promise.all([
@@ -188,33 +193,10 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       }
     }
 
-    // ── 3b. Group reposts for Following feed ─────────────────────────────
-    let groupRepostPromise = Promise.resolve([]);
-    if (fp === 'fol' && tab !== 'papers') {
-      groupRepostPromise = (async () => {
-        const { data: followedGroups } = await supabase
-          .from('follows').select('target_id')
-          .eq('follower_id', user.id).eq('target_type', 'group');
-        const followedGroupIds = (followedGroups || []).map(f => f.target_id);
-        if (!followedGroupIds.length) return [];
-        const { data } = await supabase
-          .from('group_posts_with_meta').select('*')
-          .in('group_id', followedGroupIds)
-          .eq('is_reposted_public', true)
-          .order('created_at', { ascending: false }).limit(20);
-        return (data || []).map(p => ({
-          ...p,
-          _itemKey:   `gp_${p.id}`,
-          _sortTime:  p.created_at,
-          isRepost:   false,
-          group_id:   p.group_id,
-          group_name: p.group_name,
-        }));
-      })();
-    }
-
-    // ── 4. Await both in parallel ────────────────────────────────────────
-    const [{ data: regularData }, repostItems, groupRepostItems] = await Promise.all([postQ, repostPromise, groupRepostPromise]);
+    // ── 4. Await ────────────────────────────────────────────────────────
+    const [{ data: regularData }, { data: groupOverlayData }, repostItems] = await Promise.all([
+      postQ, groupOverlayPromise, repostPromise,
+    ]);
 
     // ── 5. Merge ─────────────────────────────────────────────────────────
     const followedUserSet  = new Set(followedUserIds);
@@ -222,65 +204,22 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
 
     const allItems = [
       ...(regularData||[]).map(p=>({...p, isRepost:false, _itemKey:p.id, _sortTime:p.created_at})),
-      // In Following mode, only include reposts whose original content is from a followed user/paper
+      ...(groupOverlayData||[]).map(p=>({...p, isRepost:false, _itemKey:`go_${p.id}`, _sortTime:p.created_at})),
       ...repostItems.filter(item =>
         fp !== 'fol' ||
         followedUserSet.has(item.user_id) ||
         (item.paper_doi && followedPaperSet.has(item.paper_doi))
       ),
-      ...groupRepostItems,
     ];
     if (!allItems.length) { setPosts([]); setLoading(false); return; }
 
-    // ── 6. Batch-enrich: likes + repost counts ───────────────────────────
-    const allPostIds = [...new Set(allItems.map(p=>p.id))];
-    let likedSet = new Set(), repostCountMap = {}, userRepostedSet = new Set();
-    if (user && allPostIds.length) {
-      const [{ data: ld }, { data: rd }] = await Promise.all([
-        supabase.from('likes').select('post_id').eq('user_id',user.id).in('post_id', allPostIds),
-        supabase.from('reposts').select('post_id, user_id').in('post_id', allPostIds),
-      ]);
-      likedSet = new Set((ld||[]).map(l=>l.post_id));
-      (rd||[]).forEach(r => {
-        repostCountMap[r.post_id] = (repostCountMap[r.post_id]||0)+1;
-        if (r.user_id === user.id) userRepostedSet.add(r.post_id);
-      });
-    }
+    // ── 6. Slugs ─────────────────────────────────────────────────────────
+    // posts_with_meta already has author_slug baked in; nothing extra to do.
+    const enriched = allItems;
 
-    // ── 6b. Fetch group_id / group_name + is_deep_dive from posts directly ──
-    // posts_with_meta view was compiled before these columns were added;
-    // SELECT * on a view does not auto-include new columns in PostgreSQL.
-    let groupRefMap   = {};
-    let deepDiveMap   = {};
-    let bgColorMap    = {};
-    if (allItems.length) {
-      const postIds = allItems.map(p => p.id);
-      const { data: extraCols } = await supabase
-        .from('posts')
-        .select('id, group_id, group_name, is_deep_dive, bg_color')
-        .in('id', postIds);
-      (extraCols || []).forEach(p => {
-        if (p.group_id)     groupRefMap[p.id] = { group_id: p.group_id, group_name: p.group_name };
-        if (p.is_deep_dive) deepDiveMap[p.id] = true;
-        if (p.bg_color)     bgColorMap[p.id]  = p.bg_color;
-      });
-    }
+    // ── 7. Sort ──────────────────────────────────────────────────────────
+    enriched.sort((a,b) => new Date(b._sortTime) - new Date(a._sortTime));
 
-    const enriched = allItems.map(item => ({
-      ...item,
-      ...(groupRefMap[item.id] || {}),
-      is_deep_dive:  deepDiveMap[item.id] || false,
-      bg_color:      bgColorMap[item.id]  || null,
-      user_liked:    likedSet.has(item.id),
-      repost_count:  repostCountMap[item.id] || 0,
-      user_reposted: userRepostedSet.has(item.id),
-    }));
-
-    // ── 7. Slugs + sort ──────────────────────────────────────────────────
-    const withSlugData = await withSlugs(enriched);
-    withSlugData.sort((a,b) => new Date(b._sortTime) - new Date(a._sortTime));
-
-    // In For You + personalised mode, score posts by taxonomy match
     if (fp === 'sug' && feedMode === 'personalised') {
       const userTier1     = profile?.identity_tier1 || '';
       const userTier2     = profile?.identity_tier2 || '';
@@ -289,7 +228,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       );
 
       if (userTier1 || userTier2 || userInterests.size > 0) {
-        withSlugData.sort((a, b) => {
+        enriched.sort((a, b) => {
           const score = (post) => {
             let s = 0;
             if (post.tier1 && post.tier1 === userTier1)        s += 3;
@@ -306,7 +245,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     }
 
     // Strip milestone posts from other users; hide targeted posts not meant for this user
-    const visible = withSlugData.filter(p =>
+    const visible = enriched.filter(p =>
       (p.post_type !== 'milestone' || p.user_id === user?.id) &&
       (p.target_user_id == null || p.target_user_id === user?.id)
     );
@@ -317,16 +256,15 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
 
     setPosts(filtered);
     setLoading(false);
-  }, [user, profile, tab, fp, feedMode, modeFilter, withSlugs, applyModeFilter]);
+  }, [user, profile, tab, fp, feedMode, modeFilter, applyModeFilter]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
-  // Remove a user's posts immediately when unfollowed in the Following tab
   const handleUnfollow = (userId) => {
     if (fp !== 'fol') return;
     setPosts(prev => prev.filter(p => {
-      if (p.user_id === userId) return false;           // direct posts + reposts of their content
-      if (p.isRepost && p.reposter_id === userId) return false;  // reposts they made
+      if (p.user_id === userId) return false;
+      if (p.isRepost && p.reposter_id === userId) return false;
       return true;
     }));
   };
@@ -343,10 +281,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   const toggleTier2 = (t2) =>
     setFilterTier2(prev => prev.includes(t2) ? prev.filter(x => x !== t2) : [...prev, t2]);
 
-  // Tier filters are applied client-side; the content-type tab is applied at
-  // the server query level (post_type = 'paper'), so the client-side filter
-  // must NOT gate on the tab — otherwise turning on Papers excludes every
-  // post when no tier filters are set.
   const tierFilterCount = filterTier1.length + filterTier2.length;
   const activeFilters   = tierFilterCount + (tab !== 'all' ? 1 : 0);
 
@@ -480,7 +414,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
 
       {showFilter && (
         <div style={{background:T.w,borderBottom:`1px solid ${T.bdr}`,padding:'10px 18px',flexShrink:0}}>
-          {/* Content type */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
             <span style={{fontSize:11,color:T.mu,textTransform:'uppercase',letterSpacing:0.4,fontWeight:700}}>Content type</span>
             {[['all','All'],['papers','📄 Papers']].map(([k,l])=>(
@@ -532,7 +465,6 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         <div style={{padding:"16px 18px",boxSizing:"border-box",width:"100%"}}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 264px",gap:16,alignItems:"start",minWidth:0,width:"100%"}}>
             <div style={{display:"flex",flexDirection:"column",gap:12,minWidth:0}}>
-              {/* Compose entry — opens the dedicated NewPost screen */}
               {onCompose && (
                 <button onClick={onCompose}
                   style={{
@@ -583,7 +515,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
                     <div style={{fontSize:13,color:T.mu,marginBottom:16}}>{emptyMsg.body}</div>
                   </div>
                 )
-              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
+              ) : filteredPosts.map(p => <PostCard key={p._itemKey||p.id} post={p} currentUserId={user?.id} currentProfile={profile} onRefresh={fetchPosts} onViewUser={onViewUser} onUnfollow={handleUnfollow} onViewPaper={onViewPaper} onTagClick={onTagClick} onViewGroup={onViewGroup} onViewProject={onViewProject} isSaved={savedPostIds.has(p.id)} onSaveToggled={onSaveToggled}/>)}
             </div>
             {!isMobile && (
               <div>

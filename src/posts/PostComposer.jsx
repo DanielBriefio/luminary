@@ -8,7 +8,6 @@ import { getFileCategory } from '../lib/fileUtils';
 import { checkRemainingQuota } from '../lib/storageQuota';
 import { getCachedTagsByDoi, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
 import Btn from '../components/Btn';
-import Inp from '../components/Inp';
 import RichTextEditor from '../components/RichTextEditor';
 import CoverRepositioner from '../components/CoverRepositioner';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
@@ -100,8 +99,41 @@ function EpResultCard({ title, authors, citation, journal, year, cited, oa, onSe
   );
 }
 
-export default function NewPostScreen({ user, profile, setProfile, onPostCreated }) {
+// Default visibility per context
+function defaultVisibility(context) {
+  if (context.kind === 'feed') return 'public';
+  if (context.kind === 'group') return context.groupIsPublic ? 'public' : 'members';
+  if (context.kind === 'project') return 'members';
+  return 'public';
+}
+
+// Notify group members of a new group post
+async function notifyGroupMembers(groupId, groupName, posterId, postId) {
+  const { data: members } = await supabase
+    .from('group_members')
+    .select('user_id')
+    .eq('group_id', groupId)
+    .in('role', ['admin', 'member'])
+    .neq('user_id', posterId);
+  if (!members?.length) return;
+  await supabase.from('notifications').insert(
+    members.map(m => ({
+      user_id:    m.user_id,
+      notif_type: 'group_post',
+      actor_id:   posterId,
+      target_id:  postId,
+      meta:       { group_id: groupId, group_name: groupName },
+    }))
+  );
+}
+
+export default function PostComposer({
+  context = { kind: 'feed' },
+  user, profile, setProfile,
+  onPublished, onCancel,
+}) {
   const { isMobile } = useWindowSize();
+  const ctx = context.kind || 'feed';
   const [postType,setPostType]           = useState('text');
   const [content,setContent]             = useState('');
 
@@ -139,26 +171,23 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
   // we know the post.id. We flush record_storage_file for each after publish.
   const pendingImagesRef = useRef([]);
 
-  // Attachments (for text / tip posts)
-  const [attachType,setAttachType]       = useState(null); // null | 'file'
+  // Attachments
+  const [attachType,setAttachType]       = useState(null);
   const [uploadFile,setUploadFile]       = useState(null);
   const [uploadPreview,setUploadPreview] = useState('');
   const [uploadCategory,setUploadCategory] = useState('');
   const [uploading,setUploading]         = useState(false);
 
   const [isDeepDive, setIsDeepDive]       = useState(false);
-  // Deep-dive optional title + cover image. Cover uploads immediately; we
-  // record the storage row after the post insert returns (same pattern as
-  // pendingImagesRef for inline editor images).
   const [deepDiveTitle,    setDeepDiveTitle]    = useState('');
   const [coverUrl,         setCoverUrl]         = useState('');
   const [coverPath,        setCoverPath]        = useState('');
-  const [coverFileMeta,    setCoverFileMeta]    = useState(null); // { size, type, name }
+  const [coverFileMeta,    setCoverFileMeta]    = useState(null);
   const [coverUploading,   setCoverUploading]   = useState(false);
-  const [coverY,           setCoverY]           = useState(50);    // 0–100; vertical object-position %
+  const [coverY,           setCoverY]           = useState(50);
   const coverInputRef = useRef(null);
   const [tags,setTags]                   = useState('');
-  const [visibility,setVisibility]       = useState('everyone');
+  const [visibility,setVisibility]       = useState(() => defaultVisibility(context));
   const [loading,setLoading]             = useState(false);
   const [success,setSuccess]             = useState(false);
   const [error,setError]                 = useState('');
@@ -175,7 +204,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     return () => clearTimeout(urlDebounceRef.current);
   }, [content, postType]);
 
-  // Pre-fill paper fields from Explore "Share this paper"
+  // Pre-fill paper fields from Explore / Library "Share this paper"
   useEffect(() => {
     const raw = sessionStorage.getItem('prefill_paper');
     if (!raw) return;
@@ -190,7 +219,6 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       if (paper.year)     setPaperYear(paper.year);
       if (paper.doi)      setPaperDoi(paper.doi);
       if (paper.citation) setPaperCitation(paper.citation);
-      // Always open filled-fields view if there's any metadata to show
       if (paper.title || paper.doi) setDoiFetched(true);
     } catch(e) {}
   }, []); // eslint-disable-line
@@ -357,6 +385,27 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     return { url: publicUrl, path: data.path };
   };
 
+  // Visibility selector — show only when meaningful.
+  // Feed posts: public | private (default public, currently we treat private
+  // as the only downgrade — there's no UI for "Followers only" in unified posts).
+  // Open-group posts: public | members (default public)
+  // Closed-group / project posts: members locked (or members | private)
+  const visibilityOptions = (() => {
+    if (ctx === 'feed') {
+      return [['public','Everyone'],['private','Only me']];
+    }
+    if (ctx === 'group') {
+      if (context.groupIsPublic) {
+        return [['public','Everyone'],['members','Members only']];
+      }
+      return [['members','Members only']];
+    }
+    if (ctx === 'project') {
+      return [['members','Project members']];
+    }
+    return [['public','Everyone']];
+  })();
+
   const publish = async () => {
     const plainContent = content.replace(/<[^>]+>/g,'').trim();
     if(postType === 'paper' && !paperTitle.trim()) { setError('Please add a paper title.'); return; }
@@ -376,13 +425,12 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       setUploading(false);
     }
 
-    // Derive post_type from attachment
     let resolvedPostType = postType;
     if (uploadFile) resolvedPostType = uploadCategory || 'text';
 
     const manualTags = tags.split(/[\s,]+/).filter(t=>t.trim()).map(t=>t.startsWith('#')?t:`#${t}`);
 
-    const { data: newPost, error } = await supabase.from('posts').insert({
+    const payload = {
       user_id:       user.id,
       content:       content.trim(),
       post_type:     resolvedPostType,
@@ -404,12 +452,20 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       deep_dive_title:          isDeepDive ? deepDiveTitle.trim() : '',
       deep_dive_cover_url:      isDeepDive ? coverUrl : '',
       deep_dive_cover_position: (isDeepDive && coverUrl) ? `50% ${Math.round(coverY)}%` : '50% 50%',
-    }).select('id').single();
-    setLoading(false);
-    if(error) { setError(error.message); return; }
+      context_kind: ctx,
+      context_id:   ctx === 'feed' ? null
+                   : ctx === 'group'   ? context.groupId
+                   : ctx === 'project' ? context.projectId
+                   : null,
+    };
 
+    const { data: newPost, error: insertErr } = await supabase.from('posts').insert(payload)
+      .select('id').single();
+    setLoading(false);
+    if(insertErr) { setError(insertErr.message); return; }
+
+    // Storage tracking — every post upload uses source_kind='post'
     if (uploadFile && uploadedPath && newPost?.id) {
-      // supabase.rpc returns a PromiseLike (no .catch); use the two-arg .then form.
       supabase.rpc('record_storage_file', {
         p_bucket:      'post-files',
         p_path:        uploadedPath,
@@ -421,8 +477,6 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       }).then(() => {}, () => {});
     }
 
-    // Record the deep-dive cover image (uploaded earlier, before we had
-    // the post id) against the post.
     if (newPost?.id && coverPath && coverFileMeta) {
       supabase.rpc('record_storage_file', {
         p_bucket:      'post-files',
@@ -435,8 +489,6 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       }).then(() => {}, () => {});
     }
 
-    // Flush deferred records for any inline images uploaded by the editor
-    // before we knew the post id.
     if (newPost?.id && pendingImagesRef.current.length > 0) {
       for (const rec of pendingImagesRef.current) {
         supabase.rpc('record_storage_file', {
@@ -452,6 +504,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
       pendingImagesRef.current = [];
     }
 
+    // Lumens — +5 for post creation
     if (LUMENS_ENABLED && newPost?.id) {
       try {
         const prevLumens = profile?.lumens_current_period || 0;
@@ -463,8 +516,6 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           p_meta:     { post_id: newPost.id, post_type: resolvedPostType },
         }).then(() => {}, () => {});
         captureLumensEarned({ reason: 'post_created', amount: 5, meta: { post_id: newPost.id, post_type: resolvedPostType }, prevLumens });
-        // Optimistic local update so the sidebar widget reflects the +5 right
-        // away without waiting for a profile re-fetch.
         setProfile?.(p => p ? {
           ...p,
           lumens_current_period: (p.lumens_current_period || 0) + 5,
@@ -472,7 +523,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
         } : p);
 
         // Recognition: if this is the user's first post, find the inviter and
-        // award them +100 Lumens. Best-effort; never blocks the publish flow.
+        // award them +100 Lumens. Best-effort.
         (async () => {
           try {
             const { count } = await supabase
@@ -494,7 +545,6 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
                 p_category: 'recognition',
                 p_meta:     { invited_user_id: user.id },
               }).then(() => {}, () => {});
-              // No prevLumens — inviter is a different user, we don't know their balance.
               captureLumensEarned({ reason: 'invited_user_active', amount: 100, meta: { invited_user_id: user.id, inviter_id: inviterId } });
             }
           } catch {}
@@ -514,11 +564,22 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
         userId:        user.id,
       }).catch(console.warn);
     }
-    capture('post_created', { post_type: resolvedPostType, has_tags: tags.trim().length > 0 });
-    if (resolvedPostType === 'paper') capture('paper_shared', { has_doi: !!paperDoi.trim() });
+
+    // Group post: notify members
+    if (ctx === 'group' && newPost?.id && context.groupId) {
+      notifyGroupMembers(context.groupId, context.groupName, user.id, newPost.id).catch(() => {});
+    }
+
+    capture('post_created', {
+      post_type: resolvedPostType,
+      has_tags:  tags.trim().length > 0,
+      context_kind: ctx,
+    });
+    if (resolvedPostType === 'paper') capture('paper_shared', { has_doi: !!paperDoi.trim(), context_kind: ctx });
+
     setSuccess(true);
     setContent(''); resetDoi(); clearAttachment(); setTags('');
-    setTimeout(() => { setSuccess(false); onPostCreated && onPostCreated(); }, 2000);
+    setTimeout(() => { setSuccess(false); onPublished?.(newPost); }, 1500);
   };
 
   const types = [
@@ -544,13 +605,46 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
     color: active ? T.v : T.mu,
   });
 
+  const headerLabel =
+    ctx === 'group'   ? `New post in ${context.groupName || 'group'}` :
+    ctx === 'project' ? `New post in ${context.projectName || 'project'}` :
+    'Share something with the scientific community';
+
+  const headerSub =
+    ctx === 'group'   ? 'Visible to group members.' :
+    ctx === 'project' ? 'Visible to project members.' :
+    "Select what you're sharing and publish to the feed.";
+
+  const showVisibility = visibilityOptions.length > 1;
+
   return (
     <div style={{flex:1,overflowY:"auto",padding:isMobile?0:32,background:T.bg,display:"flex",alignItems:"flex-start",justifyContent:"center"}}>
       <div style={{maxWidth:isMobile?"100%":640,width:"100%",background:T.w,border:isMobile?"none":`1px solid ${T.bdr}`,borderRadius:isMobile?0:16,padding:isMobile?"16px 16px 0":28,boxShadow:isMobile?"none":"0 4px 24px rgba(108,99,255,.1)",display:"flex",flexDirection:"column"}}>
-        <div style={{fontFamily:"'DM Serif Display',serif",fontSize:19,fontWeight:700,marginBottom:5}}>Share something with the scientific community</div>
-        <div style={{fontSize:13,color:T.mu,marginBottom:20}}>Select what you're sharing and publish to the feed.</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
+          <div style={{fontFamily:"'DM Serif Display',serif",fontSize:19,fontWeight:700}}>{headerLabel}</div>
+          {onCancel && (
+            <button onClick={onCancel} style={{fontSize:13,color:T.mu,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit'}}>✕</button>
+          )}
+        </div>
+        <div style={{fontSize:13,color:T.mu,marginBottom:20}}>{headerSub}</div>
 
-        {success && <div style={{background:T.gr2,border:`1px solid ${T.gr}`,borderRadius:10,padding:"10px 16px",marginBottom:16,color:T.gr,fontWeight:700}}>✅ Published! Taking you back to the feed...</div>}
+        {/* Project owned by group — heads-up banner */}
+        {ctx === 'project' && context.projectGroupId && context.projectGroupName && (
+          <div style={{
+            background: T.v2, border: `1px solid rgba(108,99,255,.2)`,
+            borderRadius: 10, padding: '9px 13px', marginBottom: 16,
+            fontSize: 12.5, color: T.v, lineHeight: 1.5,
+            display: 'flex', alignItems: 'flex-start', gap: 8,
+          }}>
+            <span>👥</span>
+            <span>
+              This project is owned by <strong>{context.projectGroupName}</strong> — posts here
+              are visible to all <strong>{context.projectGroupName}</strong> members.
+            </span>
+          </div>
+        )}
+
+        {success && <div style={{background:T.gr2,border:`1px solid ${T.gr}`,borderRadius:10,padding:"10px 16px",marginBottom:16,color:T.gr,fontWeight:700}}>✅ Published!</div>}
         {error   && <div style={{background:T.ro2,border:`1px solid ${T.ro}`,borderRadius:10,padding:"10px 16px",marginBottom:16,color:T.ro,fontWeight:600}}>⚠️ {error}</div>}
 
         {/* Post type selector */}
@@ -722,9 +816,7 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           </div>
         )}
 
-        {/* Deep Dive toggle — text posts only, hidden on mobile (long-form
-            article composition isn't a phone use-case; the toggle just
-            invites confusion). Tablet (≥768px) and desktop see it. */}
+        {/* Deep Dive toggle — text posts only, hidden on mobile */}
         {postType === 'text' && !isMobile && (
           <div
             onClick={() => setIsDeepDive(d => !d)}
@@ -844,6 +936,8 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
               isDeepDive ? "Write your article here. Use Heading 2 / 3 for sections, ❝ for pull quotes, 📄 Cite to add paper references…" :
+              ctx === 'group' ? "Share an update, finding, or question with the group…" :
+              ctx === 'project' ? "Post something in this project…" :
               composerPrompt
             }/>
         </div>
@@ -855,11 +949,10 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
           </div>
         )}
 
-        {/* Attachment area (text / tip only) */}
+        {/* Attachment area (text only) */}
         {postType !== 'paper' && (
           <div style={{marginTop:10, marginBottom:14}}>
 
-            {/* Attach buttons */}
             {!uploadFile && (
               <div style={{display:"flex",gap:8}}>
                 <button style={attachBtnStyle(attachType==='file')} onClick={()=>switchAttachType('file')}>
@@ -868,7 +961,6 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
               </div>
             )}
 
-            {/* File upload UI */}
             {attachType === 'file' && !uploadFile && (
               <label style={{display:"block",cursor:"pointer",marginTop:10}}>
                 <input type="file"
@@ -888,7 +980,6 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
               </label>
             )}
 
-            {/* File preview */}
             {uploadFile && (
               <div style={{border:`1px solid ${T.bdr}`,borderRadius:12,overflow:"hidden",marginTop:10}}>
                 {uploadCategory==='image' && uploadPreview && (
@@ -950,14 +1041,25 @@ export default function NewPostScreen({ user, profile, setProfile, onPostCreated
 
         {/* Footer */}
         <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12,padding:isMobile?"12px 0 calc(12px + env(safe-area-inset-bottom))":"12px 0 0",borderTop:`1px solid ${T.bdr}`,background:T.w,position:isMobile?"sticky":undefined,bottom:isMobile?0:undefined,flexWrap:"wrap"}}>
-          <span style={{fontSize:12,color:T.mu,fontWeight:600}}>Visible to:</span>
-          <div style={{display:"flex",background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:3}}>
-            {[["everyone","Everyone"],["followers","Followers only"]].map(([v,l])=>(
-              <div key={v} onClick={()=>setVisibility(v)}
-                style={{padding:"4px 12px",borderRadius:18,fontSize:12,color:visibility===v?T.v:T.mu,cursor:"pointer",fontWeight:700,background:visibility===v?T.w:"transparent"}}>{l}</div>
-            ))}
-          </div>
+          {showVisibility ? (
+            <>
+              <span style={{fontSize:12,color:T.mu,fontWeight:600}}>Visible to:</span>
+              <div style={{display:"flex",background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:3}}>
+                {visibilityOptions.map(([v,l])=>(
+                  <div key={v} onClick={()=>setVisibility(v)}
+                    style={{padding:"4px 12px",borderRadius:18,fontSize:12,color:visibility===v?T.v:T.mu,cursor:"pointer",fontWeight:700,background:visibility===v?T.w:"transparent"}}>{l}</div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <span style={{fontSize:12,color:T.mu,fontWeight:600}}>
+              {ctx === 'project' ? '👥 Project members only' :
+               ctx === 'group'   ? '👥 Group members only'   :
+               ''}
+            </span>
+          )}
           <div style={{marginLeft:"auto",display:"flex",gap:9}}>
+            {onCancel && <Btn onClick={onCancel}>Cancel</Btn>}
             <Btn onClick={()=>{setContent('');setError('');clearAttachment();}}>Clear</Btn>
             <Btn variant="s" onClick={publish} disabled={loading||uploading} style={{padding:"9px 24px",fontSize:13}}>
               {uploading?"Uploading...":loading?"Publishing...":"Publish →"}

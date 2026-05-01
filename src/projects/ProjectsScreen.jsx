@@ -27,9 +27,10 @@ async function fetchUnreadCounts(projectList, userId) {
   await Promise.all(projectList.map(async (project) => {
     const lastRead = readMap[project.id] || '1970-01-01';
     const { count } = await supabase
-      .from('project_posts')
+      .from('posts')
       .select('id', { count: 'exact', head: true })
-      .eq('project_id', project.id)
+      .eq('context_kind', 'project')
+      .eq('context_id', project.id)
       .gt('created_at', lastRead);
     counts[project.id] = count || 0;
   }));
@@ -40,9 +41,10 @@ async function fetchLastActivity(projectList) {
   const activity = {};
   await Promise.all(projectList.map(async (project) => {
     const { data } = await supabase
-      .from('project_posts')
+      .from('posts')
       .select('created_at')
-      .eq('project_id', project.id)
+      .eq('context_kind', 'project')
+      .eq('context_id', project.id)
       .order('created_at', { ascending: false })
       .limit(1);
     activity[project.id] = data?.[0]?.created_at || null;

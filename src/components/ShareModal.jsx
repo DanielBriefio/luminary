@@ -3,7 +3,7 @@ import { T } from '../lib/constants';
 
 function getShareTitle(post) {
   if (post.post_type === 'paper' && post.paper_title) return post.paper_title;
-  if (post.post_type === 'link'  && post.link_title)  return post.link_title;
+  if (post.deep_dive_title) return post.deep_dive_title;
   const plain = (post.content || '').replace(/<[^>]+>/g, '').trim();
   return plain.slice(0, 100) + (plain.length > 100 ? '…' : '');
 }
