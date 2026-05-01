@@ -90,7 +90,7 @@ begin
   delete from project_members       where user_id = bot_id;
   delete from group_join_requests   where user_id = bot_id;
   delete from group_follows         where user_id = bot_id;
-  delete from library_items         where user_id = bot_id;
+  delete from library_items         where added_by = bot_id;
   delete from library_folders       where user_id = bot_id;
   delete from bookmark_folders      where user_id = bot_id;
   delete from notifications         where user_id = bot_id or actor_id = bot_id;
