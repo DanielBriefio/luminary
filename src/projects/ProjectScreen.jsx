@@ -94,8 +94,16 @@ export default function ProjectScreen({ projectId, user, profile, setProfile, on
 
   const deleteProject = async () => {
     setDeleting(true);
-    await supabase.from('projects').delete().eq('id', projectId);
+    // .select() so we see how many rows actually came back. RLS rejects
+    // typically return zero rows + no error — the .select() lets us tell
+    // "DB rejected the row" apart from "DB succeeded".
+    const { data, error } = await supabase.from('projects').delete().eq('id', projectId).select();
     setDeleting(false);
+    if (error) { window.alert('Failed to delete: ' + error.message); return; }
+    if (!data || data.length === 0) {
+      window.alert('Delete blocked — your role may not allow it (group projects need group admin; personal projects need to be your own).');
+      return;
+    }
     onBack();
   };
 

@@ -114,6 +114,17 @@ export default function ProjectsScreen({ user, onEditPost }) {
     fetchProjects();
   };
 
+  const deleteProject = async (project) => {
+    if (!window.confirm(`Delete "${project.name}"? This cannot be undone — every post, folder, and member of this project will be removed.`)) return;
+    const { data, error } = await supabase.from('projects').delete().eq('id', project.id).select();
+    if (error) { window.alert('Failed to delete: ' + error.message); return; }
+    if (!data || data.length === 0) {
+      window.alert('Delete blocked — your role may not allow it (group projects need group admin; personal projects need to be your own).');
+      return;
+    }
+    fetchProjects();
+  };
+
   if (activeProject) {
     return (
       <ProjectScreen
@@ -205,6 +216,7 @@ export default function ProjectsScreen({ user, onEditPost }) {
                   onClick={() => setActiveProject(p.id)}
                   onTogglePin={togglePin}
                   onArchive={archiveProject}
+                  onDelete={deleteProject}
                   onSaveAsTemplate={proj => setSaveAsTemplateProject(proj)}
                   onEdit={proj => setEditingProject(proj)}
                   unreadCount={unreadCounts[p.id] || 0}
@@ -249,7 +261,7 @@ export default function ProjectsScreen({ user, onEditPost }) {
   );
 }
 
-function ProjectBadgeCard({ project, onClick, onTogglePin, onArchive, onSaveAsTemplate, onEdit, unreadCount, lastActivity, isOwner }) {
+function ProjectBadgeCard({ project, onClick, onTogglePin, onArchive, onDelete, onSaveAsTemplate, onEdit, unreadCount, lastActivity, isOwner }) {
   const [showMenu, setShowMenu] = useState(false);
   const nudgeKey = `luminary_project_nudge_${project.id}`;
   const [nudgeDismissed, setNudgeDismissed] = useState(() => {
@@ -276,14 +288,18 @@ function ProjectBadgeCard({ project, onClick, onTogglePin, onArchive, onSaveAsTe
       <div
         onClick={onClick}
         style={{
-          background: T.w, borderRadius: 14, overflow: 'hidden',
+          background: T.w, borderRadius: 14,
+          // Removed overflow:hidden so the ⋯ menu can extend beyond the card
+          // bounds. The colored top stripe still gets rounded corners via its
+          // own borderRadius below.
           border: `1px solid ${T.bdr}`, cursor: 'pointer',
           transition: 'box-shadow .15s',
+          position: 'relative',
         }}
         onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,.10)'}
         onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
       >
-        <div style={{ height: 5, background: project.cover_color || T.v }}/>
+        <div style={{ height: 5, background: project.cover_color || T.v, borderTopLeftRadius: 13, borderTopRightRadius: 13 }}/>
         <div style={{ padding: '14px 16px' }}>
 
           {/* Top row: icon + badges + menu */}
@@ -321,11 +337,15 @@ function ProjectBadgeCard({ project, onClick, onTogglePin, onArchive, onSaveAsTe
                         <button onClick={() => { onTogglePin(project); setShowMenu(false); }} style={menuBtnStyle}>
                           {project.is_pinned ? '📌 Unpin' : '📌 Pin to top'}
                         </button>
+                        <button onClick={() => { onSaveAsTemplate(project); setShowMenu(false); }} style={menuBtnStyle}>
+                          🗂️ Save as template
+                        </button>
                         <button onClick={() => { onArchive(project); setShowMenu(false); }} style={{ ...menuBtnStyle, color: T.mu }}>
                           📦 Archive
                         </button>
-                        <button onClick={() => { onSaveAsTemplate(project); setShowMenu(false); }} style={menuBtnStyle}>
-                          🗂️ Save as template
+                        <div style={{ height: 1, background: T.bdr, margin: '4px 10px' }}/>
+                        <button onClick={() => { onDelete(project); setShowMenu(false); }} style={{ ...menuBtnStyle, color: T.ro }}>
+                          🗑️ Delete project
                         </button>
                       </div>
                     </>
