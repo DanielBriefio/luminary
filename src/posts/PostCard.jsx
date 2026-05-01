@@ -169,10 +169,12 @@ export default function PostCard({
   const [commCount, setCommCount]  = useState(parseInt(post.comment_count)||0);
   const commInputRef = useRef(null);
 
-  const [editingTags, setEditingTags] = useState(false);
-  const [editTier1,   setEditTier1]   = useState(post.tier1 || '');
-  const [editTier2,   setEditTier2]   = useState(post.tier2 || []);
-  const [editTags,    setEditTags]    = useState(post.tags  || []);
+  const [editingTags,  setEditingTags]  = useState(false);
+  const [editTier1,    setEditTier1]    = useState(post.tier1 || '');
+  const [editTier2,    setEditTier2]    = useState(post.tier2 || []);
+  // Raw editable string. Parsed into an array only on save — fixes the
+  // commas-get-eaten bug from controlling the input with editTags.join().
+  const [editTagsText, setEditTagsText] = useState((post.tags || []).join(', '));
 
   const [abstractExpanded, setAbstractExpanded] = useState(false);
   const [topComment,       setTopComment]       = useState(null);
@@ -399,7 +401,8 @@ export default function PostCard({
   };
 
   const saveTagEdits = async () => {
-    await supabase.from('posts').update({ tier1: editTier1, tier2: editTier2, tags: editTags }).eq('id', post.id);
+    const parsedTags = editTagsText.split(',').map(t => t.trim()).filter(Boolean);
+    await supabase.from('posts').update({ tier1: editTier1, tier2: editTier2, tags: parsedTags }).eq('id', post.id);
     setEditingTags(false);
     onRefresh && onRefresh();
   };
@@ -764,7 +767,7 @@ export default function PostCard({
               </div>
             )}
             <div style={{fontSize:11.5, color:T.mu, marginBottom:4}}>Specific tags (comma separated):</div>
-            <input value={editTags.join(', ')} onChange={e=>setEditTags(e.target.value.split(',').map(t=>t.trim()).filter(Boolean))}
+            <input value={editTagsText} onChange={e=>setEditTagsText(e.target.value)}
               placeholder="e.g. p53_mutation, CRISPR_cas9"
               style={{width:'100%', padding:'6px 10px', borderRadius:8, border:`1.5px solid ${T.bdr}`, background:T.w, fontSize:12, fontFamily:'inherit', marginBottom:8, color:T.text, boxSizing:'border-box'}}/>
             <div style={{display:'flex', gap:8}}>
