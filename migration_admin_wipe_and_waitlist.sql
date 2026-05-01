@@ -83,7 +83,9 @@ begin
   delete from project_post_likes    where user_id = bot_id;
   delete from reposts               where user_id = bot_id;
   delete from saved_posts           where user_id = bot_id;
-  delete from follows               where follower_id  = bot_id or target_id    = bot_id;
+  -- follows.target_id is TEXT (polymorphic: stores profile or group id),
+  -- so cast bot_id to text on the comparison side.
+  delete from follows               where follower_id  = bot_id or target_id    = bot_id::text;
   delete from group_members         where user_id = bot_id;
   delete from project_members       where user_id = bot_id;
   delete from group_join_requests   where user_id = bot_id;
