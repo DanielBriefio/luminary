@@ -5,6 +5,7 @@ import { timeAgo } from '../lib/utils';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import CreateProjectModal from '../projects/CreateProjectModal';
+import ProjectEditModal from '../projects/ProjectEditModal';
 import TemplateGallery from '../projects/TemplateGallery';
 
 export default function GroupProjects({ groupId, user, myRole, onSelectProject }) {
@@ -14,6 +15,7 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
   const [showGallery,           setShowGallery]           = useState(false);
   const [preselectedTemplate,   setPreselectedTemplate]   = useState(null);
   const [communityTemplateData, setCommunityTemplateData] = useState(null);
+  const [editingProject,        setEditingProject]        = useState(null);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -72,6 +74,14 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
         />
       )}
 
+      {editingProject && (
+        <ProjectEditModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onSaved={() => { setEditingProject(null); fetchProjects(); }}
+        />
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20 }}>Projects</div>
         {canCreate && (
@@ -101,6 +111,7 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
               project={p}
               onClick={() => onSelectProject?.(p.id)}
               onTogglePin={isAdmin ? togglePin : null}
+              onEdit={isAdmin ? proj => setEditingProject(proj) : null}
             />
           ))}
         </div>
@@ -109,8 +120,9 @@ export default function GroupProjects({ groupId, user, myRole, onSelectProject }
   );
 }
 
-function GroupProjectCard({ project, onClick, onTogglePin }) {
+function GroupProjectCard({ project, onClick, onTogglePin, onEdit }) {
   const [showMenu, setShowMenu] = useState(false);
+  const showMenuButton = !!onTogglePin || !!onEdit;
 
   const menuBtnStyle = {
     width: '100%', padding: '9px 14px', border: 'none',
@@ -137,7 +149,7 @@ function GroupProjectCard({ project, onClick, onTogglePin }) {
             <span style={{ fontSize: 24 }}>{project.icon}</span>
             {project.is_pinned && <span style={{ fontSize: 12, opacity: 0.6 }}>📌</span>}
           </div>
-          {onTogglePin && (
+          {showMenuButton && (
             <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
               <button onClick={() => setShowMenu(m => !m)} style={{
                 fontSize: 15, color: T.mu, border: 'none', background: 'transparent',
@@ -151,9 +163,17 @@ function GroupProjectCard({ project, onClick, onTogglePin }) {
                     borderRadius: 10, zIndex: 10, boxShadow: '0 4px 20px rgba(0,0,0,.12)',
                     border: `1px solid ${T.bdr}`, minWidth: 150, overflow: 'hidden',
                   }}>
-                    <button onClick={() => { onTogglePin(project); setShowMenu(false); }} style={menuBtnStyle}>
-                      {project.is_pinned ? '📌 Unpin' : '📌 Pin to top'}
-                    </button>
+                    {onEdit && (
+                      <button onClick={() => { onEdit(project); setShowMenu(false); }}
+                        style={{ ...menuBtnStyle, color: T.v, fontWeight: 600 }}>
+                        ✎ Edit project
+                      </button>
+                    )}
+                    {onTogglePin && (
+                      <button onClick={() => { onTogglePin(project); setShowMenu(false); }} style={menuBtnStyle}>
+                        {project.is_pinned ? '📌 Unpin' : '📌 Pin to top'}
+                      </button>
+                    )}
                   </div>
                 </>
               )}

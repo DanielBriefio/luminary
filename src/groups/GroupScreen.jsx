@@ -234,9 +234,17 @@ export default function GroupScreen({ groupId, user, profile, setProfile, onBack
       <ProjectScreen
         projectId={activeProjectId}
         user={user}
+        profile={profile}
+        setProfile={setProfile}
         group={group}
         onBackToGroup={() => { setActiveProjectId(null); setActiveTab('feed'); }}
         onBack={() => setActiveProjectId(null)}
+        onViewPaper={onViewPaper}
+        onViewGroup={onViewGroup}
+        onViewProject={onViewProject}
+        onEditPost={onEditPost}
+        savedPostIds={savedPostIds}
+        onSaveToggled={onSaveToggled}
       />
     );
   }
