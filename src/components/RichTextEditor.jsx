@@ -135,6 +135,11 @@ export default function RichTextEditor({
     if (!imgToolbar?.el) return;
     if (newSize === 'full') imgToolbar.el.removeAttribute('data-size');
     else                    imgToolbar.el.setAttribute('data-size', newSize);
+    // Strip any inline style. The editor + reader CSS already covers
+    // border-radius / margin / max-width / display; an inline max-width
+    // would otherwise outrank the data-size CSS rule and the resize
+    // would not render after save.
+    imgToolbar.el.removeAttribute('style');
     setImgToolbar(t => t ? { ...t, size: newSize } : t);
     syncContent();
   };
@@ -296,8 +301,10 @@ export default function RichTextEditor({
       const { url, path } = await uploadInlineImage(user, file);
       editorRef.current?.focus();
       restoreSelection();
-      document.execCommand('insertHTML', false,
-        `<img src="${url}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0;display:block;" />`);
+      // No inline style — editor + reader CSS provide max-width / margin /
+      // border-radius / display. Inline styles would override the
+      // data-size CSS used for the resize feature.
+      document.execCommand('insertHTML', false, `<img src="${url}" alt="" />`);
       syncContent();
 
       // Storage tracking — record now if we know the post id, otherwise
@@ -430,7 +437,11 @@ export default function RichTextEditor({
         borderRadius:"10px 10px 0 0",
         position: isDeepDive ? 'sticky' : 'static',
         top: isDeepDive ? 0 : 'auto',
-        zIndex: isDeepDive ? 20 : 'auto',
+        zIndex: isDeepDive ? 50 : 'auto',
+        // Drop shadow makes the elevation explicit when content scrolls
+        // beneath, so the toolbar reads as anchored to the editor top
+        // instead of floating mid-page.
+        boxShadow: isDeepDive ? '0 2px 8px rgba(27,29,54,0.06)' : 'none',
       }}>
         {/* Style dropdown */}
         <select
