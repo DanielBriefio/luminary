@@ -135,6 +135,7 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
                 onViewGroup={onViewGroup}
                 onViewProject={onViewProject}
                 onEditPost={onEditPost}
+                availableFolders={folders}
                 isSaved={savedPostIds.has(p.id)}
                 onSaveToggled={onSaveToggled}
               />

@@ -137,6 +137,10 @@ export default function PostCard({
   post, currentUserId, currentProfile,
   onRefresh, onViewUser, onUnfollow, onViewPaper, hidePaperDetails,
   onTagClick, onViewGroup, onViewProject, onEditPost,
+  availableFolders = null,
+    // When set (project context only), the post owner gets a "Move to
+    // folder" submenu in the ⋯ menu listing these folders. Each entry
+    // is `{ id, name }`. Pass null/undefined to suppress.
   isSaved = false, onSaveToggled,
 }) {
   const { isMobile } = useWindowSize();
@@ -151,6 +155,7 @@ export default function PostCard({
   const [saved,setSaved]             = useState(isSaved);
   useEffect(() => { setSaved(isSaved); }, [isSaved]);
   const [menuOpen,setMenuOpen]       = useState(false);
+  const [showFolderMove, setShowFolderMove] = useState(false);
   const [editing,setEditing]       = useState(false);
   const [editText,setEditText]     = useState(post.content||'');
   const [editSaving,setEditSaving] = useState(false);
@@ -340,6 +345,14 @@ export default function PostCard({
   const deletePost = async () => {
     await supabase.from('posts').delete().eq('id', post.id);
     setDeleted(true);
+    onRefresh && onRefresh();
+  };
+
+  const moveToFolder = async (folderId) => {
+    // folderId === null means "All posts" (folder-less)
+    await supabase.from('posts').update({ folder_id: folderId }).eq('id', post.id);
+    setShowFolderMove(false);
+    setMenuOpen(false);
     onRefresh && onRefresh();
   };
 
@@ -569,9 +582,9 @@ export default function PostCard({
               </button>
               {menuOpen&&(
                 <>
-                  <div onClick={()=>{setMenuOpen(false);setConfirmDelete(false);}} style={{position:"fixed",inset:0,zIndex:9}}/>
-                  <div style={{position:"absolute",right:0,top:32,background:T.w,border:`1px solid ${T.bdr}`,borderRadius:11,boxShadow:"0 4px 20px rgba(0,0,0,.12)",zIndex:10,minWidth:160,overflow:"hidden"}}>
-                    {!confirmDelete?(
+                  <div onClick={()=>{setMenuOpen(false);setConfirmDelete(false);setShowFolderMove(false);}} style={{position:"fixed",inset:0,zIndex:9}}/>
+                  <div style={{position:"absolute",right:0,top:32,background:T.w,border:`1px solid ${T.bdr}`,borderRadius:11,boxShadow:"0 4px 20px rgba(0,0,0,.12)",zIndex:10,minWidth:180,overflow:"hidden"}}>
+                    {!confirmDelete && !showFolderMove ? (
                       <>
                         <button onClick={()=>{
                           // Deep dives open the full composer (cover, image insert, title, etc.).
@@ -581,10 +594,35 @@ export default function PostCard({
                           setMenuOpen(false);
                         }} style={menuItemStyle(T.text)}>✏️ Edit post</button>
                         <button onClick={()=>{setEditingTags(true);setMenuOpen(false);}} style={menuItemStyle(T.text)}>🏷️ Edit tags</button>
+                        {/* Project context only: surface the folder picker */}
+                        {availableFolders && post.context_kind === 'project' && (
+                          <button onClick={()=>setShowFolderMove(true)} style={menuItemStyle(T.text)}>
+                            📁 Move to folder…
+                          </button>
+                        )}
                         <div style={{height:1,background:T.bdr,margin:"0 10px"}}/>
                         <button onClick={()=>setConfirmDelete(true)} style={menuItemStyle(T.ro)}>🗑️ Delete post</button>
                       </>
-                    ):(
+                    ) : showFolderMove ? (
+                      <div>
+                        <div style={{padding:"10px 14px 6px",fontSize:11,fontWeight:700,color:T.mu,letterSpacing:0.3,textTransform:"uppercase",borderBottom:`1px solid ${T.bdr}`}}>
+                          Move to folder
+                        </div>
+                        <button onClick={()=>moveToFolder(null)}
+                          style={{...menuItemStyle(post.folder_id ? T.text : T.v),fontWeight:post.folder_id ? 500 : 700}}>
+                          📋 All posts {!post.folder_id && '✓'}
+                        </button>
+                        {availableFolders.map(f => (
+                          <button key={f.id} onClick={()=>moveToFolder(f.id)}
+                            style={{...menuItemStyle(post.folder_id === f.id ? T.v : T.text),fontWeight:post.folder_id === f.id ? 700 : 500}}>
+                            📁 {f.name} {post.folder_id === f.id && '✓'}
+                          </button>
+                        ))}
+                        <div style={{height:1,background:T.bdr,margin:"0 10px"}}/>
+                        <button onClick={()=>setShowFolderMove(false)}
+                          style={menuItemStyle(T.mu)}>← Back</button>
+                      </div>
+                    ) : (
                       <div style={{padding:"14px 16px"}}>
                         <div style={{fontSize:13,fontWeight:700,marginBottom:4,color:T.text}}>Delete this post?</div>
                         <div style={{fontSize:12,color:T.mu,marginBottom:12}}>This cannot be undone.</div>
