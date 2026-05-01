@@ -1,0 +1,15 @@
+# Luminary — Supabase project config
+#
+# Linked project ref. CLI commands (`supabase db push`, `supabase functions
+# deploy`, etc.) target this project when run from the repo root.
+project_id = "rtblqylhoswckvwwspcp"
+
+# ─── Edge Function configuration ────────────────────────────────────────────
+# Default for every function is `verify_jwt = true` — Supabase rejects any
+# request without a valid Supabase JWT. That's correct for the webhook /
+# app-callable functions (they use the anon JWT from EDGE_HEADERS), but
+# wrong for OAuth callbacks where ORCID redirects the user's browser with
+# no auth header.
+
+[functions.orcid-callback]
+verify_jwt = false
