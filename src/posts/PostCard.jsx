@@ -719,7 +719,24 @@ export default function PostCard({
             const coverUrl     = post.deep_dive_cover_url || '';
             return (
               <div
-                onClick={() => { window.location.href = `/s/${post.id}`; }}
+                onClick={() => {
+                  // Stash the in-app context so the back button on /s/:postId
+                  // returns the user to the group/project they were browsing
+                  // instead of dumping them onto the general feed.
+                  if (currentUserId) {
+                    let ret = null;
+                    if (post.context_kind === 'group') {
+                      ret = { screen: 'groups', activeGroupId: post.context_id };
+                    } else if (post.context_kind === 'project') {
+                      ret = post.project_group_id
+                        ? { screen: 'groups', activeGroupId: post.project_group_id, initialProjectId: post.context_id }
+                        : { screen: 'projects', initialProjectId: post.context_id };
+                    }
+                    if (ret) sessionStorage.setItem('post_return_to', JSON.stringify(ret));
+                    else sessionStorage.removeItem('post_return_to');
+                  }
+                  window.location.href = `/s/${post.id}`;
+                }}
                 style={{
                   background: T.s2, border: `1px solid ${T.bdr}`, borderRadius: 10,
                   cursor: 'pointer', marginTop: 4, overflow: 'hidden',

@@ -155,7 +155,7 @@ function GroupAvatar({ group, size = 48 }) {
   );
 }
 
-export default function GroupScreen({ groupId, user, profile, setProfile, onBack, onViewPaper, onViewGroup, onViewProject, onMarkRead, savedPostIds = new Set(), onSaveToggled, onNavigateToPost, onEditPost, onOpenCompose }) {
+export default function GroupScreen({ groupId, user, profile, setProfile, onBack, onViewPaper, onViewGroup, onViewProject, onMarkRead, savedPostIds = new Set(), onSaveToggled, onNavigateToPost, onEditPost, onOpenCompose, initialProjectId = null, onInitialProjectIdConsumed }) {
   const { isMobile } = useWindowSize();
   const [group,           setGroup]           = useState(null);
   const [myRole,          setMyRole]          = useState(null);
@@ -164,7 +164,13 @@ export default function GroupScreen({ groupId, user, profile, setProfile, onBack
   const [stats,           setStats]           = useState(null);
   const [confirmDel,      setConfirmDel]      = useState(false);
   const [deleting,        setDeleting]        = useState(false);
-  const [activeProjectId, setActiveProjectId] = useState(null);
+  const [activeProjectId, setActiveProjectId] = useState(initialProjectId || null);
+
+  // Clear App-level initialProjectId once consumed so subsequent re-mounts
+  // (e.g. user leaves the group and returns) don't auto-reopen the project.
+  useEffect(() => {
+    if (initialProjectId) onInitialProjectIdConsumed?.();
+  }, []); // eslint-disable-line
 
   const fetchGroup = async () => {
     const [{ data: grp }, { data: mem }] = await Promise.all([

@@ -53,7 +53,7 @@ async function fetchLastActivity(projectList) {
   return activity;
 }
 
-export default function ProjectsScreen({ user, onEditPost, onOpenCompose }) {
+export default function ProjectsScreen({ user, onEditPost, onOpenCompose, initialProjectId = null, onInitialProjectIdConsumed }) {
   const [projects,              setProjects]              = useState([]);
   const [archivedProjects,      setArchivedProjects]      = useState([]);
   const [showArchived,          setShowArchived]          = useState(false);
@@ -62,7 +62,7 @@ export default function ProjectsScreen({ user, onEditPost, onOpenCompose }) {
   const [showGallery,           setShowGallery]           = useState(false);
   const [preselectedTemplate,   setPreselectedTemplate]   = useState(null);
   const [communityTemplateData, setCommunityTemplateData] = useState(null);
-  const [activeProject,         setActiveProject]         = useState(null);
+  const [activeProject,         setActiveProject]         = useState(initialProjectId || null);
   const [unreadCounts,          setUnreadCounts]          = useState({});
   const [lastActivityMap,       setLastActivityMap]       = useState({});
   const [saveAsTemplateProject, setSaveAsTemplateProject] = useState(null);
@@ -95,6 +95,11 @@ export default function ProjectsScreen({ user, onEditPost, onOpenCompose }) {
   };
 
   useEffect(() => { fetchProjects(); }, [user.id]); // eslint-disable-line
+
+  // Clear App-level initialProjectId once consumed.
+  useEffect(() => {
+    if (initialProjectId) onInitialProjectIdConsumed?.();
+  }, []); // eslint-disable-line
 
   const togglePin = async (project) => {
     await supabase.from('projects')
