@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import PostCard from '../posts/PostCard';
 import PostComposer from '../posts/PostComposer';
 
-export default function GroupFeed({ groupId, groupName, groupIsPublic, user, profile, setProfile, myRole, onViewPaper, onViewGroup, onViewProject, onEditPost, onMarkRead, savedPostIds = new Set(), onSaveToggled }) {
+export default function GroupFeed({ groupId, groupName, groupIsPublic, user, profile, setProfile, myRole, isGroupOwner, onViewPaper, onViewGroup, onViewProject, onEditPost, onMarkRead, savedPostIds = new Set(), onSaveToggled }) {
   const [posts,         setPosts]         = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [showCompose,   setShowCompose]   = useState(false);
@@ -29,6 +29,7 @@ export default function GroupFeed({ groupId, groupName, groupIsPublic, user, pro
         .eq('context_kind', 'project')
         .eq('context_id', projectFilter)
         .eq('hidden', false)
+        .order('pinned_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(50);
       rows = data || [];
@@ -39,6 +40,7 @@ export default function GroupFeed({ groupId, groupName, groupIsPublic, user, pro
         .eq('context_kind', 'group')
         .eq('context_id', groupId)
         .eq('hidden', false)
+        .order('pinned_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(50);
       rows = data || [];
@@ -153,6 +155,7 @@ export default function GroupFeed({ groupId, groupName, groupIsPublic, user, pro
               onViewGroup={onViewGroup}
               onViewProject={onViewProject}
               onEditPost={onEditPost}
+              canPin={isGroupOwner && !projectFilter}
               isSaved={savedPostIds.has(p.id)}
               onSaveToggled={onSaveToggled}
             />

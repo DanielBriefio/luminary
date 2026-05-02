@@ -141,6 +141,11 @@ export default function PostCard({
     // When set (project context only), the post owner gets a "Move to
     // folder" submenu in the ⋯ menu listing these folders. Each entry
     // is `{ id, name }`. Pass null/undefined to suppress.
+  canPin = false,
+    // True when the viewer is the group/project context owner. Adds a
+    // 📌 Pin / Unpin item to the ⋯ menu (in addition to the post-owner
+    // items, if the viewer is also the post author). Feed context
+    // ignores this prop.
   isSaved = false, onSaveToggled,
 }) {
   const { isMobile } = useWindowSize();
@@ -356,6 +361,14 @@ export default function PostCard({
     onRefresh && onRefresh();
   };
 
+  const togglePin = async () => {
+    // Owner check is enforced server-side in pin_post / unpin_post.
+    const fn = post.pinned_at ? 'unpin_post' : 'pin_post';
+    await supabase.rpc(fn, { p_post_id: post.id });
+    setMenuOpen(false);
+    onRefresh && onRefresh();
+  };
+
   const loadComments = async () => {
     if (commLoaded) return;
     setCommLoading(true);
@@ -566,7 +579,12 @@ export default function PostCard({
               {menuOpen&&(
                 <>
                   <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:9}}/>
-                  <div style={{position:"absolute",right:0,top:32,background:T.w,border:`1px solid ${T.bdr}`,borderRadius:11,boxShadow:"0 4px 20px rgba(0,0,0,.12)",zIndex:10,minWidth:140,overflow:"hidden"}}>
+                  <div style={{position:"absolute",right:0,top:32,background:T.w,border:`1px solid ${T.bdr}`,borderRadius:11,boxShadow:"0 4px 20px rgba(0,0,0,.12)",zIndex:10,minWidth:160,overflow:"hidden"}}>
+                    {canPin && (ctx === 'group' || ctx === 'project') && (
+                      <button onClick={togglePin} style={menuItemStyle(T.text)}>
+                        {post.pinned_at ? '📌 Unpin from top' : '📌 Pin to top'}
+                      </button>
+                    )}
                     <button onClick={()=>{setShowReport(true);setMenuOpen(false);}} style={menuItemStyle(T.text)}>🚩 Report</button>
                   </div>
                 </>
@@ -598,6 +616,12 @@ export default function PostCard({
                         {availableFolders && post.context_kind === 'project' && (
                           <button onClick={()=>setShowFolderMove(true)} style={menuItemStyle(T.text)}>
                             📁 Move to folder…
+                          </button>
+                        )}
+                        {/* Group/project owner only — server enforces auth too */}
+                        {canPin && (ctx === 'group' || ctx === 'project') && (
+                          <button onClick={togglePin} style={menuItemStyle(T.text)}>
+                            {post.pinned_at ? '📌 Unpin from top' : '📌 Pin to top'}
                           </button>
                         )}
                         <div style={{height:1,background:T.bdr,margin:"0 10px"}}/>
@@ -639,17 +663,29 @@ export default function PostCard({
           )}
         </div>
 
-        {/* Post type badge */}
-        {post.is_deep_dive && (
-          <div style={{marginBottom: 8}}>
-            <span style={{
-              fontSize: 10.5, fontWeight: 700,
-              padding: '2px 9px', borderRadius: 20,
-              background: T.v2, color: T.v,
-              border: `1px solid rgba(108,99,255,.2)`,
-            }}>
-              🔬 Deep Dive
-            </span>
+        {/* Post type / pinned badges */}
+        {(post.is_deep_dive || post.pinned_at) && (
+          <div style={{marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap'}}>
+            {post.pinned_at && (
+              <span style={{
+                fontSize: 10.5, fontWeight: 700,
+                padding: '2px 9px', borderRadius: 20,
+                background: T.am2, color: T.am,
+                border: `1px solid rgba(245,158,11,.25)`,
+              }}>
+                📌 Pinned
+              </span>
+            )}
+            {post.is_deep_dive && (
+              <span style={{
+                fontSize: 10.5, fontWeight: 700,
+                padding: '2px 9px', borderRadius: 20,
+                background: T.v2, color: T.v,
+                border: `1px solid rgba(108,99,255,.2)`,
+              }}>
+                🔬 Deep Dive
+              </span>
+            )}
           </div>
         )}
 

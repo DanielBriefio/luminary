@@ -35,6 +35,7 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
     if (activeFolderId) query = query.eq('folder_id', activeFolderId);
 
     const { data } = await query
+      .order('pinned_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(50);
     setPosts(data || []);
@@ -136,6 +137,7 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
                 onViewProject={onViewProject}
                 onEditPost={onEditPost}
                 availableFolders={folders}
+                canPin={myRole === 'owner'}
                 isSaved={savedPostIds.has(p.id)}
                 onSaveToggled={onSaveToggled}
               />

@@ -261,6 +261,7 @@ export default function GroupScreen({ groupId, user, profile, setProfile, onBack
           profile={profile}
           setProfile={setProfile}
           myRole={myRole}
+          isGroupOwner={group.created_by === user?.id}
           onViewPaper={onViewPaper}
           onViewGroup={onViewGroup}
           onViewProject={onViewProject}
