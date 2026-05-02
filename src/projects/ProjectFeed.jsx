@@ -3,12 +3,10 @@ import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import PostCard from '../posts/PostCard';
-import PostComposer from '../posts/PostComposer';
 
-export default function ProjectFeed({ project, user, profile, setProfile, myRole, activeFolderId, folders, onViewPaper, onViewGroup, onViewProject, onEditPost, onLiftDeepDive, savedPostIds = new Set(), onSaveToggled }) {
-  const [posts,       setPosts]       = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [showCompose, setShowCompose] = useState(false);
+export default function ProjectFeed({ project, user, profile, myRole, activeFolderId, folders, onViewPaper, onViewGroup, onViewProject, onEditPost, onOpenCompose, savedPostIds = new Set(), onSaveToggled }) {
+  const [posts,   setPosts]   = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Track when user last read this project (for unread badge)
   useEffect(() => {
@@ -44,11 +42,6 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
-  const handlePostCreated = () => {
-    setShowCompose(false);
-    fetchPosts();
-  };
-
   const canPost = (myRole === 'owner' || myRole === 'member') && project.status !== 'archived';
   const activeFolder = folders.find(f => f.id === activeFolderId);
 
@@ -60,6 +53,18 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
     supabase.from('groups').select('name').eq('id', project.group_id).maybeSingle()
       .then(({ data }) => setParentGroupName(data?.name || ''));
   }, [project?.group_id]);
+
+  const openCompose = () => {
+    onOpenCompose?.({
+      kind: 'project',
+      projectId:        project.id,
+      projectName:      project.name,
+      projectGroupId:   project.group_id || null,
+      projectGroupName: parentGroupName || null,
+      folderId:         activeFolderId || null,
+      folderName:       activeFolder?.name || null,
+    });
+  };
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -73,9 +78,9 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
 
-        {/* Compose trigger */}
-        {canPost && !showCompose && (
-          <button onClick={() => setShowCompose(true)} style={{
+        {/* Compose trigger — opens the App-level composer screen with project context */}
+        {canPost && (
+          <button onClick={openCompose} style={{
             display: 'flex', alignItems: 'center', gap: 12,
             width: '100%', padding: '12px 16px', marginBottom: 16,
             background: T.w, border: `1.5px dashed ${T.bdr}`,
@@ -87,42 +92,6 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
           >
             ✏️ Post something in {activeFolderId ? activeFolder?.name : 'this project'}…
           </button>
-        )}
-
-        {showCompose && (
-          <div style={{ marginBottom: 16 }}>
-            <PostComposer
-              context={{
-                kind: 'project',
-                projectId:        project.id,
-                projectName:      project.name,
-                projectGroupId:   project.group_id || null,
-                projectGroupName: parentGroupName || null,
-                folderId:         activeFolderId || null,
-                folderName:       activeFolder?.name || null,
-              }}
-              user={user}
-              profile={profile}
-              setProfile={setProfile}
-              onPublished={handlePostCreated}
-              onCancel={() => setShowCompose(false)}
-              onLiftToFullscreen={onLiftDeepDive ? () => {
-                setShowCompose(false);
-                onLiftDeepDive({
-                  context: {
-                    kind: 'project',
-                    projectId:        project.id,
-                    projectName:      project.name,
-                    projectGroupId:   project.group_id || null,
-                    projectGroupName: parentGroupName || null,
-                    folderId:         activeFolderId || null,
-                    folderName:       activeFolder?.name || null,
-                  },
-                  isDeepDive: true,
-                });
-              } : null}
-            />
-          </div>
         )}
 
         {/* Posts */}

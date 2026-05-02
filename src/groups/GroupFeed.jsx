@@ -3,12 +3,10 @@ import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Spinner from '../components/Spinner';
 import PostCard from '../posts/PostCard';
-import PostComposer from '../posts/PostComposer';
 
-export default function GroupFeed({ groupId, groupName, groupIsPublic, user, profile, setProfile, myRole, isGroupOwner, onViewPaper, onViewGroup, onViewProject, onEditPost, onLiftDeepDive, onMarkRead, savedPostIds = new Set(), onSaveToggled }) {
+export default function GroupFeed({ groupId, groupName, groupIsPublic, user, profile, myRole, isGroupOwner, onViewPaper, onViewGroup, onViewProject, onEditPost, onOpenCompose, onMarkRead, savedPostIds = new Set(), onSaveToggled }) {
   const [posts,         setPosts]         = useState([]);
   const [loading,       setLoading]       = useState(true);
-  const [showCompose,   setShowCompose]   = useState(false);
   const [groupProjects, setGroupProjects] = useState([]);
   const [projectFilter, setProjectFilter] = useState(null);
 
@@ -61,12 +59,11 @@ export default function GroupFeed({ groupId, groupName, groupIsPublic, user, pro
       .then(() => { onMarkRead?.(); });
   }, [groupId]); // eslint-disable-line
 
-  const handlePostCreated = () => {
-    setShowCompose(false);
-    fetchPosts();
-  };
-
   const canPost = myRole === 'admin' || myRole === 'member';
+
+  const openCompose = () => {
+    onOpenCompose?.({ kind: 'group', groupId, groupName, groupIsPublic });
+  };
 
   const chipStyle = (active, color) => ({
     padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${active ? (color || T.v) : T.bdr}`,
@@ -98,10 +95,10 @@ export default function GroupFeed({ groupId, groupName, groupIsPublic, user, pro
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px' }}>
 
-      {/* Compose button / composer */}
-      {canPost && !showCompose && !projectFilter && (
+      {/* Compose trigger — opens the App-level composer screen with group context */}
+      {canPost && !projectFilter && (
         <button
-          onClick={() => setShowCompose(true)}
+          onClick={openCompose}
           style={{
             display: 'flex', alignItems: 'center', gap: 12,
             width: '100%', padding: '12px 16px', marginBottom: 16,
@@ -115,26 +112,6 @@ export default function GroupFeed({ groupId, groupName, groupIsPublic, user, pro
         >
           ✏️ Share something with the group…
         </button>
-      )}
-
-      {showCompose && (
-        <div style={{ marginBottom: 16 }}>
-          <PostComposer
-            context={{ kind: 'group', groupId, groupName, groupIsPublic }}
-            user={user}
-            profile={profile}
-            setProfile={setProfile}
-            onPublished={handlePostCreated}
-            onCancel={() => setShowCompose(false)}
-            onLiftToFullscreen={onLiftDeepDive ? () => {
-              setShowCompose(false);
-              onLiftDeepDive({
-                context: { kind: 'group', groupId, groupName, groupIsPublic },
-                isDeepDive: true,
-              });
-            } : null}
-          />
-        </div>
       )}
 
       {loading ? (

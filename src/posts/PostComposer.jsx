@@ -135,17 +135,6 @@ export default function PostComposer({
     // When set, the composer pre-fills from this post and saves with
     // UPDATE instead of INSERT. Currently used for deep-dive edits from
     // the post menu — non-deep-dive edits still happen inline in PostCard.
-  onLiftToFullscreen = null,
-    // Set by inline mounts (GroupFeed/ProjectFeed). When the user toggles
-    // Deep Dive ON in an inline composer, we call this instead of setting
-    // local state — the parent re-mounts the composer at App-level so the
-    // sticky toolbar has a single, unambiguous scroll container. Keeps
-    // create UX unified across contexts (the alternative was a z-index
-    // bug from nested overflow:auto wrappers). One-way lift; no state
-    // is preserved (the toggle is typically the user's first action).
-  initialIsDeepDive = false,
-    // Set by App.jsx after a lift, so the fullscreen mount opens with
-    // Deep Dive already on instead of forcing the user to re-toggle.
 }) {
   const { isMobile } = useWindowSize();
   const ctx = context.kind || 'feed';
@@ -194,7 +183,7 @@ export default function PostComposer({
   const [uploadCategory,setUploadCategory] = useState('');
   const [uploading,setUploading]         = useState(false);
 
-  const [isDeepDive, setIsDeepDive]       = useState(!!editPost?.is_deep_dive || !!initialIsDeepDive);
+  const [isDeepDive, setIsDeepDive]       = useState(!!editPost?.is_deep_dive);
   const [deepDiveTitle,    setDeepDiveTitle]    = useState(editPost?.deep_dive_title || '');
   const [coverUrl,         setCoverUrl]         = useState(editPost?.deep_dive_cover_url || '');
   const [coverPath,        setCoverPath]        = useState('');
@@ -860,15 +849,7 @@ export default function PostComposer({
         {/* Deep Dive toggle — text posts only, hidden on mobile */}
         {postType === 'text' && !isMobile && (
           <div
-            onClick={() => {
-              // Lift inline mounts to fullscreen on enable (see onLiftToFullscreen
-              // prop comment). Disable + edit mode + non-inline mounts toggle locally.
-              if (!isDeepDive && onLiftToFullscreen && !editPost) {
-                onLiftToFullscreen();
-              } else {
-                setIsDeepDive(d => !d);
-              }
-            }}
+            onClick={() => setIsDeepDive(d => !d)}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '9px 12px', marginBottom: 8,
