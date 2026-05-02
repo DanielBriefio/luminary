@@ -15,9 +15,13 @@
 export default function PostContentStyles() {
   return (
     <style>{`
-      img[data-size="small"]  { max-width: 33% !important; }
-      img[data-size="medium"] { max-width: 60% !important; }
-      img[data-size="large"]  { max-width: 85% !important; }
+      /* Use width (not max-width) so the chosen size renders even when
+         the source image's natural width is smaller than the cap.
+         max-width-only would silently render at natural size and the
+         resize would have no visible effect on small uploads. */
+      img[data-size="small"]  { width: 33% !important; max-width: 33% !important; height: auto !important; }
+      img[data-size="medium"] { width: 60% !important; max-width: 60% !important; height: auto !important; }
+      img[data-size="large"]  { width: 85% !important; max-width: 85% !important; height: auto !important; }
     `}</style>
   );
 }
