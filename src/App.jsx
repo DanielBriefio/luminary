@@ -643,24 +643,69 @@ export default function App() {
     return <>{fonts}{globalStyles}<AdminShell supabase={supabase} user={user} profile={profile} /></>;
   }
 
+  // Derive return-to context from a post (for edit) or compose context (for create).
+  // Group post → return to its group. Project post → return to its parent group
+  // (with the project re-opened) if group-owned, else to ProjectsScreen with the
+  // project re-opened. Feed post → return to feed.
+  const buildReturnFromPost = (post) => {
+    if (post?.context_kind === 'group') {
+      return { returnScreen: 'groups', returnGroupId: post.context_id };
+    }
+    if (post?.context_kind === 'project') {
+      return post.project_group_id
+        ? { returnScreen: 'groups', returnGroupId: post.project_group_id, returnProjectId: post.context_id }
+        : { returnScreen: 'projects', returnProjectId: post.context_id };
+    }
+    return { returnScreen: 'feed' };
+  };
+  const buildReturnFromComposeContext = (context) => {
+    if (context?.kind === 'group') {
+      return { returnScreen: 'groups', returnGroupId: context.groupId };
+    }
+    if (context?.kind === 'project') {
+      return context.projectGroupId
+        ? { returnScreen: 'groups', returnGroupId: context.projectGroupId, returnProjectId: context.projectId }
+        : { returnScreen: 'projects', returnProjectId: context.projectId };
+    }
+    return { returnScreen: 'feed' };
+  };
+
+  const handleEditPost = (post) => {
+    setComposePrefill(buildReturnFromPost(post));
+    setEditingPost(post);
+    setScreen('post');
+  };
+  const handleOpenCompose = (context) => {
+    setComposePrefill({ context, ...buildReturnFromComposeContext(context) });
+    setScreen('post');
+  };
+  const handleComposeFinish = () => {
+    const ret = composePrefill;
+    setEditingPost(null);
+    setComposePrefill(null);
+    if (ret?.returnGroupId)   setActiveGroupId(ret.returnGroupId);
+    if (ret?.returnProjectId) setInitialProjectId(ret.returnProjectId);
+    setScreen(ret?.returnScreen || 'feed');
+  };
+
   const screens={
-    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} unreadNotifs={unreadNotifs} onOpenNotifs={()=>{ setUnreadNotifs(0); setScreen('notifs'); capturePageview('notifs'); }} onCompose={()=>setScreen('post')} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }}/>,
+    feed:         <FeedScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onGoToProfile={()=>setScreen('profile')} onTagClick={(tag)=>{setExploreQuery(tag);setScreen('explore');}} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} unreadNotifs={unreadNotifs} onOpenNotifs={()=>{ setUnreadNotifs(0); setScreen('notifs'); capturePageview('notifs'); }} onCompose={()=>setScreen('post')} onEditPost={handleEditPost}/>,
     explore:      <ExploreScreen user={user} currentProfile={profile} initialQuery={exploreQuery} onViewUser={onViewUser} onViewPaper={onViewPaper} onNavigateToPost={()=>setScreen('post')} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     network:      <NetworkScreen user={user} profile={profile} onViewUser={onViewUser} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
     library:      <LibraryScreen key={`lib-${libraryView}`} user={user} profile={profile} onSaveToggled={fetchSavedIds} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} onNavigateToPost={()=>setScreen('post')} defaultView={libraryView}/>,
     groups: activeGroupId
-      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>{setActiveGroupId(null);setInitialProjectId(null);setInitialTab(null);}} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }} onOpenCompose={(context)=>{ setComposePrefill({ context, returnScreen: 'groups' }); setScreen('post'); }} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)} initialTab={initialTab} onInitialTabConsumed={()=>setInitialTab(null)}/>
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>{setActiveGroupId(null);setInitialProjectId(null);setInitialTab(null);}} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={handleEditPost} onOpenCompose={handleOpenCompose} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)} initialTab={initialTab} onInitialTabConsumed={()=>setInitialTab(null)}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
-    projects: <ProjectsScreen user={user} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }} onOpenCompose={(context)=>{ setComposePrefill({ context, returnScreen: 'projects' }); setScreen('post'); }} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)}/>,
+    projects: <ProjectsScreen user={user} onEditPost={handleEditPost} onOpenCompose={handleOpenCompose} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     post:         <PostComposer
                     context={composePrefill?.context || { kind: 'feed' }}
                     editPost={editingPost}
                     user={user} profile={profile} setProfile={setProfile}
-                    onPublished={()=>{ setEditingPost(null); setComposePrefill(null); setScreen(composePrefill?.returnScreen || 'feed'); }}
-                    onCancel={()=>{ setEditingPost(null); setComposePrefill(null); setScreen(composePrefill?.returnScreen || 'feed'); }}
+                    onPublished={handleComposeFinish}
+                    onCancel={handleComposeFinish}
                   />,
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,
