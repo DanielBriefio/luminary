@@ -146,6 +146,12 @@ export default function PostCard({
     // 📌 Pin / Unpin item to the ⋯ menu (in addition to the post-owner
     // items, if the viewer is also the post author). Feed context
     // ignores this prop.
+  hideContextBanner = false,
+    // Suppresses the "🔬 Shared from [Group]" / "📁 In project: [Name]"
+    // banner. Set by GroupFeed / ProjectFeed when the viewer is already
+    // inside the post's native context (the banner would just be
+    // redundant). The banner still renders elsewhere — public-feed
+    // overlay, reposts, /s/:postId, profile lists, etc.
   isSaved = false, onSaveToggled,
 }) {
   const { isMobile } = useWindowSize();
@@ -504,7 +510,7 @@ export default function PostCard({
     }}>
 
       {/* Group context banner */}
-      {ctx === 'group' && post.group_name && (
+      {ctx === 'group' && post.group_name && !hideContextBanner && (
         <div
           onClick={groupClickable ? (e)=>{ e.stopPropagation(); onViewGroup(groupId); } : undefined}
           style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",background:T.v2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600,cursor:groupClickable?"pointer":"default"}}
@@ -515,7 +521,7 @@ export default function PostCard({
       )}
 
       {/* Project context banner */}
-      {ctx === 'project' && post.project_name && (
+      {ctx === 'project' && post.project_name && !hideContextBanner && (
         <div
           onClick={projectClickable ? (e)=>{ e.stopPropagation(); onViewProject(projectId); } : undefined}
           style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",background:T.v2,borderBottom:`1px solid ${T.bdr}`,fontSize:11.5,color:T.mu,fontWeight:600,cursor:projectClickable?"pointer":"default"}}

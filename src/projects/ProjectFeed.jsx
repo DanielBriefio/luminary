@@ -122,6 +122,7 @@ export default function ProjectFeed({ project, user, profile, myRole, activeFold
                 onEditPost={onEditPost}
                 availableFolders={folders}
                 canPin={myRole === 'owner'}
+                hideContextBanner
                 isSaved={savedPostIds.has(p.id)}
                 onSaveToggled={onSaveToggled}
               />

@@ -140,6 +140,7 @@ export default function GroupFeed({ groupId, groupName, groupIsPublic, user, pro
               onViewProject={onViewProject}
               onEditPost={onEditPost}
               canPin={isGroupOwner && !projectFilter}
+              hideContextBanner={!projectFilter}
               isSaved={savedPostIds.has(p.id)}
               onSaveToggled={onSaveToggled}
             />
