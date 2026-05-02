@@ -429,7 +429,11 @@ export default function RichTextEditor({
       ];
 
   return (
-    <div style={{flex:1, position:'relative'}}>
+    <div style={{flex:1, position:'relative', isolation:'isolate'}}>
+      {/* isolation:isolate forces a fresh stacking context on this wrapper
+          so the sticky deep-dive toolbar's z-index can't be undercut by
+          composite layers the browser may promote on scrolled content
+          (which painted text over the toolbar in some browsers). */}
       <div style={{
         display:"flex", alignItems:"center", gap:2, flexWrap:"wrap",
         padding:"5px 8px", background:T.s2,
@@ -437,7 +441,7 @@ export default function RichTextEditor({
         borderRadius:"10px 10px 0 0",
         position: isDeepDive ? 'sticky' : 'static',
         top: isDeepDive ? 0 : 'auto',
-        zIndex: isDeepDive ? 50 : 'auto',
+        zIndex: isDeepDive ? 100 : 'auto',
         // Drop shadow makes the elevation explicit when content scrolls
         // beneath, so the toolbar reads as anchored to the editor top
         // instead of floating mid-page.
