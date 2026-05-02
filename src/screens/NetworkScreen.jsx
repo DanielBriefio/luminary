@@ -228,7 +228,7 @@ export default function NetworkScreen({ user, profile, onViewUser, onViewPaper, 
                     {friends.length === 0
                       ? <Empty icon="🤝" message="No friends yet — follow someone back and you'll appear here." />
                       : (
-                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                           {friends.map(p => (
                             <FriendCard
                               key={p.id}
