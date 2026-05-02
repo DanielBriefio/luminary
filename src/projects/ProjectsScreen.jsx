@@ -53,7 +53,7 @@ async function fetchLastActivity(projectList) {
   return activity;
 }
 
-export default function ProjectsScreen({ user, onEditPost }) {
+export default function ProjectsScreen({ user, onEditPost, onLiftDeepDive }) {
   const [projects,              setProjects]              = useState([]);
   const [archivedProjects,      setArchivedProjects]      = useState([]);
   const [showArchived,          setShowArchived]          = useState(false);
@@ -132,6 +132,7 @@ export default function ProjectsScreen({ user, onEditPost }) {
         user={user}
         onBack={() => { setActiveProject(null); fetchProjects(); }}
         onEditPost={onEditPost}
+        onLiftDeepDive={onLiftDeepDive}
       />
     );
   }

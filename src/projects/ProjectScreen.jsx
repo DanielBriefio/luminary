@@ -29,7 +29,7 @@ function SidebarItem({ label, active, onClick, onDelete }) {
   );
 }
 
-export default function ProjectScreen({ projectId, user, profile, setProfile, onBack, group, onBackToGroup, onViewPaper, onViewGroup, onViewProject, onEditPost, savedPostIds, onSaveToggled }) {
+export default function ProjectScreen({ projectId, user, profile, setProfile, onBack, group, onBackToGroup, onViewPaper, onViewGroup, onViewProject, onEditPost, onLiftDeepDive, savedPostIds, onSaveToggled }) {
   const { isMobile } = useWindowSize();
   const [project,        setProject]        = useState(null);
   const [folders,        setFolders]        = useState([]);
@@ -154,6 +154,7 @@ export default function ProjectScreen({ projectId, user, profile, setProfile, on
           onViewGroup={onViewGroup}
           onViewProject={onViewProject}
           onEditPost={onEditPost}
+          onLiftDeepDive={onLiftDeepDive}
           savedPostIds={savedPostIds}
           onSaveToggled={onSaveToggled}
         />

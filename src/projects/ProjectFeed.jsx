@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import PostCard from '../posts/PostCard';
 import PostComposer from '../posts/PostComposer';
 
-export default function ProjectFeed({ project, user, profile, setProfile, myRole, activeFolderId, folders, onViewPaper, onViewGroup, onViewProject, onEditPost, savedPostIds = new Set(), onSaveToggled }) {
+export default function ProjectFeed({ project, user, profile, setProfile, myRole, activeFolderId, folders, onViewPaper, onViewGroup, onViewProject, onEditPost, onLiftDeepDive, savedPostIds = new Set(), onSaveToggled }) {
   const [posts,       setPosts]       = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [showCompose, setShowCompose] = useState(false);
@@ -106,6 +106,21 @@ export default function ProjectFeed({ project, user, profile, setProfile, myRole
               setProfile={setProfile}
               onPublished={handlePostCreated}
               onCancel={() => setShowCompose(false)}
+              onLiftToFullscreen={onLiftDeepDive ? () => {
+                setShowCompose(false);
+                onLiftDeepDive({
+                  context: {
+                    kind: 'project',
+                    projectId:        project.id,
+                    projectName:      project.name,
+                    projectGroupId:   project.group_id || null,
+                    projectGroupName: parentGroupName || null,
+                    folderId:         activeFolderId || null,
+                    folderName:       activeFolder?.name || null,
+                  },
+                  isDeepDive: true,
+                });
+              } : null}
             />
           </div>
         )}

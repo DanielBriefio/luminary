@@ -121,6 +121,12 @@ export default function App() {
   const [editingPost, setEditingPost] = useState(null);
     // When set, the 'post' screen mounts PostComposer in edit mode for this
     // post (currently used for deep-dive edits triggered from PostCard menu).
+  const [composePrefill, setComposePrefill] = useState(null);
+    // When set ({ context, isDeepDive }), the 'post' screen mounts in CREATE
+    // mode with this context + initial deep-dive state. Used by the inline
+    // composer's "lift to fullscreen" path so a deep-dive started in a
+    // group/project feed gets a single, unambiguous scroll container —
+    // avoids the nested-overflow-auto z-index bug from inline mounts.
   const [libraryView, setLibraryView] = useState('library'); // 'library' | 'bookmarks' | 'files'
   const [activeGroupId,setActiveGroupId]=useState(null);
   const [groupUnreadCount,setGroupUnreadCount]=useState(0);
@@ -586,17 +592,18 @@ export default function App() {
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
     library:      <LibraryScreen key={`lib-${libraryView}`} user={user} profile={profile} onSaveToggled={fetchSavedIds} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} onNavigateToPost={()=>setScreen('post')} defaultView={libraryView}/>,
     groups: activeGroupId
-      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }}/>
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>setActiveGroupId(null)} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }} onLiftDeepDive={(prefill)=>{ setComposePrefill({ ...prefill, returnScreen: 'groups' }); setScreen('post'); }}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
-    projects: <ProjectsScreen user={user} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }}/>,
+    projects: <ProjectsScreen user={user} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }} onLiftDeepDive={(prefill)=>{ setComposePrefill({ ...prefill, returnScreen: 'projects' }); setScreen('post'); }}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     post:         <PostComposer
-                    context={{ kind: 'feed' }}
+                    context={composePrefill?.context || { kind: 'feed' }}
+                    initialIsDeepDive={!!composePrefill?.isDeepDive}
                     editPost={editingPost}
                     user={user} profile={profile} setProfile={setProfile}
-                    onPublished={()=>{ setEditingPost(null); setScreen('feed'); }}
-                    onCancel={()=>{ setEditingPost(null); setScreen('feed'); }}
+                    onPublished={()=>{ setEditingPost(null); setComposePrefill(null); setScreen(composePrefill?.returnScreen || 'feed'); }}
+                    onCancel={()=>{ setEditingPost(null); setComposePrefill(null); setScreen(composePrefill?.returnScreen || 'feed'); }}
                   />,
     user_profile: <UserProfileScreen userId={viewedUserId} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewPaper={onViewPaper} onMessage={onMessage}/>,
     paper_detail: <PaperDetailPage doi={viewedPaperDoi} currentUserId={user?.id} currentProfile={profile} onBack={()=>setScreen('feed')} onViewUser={onViewUser} onViewPaper={onViewPaper}/>,

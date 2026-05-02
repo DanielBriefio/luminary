@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import PostCard from '../posts/PostCard';
 import PostComposer from '../posts/PostComposer';
 
-export default function GroupFeed({ groupId, groupName, groupIsPublic, user, profile, setProfile, myRole, isGroupOwner, onViewPaper, onViewGroup, onViewProject, onEditPost, onMarkRead, savedPostIds = new Set(), onSaveToggled }) {
+export default function GroupFeed({ groupId, groupName, groupIsPublic, user, profile, setProfile, myRole, isGroupOwner, onViewPaper, onViewGroup, onViewProject, onEditPost, onLiftDeepDive, onMarkRead, savedPostIds = new Set(), onSaveToggled }) {
   const [posts,         setPosts]         = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [showCompose,   setShowCompose]   = useState(false);
@@ -126,6 +126,13 @@ export default function GroupFeed({ groupId, groupName, groupIsPublic, user, pro
             setProfile={setProfile}
             onPublished={handlePostCreated}
             onCancel={() => setShowCompose(false)}
+            onLiftToFullscreen={onLiftDeepDive ? () => {
+              setShowCompose(false);
+              onLiftDeepDive({
+                context: { kind: 'group', groupId, groupName, groupIsPublic },
+                isDeepDive: true,
+              });
+            } : null}
           />
         </div>
       )}
