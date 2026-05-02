@@ -184,6 +184,13 @@ export default function PostComposer({
   const [uploading,setUploading]         = useState(false);
 
   const [isDeepDive, setIsDeepDive]       = useState(!!editPost?.is_deep_dive);
+  // Mount node for the deep-dive toolbar (rendered via portal from
+  // RichTextEditor). Lives ABOVE the scroll container so it can never
+  // share a stacking context with scrolled body text — the bug we used
+  // to chase with isolation/z-index hacks. Callback ref + state combo
+  // forces a re-render once the DOM node is available, so RichTextEditor
+  // can portal into it on the second render.
+  const [toolbarSlot, setToolbarSlot]     = useState(null);
   const [deepDiveTitle,    setDeepDiveTitle]    = useState(editPost?.deep_dive_title || '');
   const [coverUrl,         setCoverUrl]         = useState(editPost?.deep_dive_cover_url || '');
   const [coverPath,        setCoverPath]        = useState('');
@@ -648,7 +655,15 @@ export default function PostComposer({
   const showVisibility = visibilityOptions.length > 1;
 
   return (
-    <div style={{flex:1,overflowY:"auto",padding:isMobile?0:32,background:T.bg,display:"flex",alignItems:"flex-start",justifyContent:"center"}}>
+    <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,background:T.bg}}>
+      {/* Deep-dive toolbar mount point. Rendered above (outside) the
+          scrolling region so the toolbar DOM is never a sibling of
+          scrolled body text — eliminates the stacking-context fight
+          that previously let text paint over the sticky toolbar. */}
+      {isDeepDive && (
+        <div ref={setToolbarSlot} style={{flexShrink:0,position:"relative",zIndex:10}}/>
+      )}
+      <div style={{flex:1,overflowY:"auto",padding:isMobile?0:32,background:T.bg,display:"flex",alignItems:"flex-start",justifyContent:"center",minHeight:0}}>
       <div style={{maxWidth:isMobile?"100%":640,width:"100%",background:T.w,border:isMobile?"none":`1px solid ${T.bdr}`,borderRadius:isMobile?0:16,padding:isMobile?"16px 16px 0":28,boxShadow:isMobile?"none":"0 4px 24px rgba(108,99,255,.1)",display:"flex",flexDirection:"column"}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
           <div style={{fontFamily:"'DM Serif Display',serif",fontSize:19,fontWeight:700}}>{headerLabel}</div>
@@ -962,6 +977,7 @@ export default function PostComposer({
             isDeepDive={isDeepDive}
             user={user}
             onPendingImage={(rec) => { pendingImagesRef.current.push(rec); }}
+            toolbarPortalTarget={toolbarSlot}
             minHeight={isMobile ? (uploadFile ? 120 : 200) : (uploadFile ? 70 : 110)}
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
@@ -1096,6 +1112,7 @@ export default function PostComposer({
             </Btn>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
