@@ -1005,12 +1005,13 @@ export default function App() {
                   {id:'network',       label:'My Network', icon:'🌐'},
                   {id:'library',       label:'Library',    icon:'📚'},
                   {id:'messages',      label:'Messages',   icon:'💬', count:unreadMessages},
-                  {id:'notifications', label:'Alerts',     icon:'🔔', count:unreadNotifs},
+                  // Alerts removed from the mobile drawer — the bell in
+                  // the mobile top bar handles it (and the drawer entry
+                  // pointed at the wrong screen id anyway).
                 ].map(item=>(
                   <button key={item.id}
                     onClick={()=>{
                       if(item.disabled) return;
-                      if(item.id==='notifications') setUnreadNotifs(0);
                       setScreen(item.id);
                       setShowDrawer(false);
                     }}
