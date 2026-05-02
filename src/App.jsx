@@ -167,7 +167,9 @@ export default function App() {
   }, [screen, libraryView]);
 
   useEffect(()=>{
-    if(publicSlug || publicPostId || publicPaperDoi || publicCardSlug || publicGroupSlug || legalDoc) return; // no auth needed for public pages
+    // /g/:slug intentionally LOADS auth so the auth'd-member redirect
+    // effect can run. Other public pages stay fully unauthenticated.
+    if(publicSlug || publicPostId || publicPaperDoi || publicCardSlug || legalDoc) return;
     supabase.auth.getSession().then(({data})=>{ setSession(data.session); setAuthChecked(true); });
     const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{
       setSession(s);
