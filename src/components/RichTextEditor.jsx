@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import { sanitiseHtml, normalisePastedHtml, toEmbedUrl } from '../lib/htmlUtils';
@@ -67,17 +66,8 @@ async function uploadInlineImage(user, file) {
 
 export default function RichTextEditor({
   value, onChange, placeholder="", minHeight=110, isDeepDive=false,
-  user, postId, onPendingImage, toolbarPortalTarget=null,
+  user, postId, onPendingImage,
 }) {
-  // When isDeepDive AND a toolbarPortalTarget DOM node is provided, the
-  // toolbar (and its popovers) render via React portal into that node —
-  // a fixed-height bar that PostComposer mounts ABOVE its scroll
-  // container. Pulling the toolbar out of the editor wrapper avoids the
-  // stacking-context fight that previously let scrolled body text paint
-  // over the sticky toolbar in some browsers (no shared parent → no
-  // sibling z-index ambiguity). When no portal target is provided, the
-  // toolbar renders inline above the editor body as before.
-  const shouldPortal = isDeepDive && !!toolbarPortalTarget;
   const editorRef      = useRef(null);
   const fileInputRef   = useRef(null);
   const savedRangeRef  = useRef(null); // saved cursor position before popover opens
@@ -438,8 +428,25 @@ export default function RichTextEditor({
         { value:'h3', label:'Subheading' },
       ];
 
-  const toolbarButtonsJSX = (
-    <>
+  return (
+    <div style={{flex:1, position:'relative', isolation:'isolate'}}>
+      {/* isolation:isolate forces a fresh stacking context on this wrapper
+          so the sticky deep-dive toolbar's z-index can't be undercut by
+          composite layers the browser may promote on scrolled content
+          (which painted text over the toolbar in some browsers). */}
+      <div style={{
+        display:"flex", alignItems:"center", gap:2, flexWrap:"wrap",
+        padding:"5px 8px", background:T.s2,
+        border:`1.5px solid ${isDeepDive ? T.v : T.bdr}`, borderBottom:"none",
+        borderRadius:"10px 10px 0 0",
+        position: isDeepDive ? 'sticky' : 'static',
+        top: isDeepDive ? 0 : 'auto',
+        zIndex: isDeepDive ? 100 : 'auto',
+        // Drop shadow makes the elevation explicit when content scrolls
+        // beneath, so the toolbar reads as anchored to the editor top
+        // instead of floating mid-page.
+        boxShadow: isDeepDive ? '0 2px 8px rgba(27,29,54,0.06)' : 'none',
+      }}>
         {/* Style dropdown */}
         <select
           value={activeBlock}
@@ -502,170 +509,7 @@ export default function RichTextEditor({
             : '⌘B · ⌘I'
           }
         </div>
-    </>
-  );
-
-  // Popovers triggered by toolbar buttons. Position absolute at top:42 ≈
-  // just below the toolbar buttons; rendered alongside the toolbar block
-  // (inline or portaled) so they always anchor under the buttons that
-  // opened them, regardless of which path the toolbar took.
-  const popoversJSX = (
-    <>
-      {showLink && (
-        <div style={{
-          position:'absolute', zIndex:100, top:42, left:8,
-          background:T.w, border:`1.5px solid ${T.v}`,
-          borderRadius:10, padding:12, boxShadow:'0 4px 20px rgba(0,0,0,.12)',
-          width:320,
-        }}>
-          <div style={{fontSize:12.5, fontWeight:700, marginBottom:6}}>Insert link</div>
-          <div style={{display:'flex', gap:6}}>
-            <input
-              autoFocus
-              value={linkUrl}
-              onChange={e => setLinkUrl(e.target.value)}
-              placeholder="https://example.com"
-              onKeyDown={e => { if (e.key === 'Enter') insertLink(); if (e.key === 'Escape') { setShowLink(false); setLinkUrl(''); } }}
-              style={{
-                flex:1, fontSize:12.5, padding:'6px 10px',
-                border:`1.5px solid ${T.bdr}`, borderRadius:7,
-                fontFamily:'inherit', outline:'none',
-              }}
-            />
-            <Btn onClick={insertLink}>Add</Btn>
-          </div>
-          <button onClick={() => { setShowLink(false); setLinkUrl(''); }}
-            style={{fontSize:11, color:T.mu, border:'none', background:'transparent', cursor:'pointer', marginTop:4, fontFamily:'inherit'}}>
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {showVideo && (
-        <div style={{
-          position:'absolute', zIndex:100, top:42, left:8,
-          background:T.w, border:`1.5px solid ${T.v}`,
-          borderRadius:10, padding:12, boxShadow:'0 4px 20px rgba(0,0,0,.12)',
-          width:340,
-        }}>
-          <div style={{fontSize:12.5, fontWeight:700, marginBottom:2}}>Embed video</div>
-          <div style={{fontSize:11.5, color:T.mu, marginBottom:8}}>
-            Paste a YouTube or Vimeo URL.
-          </div>
-          <div style={{display:'flex', gap:6}}>
-            <input
-              autoFocus
-              value={videoUrl}
-              onChange={e => { setVideoUrl(e.target.value); setVideoError(''); }}
-              placeholder="https://youtu.be/… or https://vimeo.com/…"
-              onKeyDown={e => { if (e.key === 'Enter') insertVideo(); if (e.key === 'Escape') { setShowVideo(false); setVideoUrl(''); setVideoError(''); } }}
-              style={{
-                flex:1, fontSize:12.5, padding:'6px 10px',
-                border:`1.5px solid ${T.bdr}`, borderRadius:7,
-                fontFamily:'inherit', outline:'none',
-              }}
-            />
-            <Btn onClick={insertVideo}>Embed</Btn>
-          </div>
-          {videoError && (
-            <div style={{fontSize:11.5, color:T.ro, marginTop:4}}>{videoError}</div>
-          )}
-          <button onClick={() => { setShowVideo(false); setVideoUrl(''); setVideoError(''); }}
-            style={{fontSize:11, color:T.mu, border:'none', background:'transparent', cursor:'pointer', marginTop:4, fontFamily:'inherit'}}>
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {showDoiCite && (
-        <div style={{
-          position: 'absolute', zIndex: 100, top: 42, right: 0,
-          background: T.w, border: `1.5px solid ${T.v}`,
-          borderRadius: 10, padding: 12, boxShadow: '0 4px 20px rgba(0,0,0,.12)',
-          width: 320,
-        }}>
-          <div style={{fontSize: 12.5, fontWeight: 700, marginBottom: 2}}>Cite a paper</div>
-          <div style={{fontSize: 11.5, color: T.mu, marginBottom: 8}}>
-            Inserts <strong>(N)</strong> at cursor and adds a numbered reference at the bottom.
-          </div>
-          <div style={{display: 'flex', gap: 6}}>
-            <input
-              autoFocus
-              value={citeDoiInput}
-              onChange={e => setCiteDoiInput(e.target.value)}
-              placeholder="10.1038/s41586-021-03819-2"
-              onKeyDown={e => e.key === 'Enter' && insertCitation()}
-              style={{
-                flex: 1, fontSize: 12.5, padding: '6px 10px',
-                border: `1.5px solid ${T.bdr}`, borderRadius: 7,
-                fontFamily: 'inherit', outline: 'none',
-              }}
-            />
-            <Btn onClick={insertCitation} disabled={citeFetching}>
-              {citeFetching ? '...' : 'Cite'}
-            </Btn>
-          </div>
-          {citeError && (
-            <div style={{fontSize: 11.5, color: T.ro, marginTop: 4}}>{citeError}</div>
-          )}
-          <button onClick={() => { setShowDoiCite(false); setCiteDoiInput(''); setCiteError(''); }}
-            style={{fontSize: 11, color: T.mu, border: 'none', background: 'transparent', cursor: 'pointer', marginTop: 4, fontFamily: 'inherit'}}>
-            Cancel
-          </button>
-        </div>
-      )}
-    </>
-  );
-
-  // Inline toolbar (non-deep-dive, or deep-dive before the portal target
-  // is mounted). Pinned to the editor body's top edge with shared border.
-  const inlineToolbarBlock = (
-    <div style={{
-      display:"flex", alignItems:"center", gap:2, flexWrap:"wrap",
-      padding:"5px 8px", background:T.s2,
-      border:`1.5px solid ${isDeepDive ? T.v : T.bdr}`, borderBottom:"none",
-      borderRadius:"10px 10px 0 0",
-    }}>
-      {toolbarButtonsJSX}
-    </div>
-  );
-
-  // Portaled toolbar: full-width bar that PostComposer mounts above its
-  // scroll container, with the buttons centered to match the card width.
-  // Popovers (link / video / DOI cite) live inside the centered relative
-  // container so their absolute top:42 still anchors under the buttons.
-  const portaledToolbarBlock = (
-    <div style={{
-      background: T.s2,
-      borderBottom: `1.5px solid ${T.bdr}`,
-      boxShadow: '0 2px 8px rgba(27,29,54,0.06)',
-    }}>
-      <div style={{
-        maxWidth: 640, margin: '0 auto', position: 'relative',
-        padding: '0 12px',
-      }}>
-        <div style={{
-          display:"flex", alignItems:"center", gap:2, flexWrap:"wrap",
-          padding:"6px 0",
-        }}>
-          {toolbarButtonsJSX}
-        </div>
-        {popoversJSX}
       </div>
-    </div>
-  );
-
-  return (
-    <div style={{flex:1, position:'relative'}}>
-      {shouldPortal
-        ? createPortal(portaledToolbarBlock, toolbarPortalTarget)
-        : (
-          <>
-            {inlineToolbarBlock}
-            {popoversJSX}
-          </>
-        )
-      }
 
       <input
         ref={fileInputRef}
@@ -690,13 +534,10 @@ export default function RichTextEditor({
         style={{
           minHeight: isDeepDive ? 320 : minHeight,
           padding: isDeepDive ? '24px 28px' : '12px 15px',
-          background: T.w,
+          background: isDeepDive ? T.w : T.w,
           border: `1.5px solid ${isDeepDive ? T.v : T.bdr}`,
-          // When the toolbar is portaled out, the body sits alone — give
-          // it a full top border + all-corner radius. Inline mode keeps
-          // the merged-with-toolbar look (no top border, bottom-only radius).
-          borderTop: shouldPortal ? undefined : "none",
-          borderRadius: shouldPortal ? "10px" : "0 0 10px 10px",
+          borderTop: "none",
+          borderRadius: "0 0 10px 10px",
           fontSize: isDeepDive ? 20 : 13,
           fontFamily: isDeepDive
             ? "'Source Serif 4', 'Source Serif Pro', Georgia, serif"
@@ -706,6 +547,14 @@ export default function RichTextEditor({
           outline: "none",
           overflowY: "auto",
           cursor: "text",
+          // Deep-dive: explicit position+zIndex puts the body at z-index 0
+          // inside the wrapper's stacking context. Without this, the body
+          // is z-index 'auto' and the browser is free to paint it over a
+          // sibling sticky toolbar (z-index 100) once it gets promoted to
+          // its own GPU compositor layer during scroll. With z-index 0
+          // explicit, the body MUST stack below the toolbar regardless of
+          // any layer promotion the browser does.
+          ...(isDeepDive ? { position: 'relative', zIndex: 0 } : {}),
         }}
       />
 
@@ -756,6 +605,113 @@ export default function RichTextEditor({
             }}
           >
             ✕
+          </button>
+        </div>
+      )}
+
+      {/* Link popover */}
+      {showLink && (
+        <div style={{
+          position:'absolute', zIndex:100, top:42, left:8,
+          background:T.w, border:`1.5px solid ${T.v}`,
+          borderRadius:10, padding:12, boxShadow:'0 4px 20px rgba(0,0,0,.12)',
+          width:320,
+        }}>
+          <div style={{fontSize:12.5, fontWeight:700, marginBottom:6}}>Insert link</div>
+          <div style={{display:'flex', gap:6}}>
+            <input
+              autoFocus
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              placeholder="https://example.com"
+              onKeyDown={e => { if (e.key === 'Enter') insertLink(); if (e.key === 'Escape') { setShowLink(false); setLinkUrl(''); } }}
+              style={{
+                flex:1, fontSize:12.5, padding:'6px 10px',
+                border:`1.5px solid ${T.bdr}`, borderRadius:7,
+                fontFamily:'inherit', outline:'none',
+              }}
+            />
+            <Btn onClick={insertLink}>Add</Btn>
+          </div>
+          <button onClick={() => { setShowLink(false); setLinkUrl(''); }}
+            style={{fontSize:11, color:T.mu, border:'none', background:'transparent', cursor:'pointer', marginTop:4, fontFamily:'inherit'}}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Video embed popover */}
+      {showVideo && (
+        <div style={{
+          position:'absolute', zIndex:100, top:42, left:8,
+          background:T.w, border:`1.5px solid ${T.v}`,
+          borderRadius:10, padding:12, boxShadow:'0 4px 20px rgba(0,0,0,.12)',
+          width:340,
+        }}>
+          <div style={{fontSize:12.5, fontWeight:700, marginBottom:2}}>Embed video</div>
+          <div style={{fontSize:11.5, color:T.mu, marginBottom:8}}>
+            Paste a YouTube or Vimeo URL.
+          </div>
+          <div style={{display:'flex', gap:6}}>
+            <input
+              autoFocus
+              value={videoUrl}
+              onChange={e => { setVideoUrl(e.target.value); setVideoError(''); }}
+              placeholder="https://youtu.be/… or https://vimeo.com/…"
+              onKeyDown={e => { if (e.key === 'Enter') insertVideo(); if (e.key === 'Escape') { setShowVideo(false); setVideoUrl(''); setVideoError(''); } }}
+              style={{
+                flex:1, fontSize:12.5, padding:'6px 10px',
+                border:`1.5px solid ${T.bdr}`, borderRadius:7,
+                fontFamily:'inherit', outline:'none',
+              }}
+            />
+            <Btn onClick={insertVideo}>Embed</Btn>
+          </div>
+          {videoError && (
+            <div style={{fontSize:11.5, color:T.ro, marginTop:4}}>{videoError}</div>
+          )}
+          <button onClick={() => { setShowVideo(false); setVideoUrl(''); setVideoError(''); }}
+            style={{fontSize:11, color:T.mu, border:'none', background:'transparent', cursor:'pointer', marginTop:4, fontFamily:'inherit'}}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* DOI citation popover */}
+      {showDoiCite && (
+        <div style={{
+          position: 'absolute', zIndex: 100, top: 42, right: 0,
+          background: T.w, border: `1.5px solid ${T.v}`,
+          borderRadius: 10, padding: 12, boxShadow: '0 4px 20px rgba(0,0,0,.12)',
+          width: 320,
+        }}>
+          <div style={{fontSize: 12.5, fontWeight: 700, marginBottom: 2}}>Cite a paper</div>
+          <div style={{fontSize: 11.5, color: T.mu, marginBottom: 8}}>
+            Inserts <strong>(N)</strong> at cursor and adds a numbered reference at the bottom.
+          </div>
+          <div style={{display: 'flex', gap: 6}}>
+            <input
+              autoFocus
+              value={citeDoiInput}
+              onChange={e => setCiteDoiInput(e.target.value)}
+              placeholder="10.1038/s41586-021-03819-2"
+              onKeyDown={e => e.key === 'Enter' && insertCitation()}
+              style={{
+                flex: 1, fontSize: 12.5, padding: '6px 10px',
+                border: `1.5px solid ${T.bdr}`, borderRadius: 7,
+                fontFamily: 'inherit', outline: 'none',
+              }}
+            />
+            <Btn onClick={insertCitation} disabled={citeFetching}>
+              {citeFetching ? '...' : 'Cite'}
+            </Btn>
+          </div>
+          {citeError && (
+            <div style={{fontSize: 11.5, color: T.ro, marginTop: 4}}>{citeError}</div>
+          )}
+          <button onClick={() => { setShowDoiCite(false); setCiteDoiInput(''); setCiteError(''); }}
+            style={{fontSize: 11, color: T.mu, border: 'none', background: 'transparent', cursor: 'pointer', marginTop: 4, fontFamily: 'inherit'}}>
+            Cancel
           </button>
         </div>
       )}
