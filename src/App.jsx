@@ -105,6 +105,9 @@ export default function App() {
     // One-shot seed for GroupScreen.activeProjectId / ProjectsScreen.activeProject
     // on first mount. Set by the auth'd /g/:slug?project=<uuid> entry path AND
     // by the deep-dive return-to-context restore (sessionStorage post_return_to).
+  const [initialTab, setInitialTab] = useState(null);
+    // One-shot seed for GroupScreen.activeTab on first mount. Set by the
+    // auth'd /g/:slug?tab=<feed|projects|library|members|profile> entry path.
   const [legalDoc]        = useState(getLegalDoc);
   const [isAdminRoute]    = useState(() => window.location.pathname === '/admin');
   const { isMobile } = useWindowSize();
@@ -316,8 +319,10 @@ export default function App() {
       // Authed member: jump into in-app group view.
       const params    = new URLSearchParams(window.location.search);
       const projectId = params.get('project');
+      const tab       = params.get('tab');
       setActiveGroupId(group.id);
       if (projectId) setInitialProjectId(projectId);
+      if (tab)       setInitialTab(tab);
       setScreen('groups');
       window.history.replaceState({}, '', '/');
       setPublicGroupSlug(null);
@@ -645,7 +650,7 @@ export default function App() {
     messages:     <MessagesScreen user={user} onViewUser={onViewUser}/>,
     library:      <LibraryScreen key={`lib-${libraryView}`} user={user} profile={profile} onSaveToggled={fetchSavedIds} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}} onNavigateToPost={()=>setScreen('post')} defaultView={libraryView}/>,
     groups: activeGroupId
-      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>{setActiveGroupId(null);setInitialProjectId(null);}} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }} onOpenCompose={(context)=>{ setComposePrefill({ context, returnScreen: 'groups' }); setScreen('post'); }} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)}/>
+      ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>{setActiveGroupId(null);setInitialProjectId(null);setInitialTab(null);}} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }} onOpenCompose={(context)=>{ setComposePrefill({ context, returnScreen: 'groups' }); setScreen('post'); }} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)} initialTab={initialTab} onInitialTabConsumed={()=>setInitialTab(null)}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     projects: <ProjectsScreen user={user} onEditPost={(post)=>{ setEditingPost(post); setScreen('post'); }} onOpenCompose={(context)=>{ setComposePrefill({ context, returnScreen: 'projects' }); setScreen('post'); }} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)}/>,
     profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,

@@ -155,21 +155,25 @@ function GroupAvatar({ group, size = 48 }) {
   );
 }
 
-export default function GroupScreen({ groupId, user, profile, setProfile, onBack, onViewPaper, onViewGroup, onViewProject, onMarkRead, savedPostIds = new Set(), onSaveToggled, onNavigateToPost, onEditPost, onOpenCompose, initialProjectId = null, onInitialProjectIdConsumed }) {
+export default function GroupScreen({ groupId, user, profile, setProfile, onBack, onViewPaper, onViewGroup, onViewProject, onMarkRead, savedPostIds = new Set(), onSaveToggled, onNavigateToPost, onEditPost, onOpenCompose, initialProjectId = null, onInitialProjectIdConsumed, initialTab = null, onInitialTabConsumed }) {
   const { isMobile } = useWindowSize();
   const [group,           setGroup]           = useState(null);
   const [myRole,          setMyRole]          = useState(null);
-  const [activeTab,       setActiveTab]       = useState('feed');
+  const [activeTab,       setActiveTab]       = useState(
+    ['feed','projects','library','members','profile'].includes(initialTab) ? initialTab : 'feed'
+  );
   const [loading,         setLoading]         = useState(true);
   const [stats,           setStats]           = useState(null);
   const [confirmDel,      setConfirmDel]      = useState(false);
   const [deleting,        setDeleting]        = useState(false);
   const [activeProjectId, setActiveProjectId] = useState(initialProjectId || null);
 
-  // Clear App-level initialProjectId once consumed so subsequent re-mounts
-  // (e.g. user leaves the group and returns) don't auto-reopen the project.
+  // Clear App-level initial* state once consumed so subsequent re-mounts
+  // (e.g. user leaves the group and returns) don't auto-reopen the project
+  // or auto-select the seeded tab.
   useEffect(() => {
     if (initialProjectId) onInitialProjectIdConsumed?.();
+    if (initialTab)       onInitialTabConsumed?.();
   }, []); // eslint-disable-line
 
   const fetchGroup = async () => {
