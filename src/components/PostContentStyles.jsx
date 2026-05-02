@@ -19,9 +19,9 @@ export default function PostContentStyles() {
          the source image's natural width is smaller than the cap.
          max-width-only would silently render at natural size and the
          resize would have no visible effect on small uploads. */
-      img[data-size="small"]  { width: 33% !important; max-width: 33% !important; height: auto !important; }
-      img[data-size="medium"] { width: 60% !important; max-width: 60% !important; height: auto !important; }
-      img[data-size="large"]  { width: 85% !important; max-width: 85% !important; height: auto !important; }
+      img[data-size="small"]  { width: 25% !important; max-width: 25% !important; height: auto !important; }
+      img[data-size="medium"] { width: 50% !important; max-width: 50% !important; height: auto !important; }
+      img[data-size="large"]  { width: 75% !important; max-width: 75% !important; height: auto !important; }
     `}</style>
   );
 }
