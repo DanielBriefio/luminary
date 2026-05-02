@@ -136,19 +136,32 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     }
     if (tab === 'papers') postQ = postQ.eq('post_type','paper');
 
-    // ── 2b. Group posts from open groups followed (overlay) ──────────────
+    // ── 2b. Cross-posted group posts surfaced in the public feed ────────
+    //   - fp='all': any open-group post with visibility='public' is a
+    //     cross-post (author opted in via the "Also share to public
+    //     feed" toggle in the composer).
+    //   - fp='fol': posts in followed groups with visibility='public'
+    //     (visible only to followers of those groups in their feed).
     let groupOverlayPromise = Promise.resolve({ data: [] });
     if (tab !== 'papers') {
-      const overlayGroupIds = fp === 'fol' ? followedGroupIds : [];
-      if (overlayGroupIds.length > 0) {
+      if (fp === 'fol' && followedGroupIds.length > 0) {
         groupOverlayPromise = supabase.from('posts_with_meta')
           .select('*')
           .eq('context_kind', 'group')
-          .in('context_id', overlayGroupIds)
+          .in('context_id', followedGroupIds)
           .eq('visibility', 'public')
           .eq('hidden', false)
           .order('created_at', { ascending: false })
           .limit(20);
+      } else if (fp !== 'fol') {
+        groupOverlayPromise = supabase.from('posts_with_meta')
+          .select('*')
+          .eq('context_kind', 'group')
+          .eq('group_is_public', true)
+          .eq('visibility', 'public')
+          .eq('hidden', false)
+          .order('created_at', { ascending: false })
+          .limit(30);
       }
     }
 

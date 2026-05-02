@@ -102,7 +102,11 @@ function EpResultCard({ title, authors, citation, journal, year, cited, oa, onSe
 // Default visibility per context
 function defaultVisibility(context) {
   if (context.kind === 'feed') return 'public';
-  if (context.kind === 'group') return context.groupIsPublic ? 'public' : 'members';
+  // Group posts default to members-only; users opt in to cross-post via
+  // the "Also share to public feed" toggle (open groups only). Pre-cross-
+  // post mental model defaulted open groups to public; the new default
+  // makes "share to feed" an explicit choice.
+  if (context.kind === 'group') return 'members';
   if (context.kind === 'project') return 'members';
   return 'public';
 }
@@ -184,6 +188,12 @@ export default function PostComposer({
   const [uploading,setUploading]         = useState(false);
 
   const [isDeepDive, setIsDeepDive]       = useState(!!editPost?.is_deep_dive);
+  // Mount node for the deep-dive toolbar (rendered via portal from
+  // RichTextEditor). Lives ABOVE the scroll container so the toolbar
+  // DOM never shares a stacking context with scrolled body text.
+  // Callback ref + state combo forces a re-render once the slot DOM
+  // node is available, so RichTextEditor can portal into it.
+  const [toolbarSlot, setToolbarSlot]     = useState(null);
   const [deepDiveTitle,    setDeepDiveTitle]    = useState(editPost?.deep_dive_title || '');
   const [coverUrl,         setCoverUrl]         = useState(editPost?.deep_dive_cover_url || '');
   const [coverPath,        setCoverPath]        = useState('');
@@ -376,10 +386,16 @@ export default function PostComposer({
     setAttachType(type);
   };
 
-  const switchPostType = (type) => {
-    setPostType(type);
+  // 3-way mode picker: 'text' / 'paper' / 'deepdive'. Maps to the
+  // underlying (postType, isDeepDive) flags so the publish RPC + DB
+  // schema don't change. UI state replaces the previous 2-tile +
+  // toggle combo with a single first-class choice.
+  const mode = postType === 'paper' ? 'paper' : (isDeepDive ? 'deepdive' : 'text');
+  const switchMode = (next) => {
     setError('');
-    if (type === 'paper') clearAttachment();
+    if (next === 'text')     { setPostType('text');  setIsDeepDive(false); }
+    if (next === 'paper')    { setPostType('paper'); setIsDeepDive(false); clearAttachment(); }
+    if (next === 'deepdive') { setPostType('text');  setIsDeepDive(true);  }
   };
 
   const uploadFileToStorage = async (file) => {
@@ -393,26 +409,22 @@ export default function PostComposer({
     return { url: publicUrl, path: data.path };
   };
 
-  // Visibility selector — show only when meaningful.
-  // Feed posts: public | private (default public, currently we treat private
-  // as the only downgrade — there's no UI for "Followers only" in unified posts).
-  // Open-group posts: public | members (default public)
-  // Closed-group / project posts: members locked (or members | private)
-  const visibilityOptions = (() => {
-    if (ctx === 'feed') {
-      return [['public','Everyone'],['private','Only me']];
-    }
-    if (ctx === 'group') {
-      if (context.groupIsPublic) {
-        return [['public','Everyone'],['members','Members only']];
-      }
-      return [['members','Members only']];
-    }
-    if (ctx === 'project') {
-      return [['members','Project members']];
-    }
-    return [['public','Everyone']];
-  })();
+  // Visibility model (post-cross-post refactor):
+  //   Feed       → always public (no selector — feed posts are public by
+  //                definition; "Only me" was a confusing edge case).
+  //   Open group → members-only by default + optional cross-post toggle
+  //                ("Also share to public feed"). Toggle flips visibility
+  //                between 'members' and 'public'; FeedScreen unions in
+  //                public group posts so 'public' actually surfaces in
+  //                the public feed.
+  //   Closed grp → members-only, locked.
+  //   Project    → members-only, locked.
+  // No top-bar pill tabs anymore — open groups use a body-level toggle.
+  const isOpenGroup = ctx === 'group' && !!context.groupIsPublic;
+  const lockedHint =
+    ctx === 'project'                   ? '👥 Project members only' :
+    ctx === 'group' && !isOpenGroup     ? '👥 Group members only'   :
+    '';
 
   const publish = async () => {
     const plainContent = content.replace(/<[^>]+>/g,'').trim();
@@ -612,9 +624,10 @@ export default function PostComposer({
     setTimeout(() => { setSuccess(false); onPublished?.(newPost); }, 1500);
   };
 
-  const types = [
-    {id:"text",  icon:"✏️", label:"Text"},
-    {id:"paper", icon:"📄", label:"Paper"},
+  const modes = [
+    {id:"text",     icon:"✏️", label:"Text",      sub:"A short note or update"},
+    {id:"paper",    icon:"📄", label:"Paper",     sub:"Share research with commentary"},
+    {id:"deepdive", icon:"🔬", label:"Deep Dive", sub:"Long-form article with rich formatting"},
   ];
 
   const catInfo = {
@@ -635,29 +648,57 @@ export default function PostComposer({
     color: active ? T.v : T.mu,
   });
 
-  const headerLabel =
-    ctx === 'group'   ? `New post in ${context.groupName || 'group'}` :
-    ctx === 'project' ? `New post in ${context.projectName || 'project'}` :
-    'Share something with the scientific community';
-
-  const headerSub =
-    ctx === 'group'   ? 'Visible to group members.' :
-    ctx === 'project' ? 'Visible to project members.' :
-    "Select what you're sharing and publish to the feed.";
-
-  const showVisibility = visibilityOptions.length > 1;
+  const breadcrumbLabel = isEditMode ? 'Edit post' : 'New post';
+  const breadcrumbContext =
+    ctx === 'group'   ? `in ${context.groupName || 'group'}` :
+    ctx === 'project' ? `in ${context.projectName || 'project'}` :
+    '';
 
   return (
-    <div style={{flex:1,overflowY:"auto",padding:isMobile?0:32,background:T.bg,display:"flex",alignItems:"flex-start",justifyContent:"center"}}>
-      <div style={{maxWidth:isMobile?"100%":640,width:"100%",background:T.w,border:isMobile?"none":`1px solid ${T.bdr}`,borderRadius:isMobile?0:16,padding:isMobile?"16px 16px 0":28,boxShadow:isMobile?"none":"0 4px 24px rgba(108,99,255,.1)",display:"flex",flexDirection:"column"}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
-          <div style={{fontFamily:"'DM Serif Display',serif",fontSize:19,fontWeight:700}}>{headerLabel}</div>
-          {onCancel && (
-            <button onClick={onCancel} style={{fontSize:13,color:T.mu,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit'}}>✕</button>
+    <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,background:T.bg}}>
+      {/* Top bar — always visible, doesn't scroll. Holds cancel,
+          breadcrumb, visibility (desktop only), and publish. Replaces
+          the old in-card header + footer publish row. */}
+      <div style={{
+        flexShrink:0, background:T.w, borderBottom:`1px solid ${T.bdr}`,
+        padding: isMobile ? "10px 14px" : "12px 24px",
+        display:"flex", alignItems:"center", gap:12, minHeight:56,
+      }}>
+        {onCancel && (
+          <button onClick={onCancel} title="Cancel" style={{
+            fontSize:18, color:T.mu, border:'none', background:'transparent',
+            cursor:'pointer', fontFamily:'inherit', padding:'4px 8px',
+            lineHeight:1,
+          }}>✕</button>
+        )}
+        <div style={{flex:1, minWidth:0, display:'flex', alignItems:'baseline', gap:8, overflow:'hidden'}}>
+          <span style={{
+            fontFamily:"'DM Serif Display',serif", fontSize: isMobile?16:18,
+            fontWeight:700, color:T.text, whiteSpace:'nowrap',
+          }}>{breadcrumbLabel}</span>
+          {breadcrumbContext && (
+            <span style={{
+              fontSize: isMobile?12:13, color:T.mu,
+              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+            }}>{breadcrumbContext}</span>
           )}
         </div>
-        <div style={{fontSize:13,color:T.mu,marginBottom:20}}>{headerSub}</div>
+        <Btn variant="s" onClick={publish} disabled={loading||uploading} style={{padding:"8px 20px", fontSize:13, whiteSpace:'nowrap'}}>
+          {uploading?"Uploading...":loading?(isEditMode?"Saving...":"Publishing..."):(isEditMode?"Save":"Publish →")}
+        </Btn>
+      </div>
 
+      {/* Toolbar mount point — rendered above (outside) the scrolling
+          region for all three modes (text/paper/deepdive) so the
+          toolbar sits in the same place regardless of post type, and
+          its DOM is never a sibling of scrolled body text. */}
+      <div ref={setToolbarSlot} style={{flexShrink:0,position:"relative",zIndex:10}}/>
+
+      {/* Body — single scroll container. Content centered at reading
+          width (~680px) regardless of viewport, sidebar stays as the
+          outer layout layer above this composer. */}
+      <div style={{flex:1,overflowY:"auto",background:T.bg,minHeight:0}}>
+      <div style={{maxWidth:680,width:"100%",margin:"0 auto",padding:isMobile?"16px 16px 80px":"24px 32px 64px",display:"flex",flexDirection:"column"}}>
         {/* Project owned by group — heads-up banner */}
         {ctx === 'project' && context.projectGroupId && context.projectGroupName && (
           <div style={{
@@ -677,15 +718,23 @@ export default function PostComposer({
         {success && <div style={{background:T.gr2,border:`1px solid ${T.gr}`,borderRadius:10,padding:"10px 16px",marginBottom:16,color:T.gr,fontWeight:700}}>{isEditMode ? '✅ Saved!' : '✅ Published!'}</div>}
         {error   && <div style={{background:T.ro2,border:`1px solid ${T.ro}`,borderRadius:10,padding:"10px 16px",marginBottom:16,color:T.ro,fontWeight:600}}>⚠️ {error}</div>}
 
-        {/* Post type selector */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:20}}>
-          {types.map(t=>(
-            <div key={t.id} onClick={()=>switchPostType(t.id)}
-              style={{border:`${postType===t.id?2:1.5}px solid ${postType===t.id?T.v:T.bdr}`,borderRadius:11,padding:"12px 8px",textAlign:"center",cursor:"pointer",background:postType===t.id?T.v2:T.w}}>
-              <div style={{fontSize:22,marginBottom:4}}>{t.icon}</div>
-              <div style={{fontSize:11,fontWeight:700,color:postType===t.id?T.v:T.mu}}>{t.label}</div>
-            </div>
-          ))}
+        {/* Mode picker — 3 tiles. Maps to (postType, isDeepDive) flags
+            via switchMode. Replaces the old 2-tile + Deep Dive toggle
+            combo with a single first-class choice. */}
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(3,1fr)":"repeat(3,1fr)",gap:8,marginBottom:20}}>
+          {modes.map(m=>{
+            const active = mode === m.id;
+            return (
+              <div key={m.id} onClick={()=>switchMode(m.id)}
+                style={{border:`${active?2:1.5}px solid ${active?T.v:T.bdr}`,borderRadius:11,padding:isMobile?"10px 6px":"12px 10px",textAlign:"center",cursor:"pointer",background:active?T.v2:T.w}}>
+                <div style={{fontSize:22,marginBottom:4}}>{m.icon}</div>
+                <div style={{fontSize:11.5,fontWeight:700,color:active?T.v:T.text,marginBottom:isMobile?0:2}}>{m.label}</div>
+                {!isMobile && (
+                  <div style={{fontSize:10.5,color:T.mu,lineHeight:1.3}}>{m.sub}</div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Paper search / DOI panel */}
@@ -846,42 +895,43 @@ export default function PostComposer({
           </div>
         )}
 
-        {/* Deep Dive toggle — text posts only, hidden on mobile */}
-        {postType === 'text' && !isMobile && (
+        {/* Open-group cross-post toggle: when on, this group post also
+            surfaces in the global public feed (FeedScreen unions it in
+            via context_kind='group' + visibility='public' + open-group).
+            Default off — group posts stay group-only unless author opts in. */}
+        {isOpenGroup && (
           <div
-            onClick={() => setIsDeepDive(d => !d)}
+            onClick={() => setVisibility(v => v === 'public' ? 'members' : 'public')}
             style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 12px', marginBottom: 8,
-              borderRadius: 10,
-              background: isDeepDive ? T.v2 : T.s2,
-              border: `1.5px solid ${isDeepDive ? T.v : T.bdr}`,
-              cursor: 'pointer',
+              display:'flex', alignItems:'center', gap:10,
+              padding:'10px 12px', marginBottom:14,
+              borderRadius:10,
+              background: visibility === 'public' ? T.v2 : T.s2,
+              border:`1.5px solid ${visibility === 'public' ? T.v : T.bdr}`,
+              cursor:'pointer',
             }}
           >
             <div style={{
-              width: 38, height: 20, borderRadius: 10,
-              background: isDeepDive ? T.v : T.bdr,
-              position: 'relative', flexShrink: 0,
-              transition: 'background .2s',
+              width:38, height:20, borderRadius:10,
+              background: visibility === 'public' ? T.v : T.bdr,
+              position:'relative', flexShrink:0, transition:'background .2s',
             }}>
               <div style={{
-                position: 'absolute', top: 2,
-                left: isDeepDive ? 19 : 2,
-                width: 16, height: 16, borderRadius: '50%',
-                background: 'white',
-                boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-                transition: 'left .2s',
+                position:'absolute', top:2,
+                left: visibility === 'public' ? 19 : 2,
+                width:16, height:16, borderRadius:'50%',
+                background:'white', boxShadow:'0 1px 3px rgba(0,0,0,.2)',
+                transition:'left .2s',
               }}/>
             </div>
-            <div style={{flex: 1}}>
-              <div style={{fontSize: 12.5, fontWeight: 700, color: isDeepDive ? T.v : T.text}}>
-                🔬 Deep Dive {isDeepDive ? '— on' : ''}
+            <div style={{flex:1}}>
+              <div style={{fontSize:12.5, fontWeight:700, color: visibility === 'public' ? T.v : T.text}}>
+                🌍 Also share to public feed
               </div>
-              <div style={{fontSize: 11, color: T.mu}}>
-                {isDeepDive
-                  ? 'H2/H3 headings, blockquotes, horizontal dividers, and inline DOI citations enabled'
-                  : 'Enable for structured posts with headings, blockquotes, and paper citations'}
+              <div style={{fontSize:11, color:T.mu}}>
+                {visibility === 'public'
+                  ? 'This post appears in the group AND in the public feed for everyone.'
+                  : 'Only group members will see this post. Toggle on to also share to the public feed.'}
               </div>
             </div>
           </div>
@@ -962,6 +1012,7 @@ export default function PostComposer({
             isDeepDive={isDeepDive}
             user={user}
             onPendingImage={(rec) => { pendingImagesRef.current.push(rec); }}
+            toolbarPortalTarget={toolbarSlot}
             minHeight={isMobile ? (uploadFile ? 120 : 200) : (uploadFile ? 70 : 110)}
             placeholder={
               postType==='paper' ? "Why does this paper matter? What's the key finding?" :
@@ -1069,33 +1120,18 @@ export default function PostComposer({
             placeholder="Hashtags: #MedicalAffairs #RWE #DigitalHealth (space or comma separated)"/>
         </div>
 
-        {/* Footer */}
-        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12,padding:isMobile?"12px 0 calc(12px + env(safe-area-inset-bottom))":"12px 0 0",borderTop:`1px solid ${T.bdr}`,background:T.w,position:isMobile?"sticky":undefined,bottom:isMobile?0:undefined,flexWrap:"wrap"}}>
-          {showVisibility ? (
-            <>
-              <span style={{fontSize:12,color:T.mu,fontWeight:600}}>Visible to:</span>
-              <div style={{display:"flex",background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:22,padding:3}}>
-                {visibilityOptions.map(([v,l])=>(
-                  <div key={v} onClick={()=>setVisibility(v)}
-                    style={{padding:"4px 12px",borderRadius:18,fontSize:12,color:visibility===v?T.v:T.mu,cursor:"pointer",fontWeight:700,background:visibility===v?T.w:"transparent"}}>{l}</div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <span style={{fontSize:12,color:T.mu,fontWeight:600}}>
-              {ctx === 'project' ? '👥 Project members only' :
-               ctx === 'group'   ? '👥 Group members only'   :
-               ''}
-            </span>
+        {/* Footer — locked-visibility hint (closed groups + projects) +
+            Clear. Cancel + Publish moved to the top bar; open-group
+            cross-post toggle lives in the body above. */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12,paddingTop:12,borderTop:`1px solid ${T.bdr}`,flexWrap:"wrap"}}>
+          {lockedHint && (
+            <span style={{fontSize:12,color:T.mu,fontWeight:600}}>{lockedHint}</span>
           )}
-          <div style={{marginLeft:"auto",display:"flex",gap:9}}>
-            {onCancel && <Btn onClick={onCancel}>Cancel</Btn>}
+          <div style={{marginLeft:"auto"}}>
             <Btn onClick={()=>{setContent('');setError('');clearAttachment();}}>Clear</Btn>
-            <Btn variant="s" onClick={publish} disabled={loading||uploading} style={{padding:"9px 24px",fontSize:13}}>
-              {uploading?"Uploading...":loading?(isEditMode?"Saving...":"Publishing..."):(isEditMode?"Save changes":"Publish →")}
-            </Btn>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
