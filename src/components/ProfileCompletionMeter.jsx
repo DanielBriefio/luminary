@@ -22,6 +22,7 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
   const [stats,    setStats]    = useState({});
   const [expanded, setExpanded] = useState(false);
   const [loading,  setLoading]  = useState(true);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -42,56 +43,66 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
     });
   }, [user.id]);
 
-  // Fire celebration when profile reaches stage 5 for the first time
+  // Fire celebration once, the first time profile reaches stage 5.
+  // Gate is server-side: the readable milestone post is created during
+  // celebration, so its existence is the canonical "already celebrated"
+  // signal. Survives across devices, browsers, private mode, and
+  // Safari ITP clearing localStorage (which the previous flag-based
+  // gate didn't — it re-fired on each visit once the LS got wiped).
   useEffect(() => {
     if (loading) return;
     const stage = computeStage(profile, stats);
     if (stage < 5) return;
-    const flagKey = `luminary_profile_celebrated_${user.id}`;
-    // Confetti — fires once per device via localStorage
-    if (!localStorage.getItem(flagKey)) {
-      localStorage.setItem(flagKey, '1');
+
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from('posts').select('id, visibility')
+        .eq('user_id', user.id).eq('post_type', 'milestone');
+      if (cancelled) return;
+
+      const readable = (data || []).find(p => p.visibility === 'everyone');
+      if (readable) return; // already celebrated — skip confetti + post creation
+
+      // First time hitting stage 5: fire confetti + show banner
       confetti({
         particleCount: 140,
         spread: 90,
         origin: { y: 0.5 },
         colors: ['#6c63ff', '#764ba2', '#f093fb', '#10b981', '#f59e0b', '#ffffff'],
       });
-    }
+      setShowCelebration(true);
 
-    // Milestone post — always ensure a readable (visibility='everyone') one exists.
-    // Deletes any old visibility='private' post left over from before the fix.
-    supabase.from('posts').select('id, visibility')
-      .eq('user_id', user.id).eq('post_type', 'milestone')
-      .then(({ data }) => {
-        const readable = (data || []).find(p => p.visibility === 'everyone');
-        if (readable) return; // already correct — nothing to do
-
-        // Delete stale private copies then insert a readable one
-        const staleIds = (data || []).map(p => p.id);
-        const cleanup = staleIds.length
-          ? supabase.from('posts').delete().in('id', staleIds)
-          : Promise.resolve();
-
-        cleanup.then(async () => {
-          const { data: configRow } = await supabase
-            .from('admin_config').select('value')
-            .eq('key', 'milestone_post_template').single();
-          const tpl       = configRow?.value || {};
-          const heading   = tpl.heading    || 'Your profile is complete! 🎉';
-          const message   = tpl.message    || "You've built your Luminary profile. Share it with colleagues so they can follow your work and publications.";
-          const cta1Label = tpl.cta1_label || 'View my profile →';
-          const cta2Label = tpl.cta2_label || '🪪 Virtual business card';
-          return supabase.from('posts').insert({
-            user_id:        user.id,
-            target_user_id: user.id,
-            post_type:      'milestone',
-            visibility:     'everyone',
-            content:        buildMilestoneHtml(heading, message, cta1Label, cta2Label),
-          });
-        });
+      // Cleanup stale private copies, then insert the readable milestone post
+      const staleIds = (data || []).map(p => p.id);
+      if (staleIds.length) {
+        await supabase.from('posts').delete().in('id', staleIds);
+      }
+      const { data: configRow } = await supabase
+        .from('admin_config').select('value')
+        .eq('key', 'milestone_post_template').single();
+      const tpl       = configRow?.value || {};
+      const heading   = tpl.heading    || 'Your profile is complete! 🎉';
+      const message   = tpl.message    || "You've built your Luminary profile. Share it with colleagues so they can follow your work and publications.";
+      const cta1Label = tpl.cta1_label || 'View my profile →';
+      const cta2Label = tpl.cta2_label || '🪪 Virtual business card';
+      await supabase.from('posts').insert({
+        user_id:        user.id,
+        target_user_id: user.id,
+        post_type:      'milestone',
+        visibility:     'everyone',
+        content:        buildMilestoneHtml(heading, message, cta1Label, cta2Label),
       });
+    })();
+
+    return () => { cancelled = true; };
   }, [loading, profile, stats, user.id]);
+
+  // Auto-dismiss the celebration banner after 8 seconds.
+  useEffect(() => {
+    if (!showCelebration) return;
+    const t = setTimeout(() => setShowCelebration(false), 8000);
+    return () => clearTimeout(t);
+  }, [showCelebration]);
 
   const currentStage = computeStage(profile, stats);
 
@@ -108,8 +119,38 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
     }
   }, [loading, currentStage, user.id]); // eslint-disable-line
 
+  // Celebration banner — fixed-position toast that confirms profile
+  // completion. Renders independently of the meter's main render path
+  // so it shows even after the meter itself returns null at stage 5.
+  const celebrationBanner = showCelebration ? (
+    <div style={{
+      position: 'fixed', top: 80, left: '50%',
+      transform: 'translateX(-50%)',
+      background: T.v, color: '#fff',
+      padding: '14px 22px', borderRadius: 14,
+      boxShadow: '0 12px 40px rgba(108,99,255,.35)',
+      zIndex: 9999, fontSize: 14, fontWeight: 600,
+      fontFamily: 'inherit',
+      display: 'flex', alignItems: 'center', gap: 12,
+      maxWidth: 'calc(100vw - 32px)',
+    }}>
+      <span style={{fontSize: 20}}>🎉</span>
+      <span>Congratulations on completing your profile!</span>
+      <button
+        onClick={() => setShowCelebration(false)}
+        title="Dismiss"
+        style={{
+          marginLeft: 4, fontSize: 16, color: '#fff',
+          border: 'none', background: 'transparent',
+          cursor: 'pointer', fontFamily: 'inherit',
+          padding: '0 4px', lineHeight: 1, opacity: .8,
+        }}
+      >✕</button>
+    </div>
+  ) : null;
+
   if (loading) return null;
-  if (currentStage === 5) return null;
+  if (currentStage === 5) return celebrationBanner;
 
   const nextStageNum   = currentStage + 1;
   const completedCount = MILESTONES.filter(m => m.check(profile, stats)).length;
@@ -121,6 +162,8 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
   const sorted     = [...incomplete, ...completed];
 
   return (
+    <>
+    {celebrationBanner}
     <div style={{
       background: T.w, borderRadius: 12,
       border: `1.5px solid rgba(108,99,255,.2)`,
@@ -225,5 +268,6 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
         </div>
       )}
     </div>
+    </>
   );
 }
