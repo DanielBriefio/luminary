@@ -545,7 +545,15 @@ export default function RichTextEditor({
           lineHeight: isDeepDive ? 1.7 : 1.75,
           color: T.text,
           outline: "none",
-          overflowY: "auto",
+          // Deep-dive: NO overflow:auto here. The body has no max-height so
+          // it grows to fit content; an overflow:auto would never trigger
+          // a real scroll, but it WOULD cause the browser to promote this
+          // div to its own compositor layer, which paints over the sticky
+          // toolbar regardless of z-index. That was the source of the
+          // text-bleeds-over-toolbar bug.
+          // Non-deep-dive: keep overflow:auto so a fixed-minHeight editor
+          // (e.g. inline post edit) scrolls inside its box.
+          overflowY: isDeepDive ? "visible" : "auto",
           cursor: "text",
         }}
       />
