@@ -429,23 +429,12 @@ export default function RichTextEditor({
       ];
 
   return (
-    <div style={{flex:1, position:'relative', isolation:'isolate'}}>
-      {/* isolation:isolate forces a fresh stacking context on this wrapper
-          so the sticky deep-dive toolbar's z-index can't be undercut by
-          composite layers the browser may promote on scrolled content
-          (which painted text over the toolbar in some browsers). */}
+    <div style={{flex:1, position:'relative'}}>
       <div style={{
         display:"flex", alignItems:"center", gap:2, flexWrap:"wrap",
         padding:"5px 8px", background:T.s2,
         border:`1.5px solid ${isDeepDive ? T.v : T.bdr}`, borderBottom:"none",
         borderRadius:"10px 10px 0 0",
-        position: isDeepDive ? 'sticky' : 'static',
-        top: isDeepDive ? 0 : 'auto',
-        zIndex: isDeepDive ? 100 : 'auto',
-        // Drop shadow makes the elevation explicit when content scrolls
-        // beneath, so the toolbar reads as anchored to the editor top
-        // instead of floating mid-page.
-        boxShadow: isDeepDive ? '0 2px 8px rgba(27,29,54,0.06)' : 'none',
       }}>
         {/* Style dropdown */}
         <select
@@ -533,8 +522,16 @@ export default function RichTextEditor({
         {...(isDeepDive ? {'data-deep-dive': 'true'} : {})}
         style={{
           minHeight: isDeepDive ? 320 : minHeight,
+          // Deep-dive: bound the body so its content scrolls INSIDE the
+          // editor pane instead of growing the page. With the body's own
+          // overflow:auto engaged, content can never paint outside its
+          // bounding box — which kills the sticky-toolbar overlap bug at
+          // its source (no need for sticky positioning, no z-index fight).
+          // Toolbar above is now a static sibling that scrolls with the
+          // page as a single unit alongside the editor pane.
+          maxHeight: isDeepDive ? '60vh' : undefined,
           padding: isDeepDive ? '24px 28px' : '12px 15px',
-          background: isDeepDive ? T.w : T.w,
+          background: T.w,
           border: `1.5px solid ${isDeepDive ? T.v : T.bdr}`,
           borderTop: "none",
           borderRadius: "0 0 10px 10px",
@@ -547,14 +544,6 @@ export default function RichTextEditor({
           outline: "none",
           overflowY: "auto",
           cursor: "text",
-          // Deep-dive: explicit position+zIndex puts the body at z-index 0
-          // inside the wrapper's stacking context. Without this, the body
-          // is z-index 'auto' and the browser is free to paint it over a
-          // sibling sticky toolbar (z-index 100) once it gets promoted to
-          // its own GPU compositor layer during scroll. With z-index 0
-          // explicit, the body MUST stack below the toolbar regardless of
-          // any layer promotion the browser does.
-          ...(isDeepDive ? { position: 'relative', zIndex: 0 } : {}),
         }}
       />
 
