@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabase';
 import { initAnalytics, optInAndIdentify, optOutAndReset, capturePageview } from './lib/analytics';
 import { T, NAV, TIER_CONFIG, getTierFromLumens } from './lib/constants';
@@ -183,6 +183,47 @@ export default function App() {
     if(!session?.user){setProfile(null);return;}
     supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>setProfile(data));
   },[session]);
+
+  // Apply any pending signup intent on first authenticated session.
+  // Stashed by AuthScreen before signUp; consumed here once the user
+  // is signed in (either immediately if email confirmation is off, or
+  // after the user clicks the confirmation link). Idempotent — the
+  // RPC atomically claims the pending row and is a no-op afterwards.
+  // Tracked per-user-id in a ref so we don't re-call on every re-render.
+  const appliedSignupForRef = useRef(null);
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    if (appliedSignupForRef.current === session.user.id) return;
+    appliedSignupForRef.current = session.user.id;
+    (async () => {
+      try {
+        const { data } = await supabase.rpc('apply_signup_intent');
+        if (data?.status === 'applied') {
+          // Pull the updated profile so the new name / consents /
+          // ORCID fields surface in the UI immediately.
+          const { data: fresh } = await supabase
+            .from('profiles').select('*').eq('id', session.user.id).single();
+          if (fresh) setProfile(fresh);
+        }
+      } catch {
+        // Best-effort. If the RPC isn't deployed yet, swallow — the
+        // user is still authenticated and will see whatever profile
+        // state already exists.
+      }
+    })();
+  }, [session?.user?.id]);
+
+  // ?confirmed=1 deep-link from the email confirmation redirect →
+  // pop a quick success toast and strip the param.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('confirmed')) return;
+    params.delete('confirmed');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    setJoinToast('✓ Email confirmed — welcome to Luminary!');
+    setTimeout(() => setJoinToast(''), 3500);
+  }, []);
 
   // Live-sync the profile row so updates from server-side (e.g. award_lumens
   // updating lumens_current_period) reflect in the sidebar widget without a

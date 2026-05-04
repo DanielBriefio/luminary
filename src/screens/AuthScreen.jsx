@@ -41,6 +41,15 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [signupError,    setSignupError]    = useState('');
   const [signupLoading,  setSignupLoading]  = useState(false);
 
+  // Email-confirmation-pending state (set when signUp returns no
+  // session because Supabase Auth's "Confirm email" gate is on).
+  // The post-signup writes were stashed server-side in signup_pending;
+  // App.jsx applies them on the first authenticated session after
+  // the user clicks the confirmation link.
+  const [awaitingConfirmEmail, setAwaitingConfirmEmail] = useState('');
+  const [resendingConfirm,     setResendingConfirm]     = useState(false);
+  const [resendNotice,         setResendNotice]         = useState('');
+
   // Invite path
   const [inviteCode,        setInviteCode]        = useState('');
   const [inviteValid,       setInviteValid]       = useState(null); // null | true | false
@@ -82,6 +91,29 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     setSignupEmail(''); setSignupPassword(''); setSignupName(''); setSignupError('');
     setWaitlistName(''); setWaitlistEmail(''); setWaitlistInstitution('');
     setWaitlistRole(''); setWaitlistReferral(''); setWaitlistSubmitted(false);
+    setAwaitingConfirmEmail(''); setResendNotice('');
+  };
+
+  // Confirmation-link target: Supabase appends ?access_token=… etc.
+  // App.jsx picks the new session up via onAuthStateChange and runs
+  // apply_signup_intent on first authenticated render.
+  const confirmRedirectTo = `${window.location.origin}/?confirmed=1`;
+
+  const resendConfirmationEmail = async () => {
+    if (!awaitingConfirmEmail || resendingConfirm) return;
+    setResendingConfirm(true); setResendNotice('');
+    try {
+      const { error: rerr } = await supabase.auth.resend({
+        type:    'signup',
+        email:   awaitingConfirmEmail,
+        options: { emailRedirectTo: confirmRedirectTo },
+      });
+      if (rerr) throw rerr;
+      setResendNotice('Sent. Check your inbox (and spam folder).');
+    } catch (e) {
+      setResendNotice(e.message || 'Could not resend right now. Try again in a minute.');
+    }
+    setResendingConfirm(false);
   };
 
   const isAcademicEmail = email => {
@@ -189,11 +221,16 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const handleOrcidOAuth = () => startOrcidOAuth();
 
   // ── ORCID sign-up completion (after OAuth callback) ───────────────────────
+  // Stash → signUp → branch on session. With email confirmation enabled,
+  // signUp returns no session; the post-signup writes (profile fields,
+  // ORCID enrichment, publications import, invite generation) all need
+  // a session to satisfy RLS. apply_signup_intent does them server-side
+  // on first authenticated session — see migration_signup_confirmation.sql.
   const handleOrcidSignupComplete = async () => {
     setSignupLoading(true);
     setSignupError('');
     try {
-      // 1. Fetch the pending ORCID data using the token
+      // 1. Fetch the pending ORCID data and snapshot it into stash payload.
       const { data: pending } = await supabase
         .from('orcid_pending')
         .select('*')
@@ -203,64 +240,56 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
       if (!pending) throw new Error('ORCID session expired. Please sign up again.');
 
-      // 2. Create Supabase auth user
+      const nowIso = new Date().toISOString();
+      const stashPayload = {
+        name:                 pending.name,
+        signup_method:        'orcid',
+        card_email:           signupEmail,
+        email_notifications:  consentNotifications,
+        email_marketing:      consentMarketing,
+        marketing_consent_at: consentMarketing ? nowIso : null,
+        analytics_consent_at: consentAnalytics ? nowIso : null,
+        terms_accepted_at:    nowIso,
+        privacy_accepted_at:  nowIso,
+        orcid_data: {
+          orcid_id:     pending.orcid_id,
+          bio:          pending.bio,
+          institution:  pending.institution,
+          title:        pending.title,
+          work_history: JSON.parse(pending.work_history || '[]'),
+          education:    JSON.parse(pending.education    || '[]'),
+          publications: JSON.parse(pending.publications || '[]'),
+        },
+      };
+
+      // 2. Stash intent server-side BEFORE signUp. Anon-callable RPC.
+      const { error: stashErr } = await supabase.rpc('stash_signup_intent', {
+        p_email: signupEmail,
+        p_data:  stashPayload,
+      });
+      if (stashErr) throw stashErr;
+
+      // 3. Create Supabase auth user. If email confirmation is on, no
+      //    session is returned — user needs to click the email link.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email:    signupEmail,
         password: signupPassword,
+        options:  { emailRedirectTo: confirmRedirectTo },
       });
       if (authError) throw authError;
 
-      const userId = authData.user?.id;
-      if (!userId) throw new Error('Account creation failed.');
-
-      // 3. Populate profile with ORCID data
-      await supabase.from('profiles').update({
-        name:                 pending.name,
-        bio:                  pending.bio,
-        institution:          pending.institution,
-        title:                pending.title,
-        orcid:                pending.orcid_id,
-        orcid_verified:       true,
-        signup_method:        'orcid',
-        work_history:         JSON.parse(pending.work_history || '[]'),
-        education:            JSON.parse(pending.education    || '[]'),
-        email_notifications:    consentNotifications,
-        email_marketing:        consentMarketing,
-        marketing_consent_at:   consentMarketing  ? new Date().toISOString() : null,
-        analytics_consent_at:   consentAnalytics  ? new Date().toISOString() : null,
-        terms_accepted_at:      new Date().toISOString(),
-        privacy_accepted_at:    new Date().toISOString(),
-      }).eq('id', userId);
-
-      // 4. Insert publications
-      const pubs = JSON.parse(pending.publications || '[]');
-      if (pubs.length) {
-        await supabase.from('publications').insert(
-          pubs.map(p => ({
-            user_id: userId,
-            title:   p.title,
-            journal: p.journal,
-            year:    p.year,
-            doi:     p.doi  || '',
-            pmid:    p.pmid || '',
-            source:  'orcid',
-          }))
-        );
-      }
-
-      // 5. Generate invite codes
-      await supabase.rpc('generate_user_invites', { user_id: userId, count: 5 });
-
-      // 6. Clean up pending record
+      // 4. Drop the orcid_pending row — it's been snapshotted into the stash.
       await supabase.from('orcid_pending').delete().eq('token', orcidPendingToken);
 
-      // Done — Supabase auth session is now active, app will re-render
       capture('signed_up', { method: 'orcid' });
+
       if (authData.session) {
+        // Confirmation off — apply now and continue into the app.
+        await supabase.rpc('apply_signup_intent');
         onAuth();
       } else {
-        goToMode('login');
-        setSuccess('Account created! Check your email to confirm, then sign in.');
+        // Confirmation on — render the "check your email" panel.
+        setAwaitingConfirmEmail(signupEmail);
       }
     } catch (e) {
       setSignupError(e.message || 'Sign-up failed. Please try again.');
@@ -269,69 +298,55 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   };
 
   // ── Invite-code sign-up ───────────────────────────────────────────────────
+  // Stash → signUp → branch on session. The invite code claim, profile
+  // fields, and inviter-notification all happen server-side via
+  // apply_signup_intent on first authenticated session — see
+  // migration_signup_confirmation.sql.
   const handleInviteSignup = async () => {
     setSignupLoading(true); setSignupError('');
     try {
+      const codeRow = codeRowRef.current;
+      const nowIso  = new Date().toISOString();
+
+      // 1. Stash intent (anon-callable RPC).
+      const { error: stashErr } = await supabase.rpc('stash_signup_intent', {
+        p_email: signupEmail,
+        p_data: {
+          name:                 signupName,
+          signup_method:        'invite',
+          card_email:           signupEmail,
+          email_notifications:  consentNotifications,
+          email_marketing:      consentMarketing,
+          marketing_consent_at: consentMarketing ? nowIso : null,
+          analytics_consent_at: consentAnalytics ? nowIso : null,
+          terms_accepted_at:    nowIso,
+          privacy_accepted_at:  nowIso,
+          invite_code:          (inviteCode || '').trim().toUpperCase(),
+        },
+      });
+      if (stashErr) throw stashErr;
+
+      // 2. Create Supabase auth user.
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: signupEmail,
+        email:    signupEmail,
         password: signupPassword,
-        options: { data: { name: signupName } },
+        options:  {
+          data: { name: signupName },
+          emailRedirectTo: confirmRedirectTo,
+        },
       });
       if (authError) throw authError;
-
-      const userId = authData.user?.id;
-      if (!userId) throw new Error('Account creation failed');
-
-      const codeRow = codeRowRef.current;
-      if (codeRow?.is_multi_use) {
-        await supabase.from('invite_code_uses').insert({
-          code_id:    codeRow.id,
-          user_id:    userId,
-          claimed_at: new Date().toISOString(),
-        });
-        await supabase
-          .from('invite_codes')
-          .update({ uses_count: (codeRow.uses_count || 0) + 1 })
-          .eq('id', codeRow.id);
-      } else {
-        await supabase.rpc('claim_invite_code', {
-          p_code:    inviteCode.trim().toUpperCase(),
-          p_user_id: userId,
-        });
-      }
-
-      await supabase.from('profiles').upsert({
-        id:                   userId,
-        name:                 signupName,
-        signup_method:        'invite',
-        card_email:           signupEmail,
-        email_notifications:  consentNotifications,
-        email_marketing:      consentMarketing,
-        marketing_consent_at: consentMarketing ? new Date().toISOString() : null,
-        analytics_consent_at: consentAnalytics  ? new Date().toISOString() : null,
-        terms_accepted_at:    new Date().toISOString(),
-        privacy_accepted_at:  new Date().toISOString(),
-      });
 
       capture('signed_up', { method: 'email' });
       capture('invite_code_used', { code_type: codeRow?.is_multi_use ? 'event' : 'personal' });
 
-      // Notify the inviter that someone redeemed their code
-      if (codeRow?.created_by && codeRow.created_by !== userId) {
-        await supabase.from('notifications').insert({
-          user_id:    codeRow.created_by,
-          actor_id:   userId,
-          notif_type: 'invite_redeemed',
-          meta:       { code: codeRow.code },
-          read:       false,
-        });
-      }
-
       if (authData.session) {
+        // Confirmation off — apply now and continue.
+        await supabase.rpc('apply_signup_intent');
         onAuth();
       } else {
-        goToMode('login');
-        setSuccess('Account created! Check your email to confirm, then sign in.');
+        // Confirmation on — render the "check your email" panel.
+        setAwaitingConfirmEmail(signupEmail);
       }
     } catch (e) {
       setSignupError(e.message || 'Sign-up failed. Please try again.');
@@ -341,6 +356,56 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
 
   // ── Render sign-up steps ──────────────────────────────────────────────────
   const renderSignup = () => {
+    // Awaiting email confirmation — takes precedence over every other
+    // signup view because the user shouldn't see the form they just
+    // submitted. They land here after signUp returns no session.
+    if (awaitingConfirmEmail) return (
+      <div style={{ textAlign: 'center', padding: '12px 0' }}>
+        <div style={{ fontSize: 44, marginBottom: 16 }}>📧</div>
+        <div style={{
+          fontFamily: "'DM Serif Display',serif",
+          fontSize: 22, marginBottom: 8,
+        }}>
+          Check your email
+        </div>
+        <div style={{ fontSize: 14, color: T.mu, lineHeight: 1.65, marginBottom: 22 }}>
+          We sent a confirmation link to{' '}
+          <strong style={{ color: T.text }}>{awaitingConfirmEmail}</strong>.
+          Click the link to finish setting up your account — your invite
+          and profile data are saved and will apply automatically.
+        </div>
+
+        <Btn variant="s" onClick={resendConfirmationEmail} disabled={resendingConfirm}
+          style={{ width: '100%', marginBottom: 10 }}>
+          {resendingConfirm ? 'Sending…' : 'Resend confirmation email'}
+        </Btn>
+
+        {resendNotice && (
+          <div style={{ fontSize: 12, color: T.mu, marginBottom: 12 }}>{resendNotice}</div>
+        )}
+
+        <button
+          onClick={() => goToMode('login')}
+          style={{
+            background: 'transparent', border: 'none',
+            color: T.v, fontWeight: 600, fontSize: 13,
+            fontFamily: 'inherit', cursor: 'pointer',
+            padding: '6px 0',
+          }}
+        >
+          Already confirmed? Sign in →
+        </button>
+
+        <div style={{ fontSize: 11.5, color: T.mu, marginTop: 14, lineHeight: 1.55 }}>
+          Wrong email?{' '}
+          <button
+            onClick={() => { setAwaitingConfirmEmail(''); setResendNotice(''); }}
+            style={{ color: T.v, fontWeight: 600, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+          >Start over</button>
+        </div>
+      </div>
+    );
+
     // ORCID OAuth completion form — shown after returning from ORCID
     if (showOrcidEmailForm) return (
       <div>
