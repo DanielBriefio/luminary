@@ -420,30 +420,80 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
     setEditing(false); setSaving(false);
   };
 
+  // Save card details + everything else in `form`. We persist the full
+  // form, not just the card subset, because the profile-→form sync
+  // effect at line ~581 reruns whenever `profile` changes — if we only
+  // persisted the card fields, the response from select().single()
+  // would carry the OLD values for the main fields and the sync would
+  // overwrite the user's unsaved edits in the main form. Mirrors the
+  // field set in save() above.
   const saveCard = async () => {
     setCardSaving(true);
-    const baseUpdates = {
-      card_email: form.card_email, card_phone: form.card_phone,
-      card_website: form.card_website,
-      card_linkedin: form.card_linkedin, work_phone: form.work_phone,
-      card_show_email: form.card_show_email, card_show_phone: form.card_show_phone,
-      card_show_linkedin: form.card_show_linkedin,
-      card_show_website: form.card_show_website, card_show_orcid: form.card_show_orcid,
-      card_show_twitter: form.card_show_twitter,
-      card_show_work_phone: form.card_show_work_phone,
+    const composedName = [form.first_name, form.middle_name, form.last_name].filter(Boolean).join(' ');
+    const locationStr  = [form.location_city, form.location_country].filter(Boolean).join(', ');
+
+    const coreUpdates = {
+      name_prefix:form.name_prefix, first_name:form.first_name, middle_name:form.middle_name,
+      last_name:form.last_name, name_suffix:form.name_suffix, name:composedName||undefined,
+      title:form.title, institution:form.institution,
+      location: locationStr || form.location,
+      bio:form.bio, orcid:form.orcid, twitter:form.twitter, card_linkedin:form.card_linkedin,
+      identity_tier1:form.identity_tier1, identity_tier2:form.identity_tier2,
+      topic_interests: form.topic_interests,
+    };
+    const cardUpdates = {
+      card_email:form.card_email, card_phone:form.card_phone,
+      card_website:form.card_website,
+      card_show_email:form.card_show_email, card_show_phone:form.card_show_phone,
+      card_show_linkedin:form.card_show_linkedin,
+      card_show_website:form.card_show_website, card_show_orcid:form.card_show_orcid,
+      card_show_twitter:form.card_show_twitter,
+    };
+    const workModeUpdates = {
+      work_mode: form.work_mode,
+      subspeciality: form.subspeciality,
+      years_in_practice: form.years_in_practice ? parseInt(form.years_in_practice) : null,
+      primary_hospital: form.primary_hospital,
+      patient_population: form.patient_population,
+      additional_quals: form.additional_quals,
+      clinical_highlight_label: form.clinical_highlight_label,
+      clinical_highlight_value: form.clinical_highlight_value,
+      work_phone:   form.work_phone,
+      work_address: form.work_address,
+      card_show_work_phone:   form.card_show_work_phone,
       card_show_work_address: form.card_show_work_address,
     };
     const newColUpdates = {
       work_street: form.work_street, work_city: form.work_city,
       work_postal_code: form.work_postal_code, work_country: form.work_country,
+      location_city: form.location_city, location_country: form.location_country,
     };
-    // Try with new columns first, fall back to base if migration not yet run
-    const { data, error } = await supabase.from('profiles').update({...baseUpdates,...newColUpdates}).eq('id', user.id).select().single();
-    if (!error && data) { setProfile(data); setCardSaving(false); setEditingCard(false); return; }
-    const { data: d2 } = await supabase.from('profiles').update(baseUpdates).eq('id', user.id).select().single();
-    if (d2) setProfile(d2);
+
+    // Same try-1/try-2/try-3 graceful-fallback ladder save() uses, in
+    // case some columns from later migrations aren't yet deployed.
+    const { data, error } = await supabase.from('profiles')
+      .update({...coreUpdates, ...cardUpdates, ...workModeUpdates, ...newColUpdates})
+      .eq('id', user.id).select().single();
+    if (!error && data) {
+      setProfile(data); setCardSaving(false); setEditingCard(false);
+      if (editing) setEditing(false);
+      return;
+    }
+    const { data: d2, error: e2 } = await supabase.from('profiles')
+      .update({...coreUpdates, ...cardUpdates, ...workModeUpdates})
+      .eq('id', user.id).select().single();
+    if (!e2 && d2) {
+      setProfile(d2); setCardSaving(false); setEditingCard(false);
+      if (editing) setEditing(false);
+      return;
+    }
+    const { data: d3 } = await supabase.from('profiles')
+      .update({...coreUpdates, ...cardUpdates})
+      .eq('id', user.id).select().single();
+    if (d3) setProfile(d3);
     setCardSaving(false);
     setEditingCard(false);
+    if (editing) setEditing(false);
   };
 
   const uploadAvatar = async (file) => {
