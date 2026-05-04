@@ -1,10 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  T,
-  ORCID_CLIENT_ID,
-  ORCID_AUTHORIZE_URL,
-  ORCID_REDIRECT_URI,
-} from '../lib/constants';
+import { T } from '../lib/constants';
+import { startOrcidOAuth } from '../lib/orcidAuth';
 import { useWindowSize } from '../lib/useWindowSize';
 import OrcidIcon from '../components/OrcidIcon';
 
@@ -146,17 +142,9 @@ export default function LandingScreen({ supabase, onShowAuth }) {
     }, 50);
   };
 
-  // Matches AuthScreen.handleOrcidOAuth exactly
-  const handleOrcid = () => {
-    const params = new URLSearchParams({
-      client_id:     ORCID_CLIENT_ID,
-      response_type: 'code',
-      scope:         '/authenticate',
-      redirect_uri:  ORCID_REDIRECT_URI,
-      state:         'signup',
-    });
-    window.location.href = `${ORCID_AUTHORIZE_URL}?${params}`;
-  };
+  // Matches AuthScreen.handleOrcidOAuth — generates a single-use state
+  // and stores it in sessionStorage; App.jsx verifies on the way back.
+  const handleOrcid = () => startOrcidOAuth();
 
   return (
     <div style={{
@@ -1077,6 +1065,13 @@ function WaitlistForm({ supabase, isMobile }) {
             placeholder="e.g. Clinical Researcher, MSL"
           />
         </div>
+
+        <WaitlistField
+          label="Where did you hear about us? (optional)"
+          value={form.referral_source}
+          onChange={v => set('referral_source', v)}
+          placeholder="Colleague, conference, Twitter…"
+        />
 
         {error && (
           <div style={{

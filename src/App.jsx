@@ -6,6 +6,7 @@ import Av from './components/Av';
 import Spinner from './components/Spinner';
 import BottomNav from './components/BottomNav';
 import { useWindowSize } from './lib/useWindowSize';
+import { consumeOrcidOAuthState } from './lib/orcidAuth';
 import AuthScreen from './screens/AuthScreen';
 import LandingScreen from './screens/LandingScreen';
 import FeedScreen from './feed/FeedScreen';
@@ -414,22 +415,28 @@ export default function App() {
       });
   }, [session, profile]); // eslint-disable-line
 
-  // Offer ORCID import on first login if user has a verified ORCID but hasn't imported yet
+  // Offer ORCID import on first login if user has a verified ORCID but
+  // hasn't imported yet. Dismissal persists in profiles.orcid_import_dismissed_at
+  // so it survives across browsers and devices.
   useEffect(()=>{
     if(!profile) return;
     if(!profile.orcid || !profile.orcid_verified) return;
     if(profile.orcid_imported_at) return;
     if(!profile.onboarding_completed) return; // wait until onboarding finishes
-    const dismissed = localStorage.getItem(`orcid_import_dismissed_${profile.id}`);
-    if(dismissed) return;
+    if(profile.orcid_import_dismissed_at) return;
     setShowOrcidImport(true);
   },[profile]);
 
   // Handle ORCID OAuth callback params (?orcid_token=... or ?orcid_error=...)
+  // The `orcid_state` echoed back from the callback MUST match the
+  // single-use value we stashed in sessionStorage before the redirect.
+  // A mismatch means the response wasn't initiated by this tab — bail
+  // before doing anything with the token. CSRF protection.
   useEffect(() => {
-    const params    = new URLSearchParams(window.location.search);
+    const params     = new URLSearchParams(window.location.search);
     const orcidToken = params.get('orcid_token');
     const orcidName  = params.get('orcid_name');
+    const orcidState = params.get('orcid_state');
     const orcidError = params.get('orcid_error');
 
     if (orcidError) {
@@ -439,10 +446,15 @@ export default function App() {
     }
 
     if (orcidToken) {
+      const stateOk = consumeOrcidOAuthState(decodeURIComponent(orcidState || ''));
+      window.history.replaceState({}, '', window.location.pathname);
+      if (!stateOk) {
+        setOrcidAuthError('ORCID sign-in could not be verified. Please try again from this tab.');
+        return;
+      }
       setOrcidPendingToken(orcidToken);
       setOrcidPendingName(decodeURIComponent(orcidName || ''));
       setShowOrcidEmailForm(true);
-      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -751,8 +763,13 @@ export default function App() {
           profile={profile}
           setProfile={setProfile}
           onClose={() => {
-            localStorage.setItem(`orcid_import_dismissed_${user.id}`, '1');
+            const ts = new Date().toISOString();
+            setProfile(p => p ? { ...p, orcid_import_dismissed_at: ts } : p);
             setShowOrcidImport(false);
+            supabase.from('profiles')
+              .update({ orcid_import_dismissed_at: ts })
+              .eq('id', user.id)
+              .then(() => {}, () => {});
           }}
         />
       )}

@@ -4,6 +4,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 serve(async (req) => {
   const url    = new URL(req.url);
   const code   = url.searchParams.get("code");
+  // ORCID echoes the `state` we sent on the authorize redirect verbatim.
+  // We pass it through to the app so the client can compare it against
+  // the value it stashed in sessionStorage (CSRF protection — the
+  // attacker can craft a redirect with their own code, but cannot
+  // forge a state that matches the victim's session). Validation
+  // happens client-side because this function is stateless and has no
+  // access to the user's session.
+  const state  = url.searchParams.get("state") || "";
   const appUrl = (Deno.env.get("APP_URL") || "https://luminary.to").trim();
 
   const isProduction = Deno.env.get("ORCID_ENV") === "production";
@@ -174,7 +182,7 @@ serve(async (req) => {
     });
 
     return Response.redirect(
-      `${appUrl}?orcid_token=${tempToken}&orcid_name=${encodeURIComponent(fullName)}`,
+      `${appUrl}?orcid_token=${tempToken}&orcid_name=${encodeURIComponent(fullName)}&orcid_state=${encodeURIComponent(state)}`,
       302
     );
 

@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T, ORCID_CLIENT_ID, ORCID_AUTHORIZE_URL, ORCID_REDIRECT_URI } from '../lib/constants';
+import { T } from '../lib/constants';
+import { startOrcidOAuth } from '../lib/orcidAuth';
 import Inp from '../components/Inp';
 import Btn from '../components/Btn';
 import Footer from '../components/Footer';
@@ -183,16 +184,9 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   };
 
   // ── ORCID OAuth redirect ──────────────────────────────────────────────────
-  const handleOrcidOAuth = () => {
-    const params = new URLSearchParams({
-      client_id:     ORCID_CLIENT_ID,
-      response_type: 'code',
-      scope:         '/authenticate',
-      redirect_uri:  ORCID_REDIRECT_URI,
-      state:         'signup',
-    });
-    window.location.href = `${ORCID_AUTHORIZE_URL}?${params}`;
-  };
+  // Random `state` round-trips through ORCID and is verified in App.jsx
+  // before consuming the orcid_token — see src/lib/orcidAuth.js.
+  const handleOrcidOAuth = () => startOrcidOAuth();
 
   // ── ORCID sign-up completion (after OAuth callback) ───────────────────────
   const handleOrcidSignupComplete = async () => {
