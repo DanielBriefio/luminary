@@ -214,13 +214,20 @@ export default function App() {
   }, [session?.user?.id]);
 
   // ?confirmed=1 deep-link from the email confirmation redirect →
-  // pop a quick success toast and strip the param.
+  // pop a quick success toast and strip the param. PRESERVE the hash:
+  // supabase-js's detectSessionInUrl reads `#access_token=...` from
+  // the URL hash to establish the post-confirmation session. If we
+  // strip the hash before supabase-js gets to it, the session is
+  // never created and the user lands on the Landing page having to
+  // log in manually. supabase-js will clear the hash itself once
+  // it's processed it.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (!params.has('confirmed')) return;
     params.delete('confirmed');
-    const qs = params.toString();
-    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    const qs   = params.toString();
+    const hash = window.location.hash || '';
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + hash);
     setJoinToast('✓ Email confirmed — welcome to Luminary!');
     setTimeout(() => setJoinToast(''), 3500);
   }, []);
