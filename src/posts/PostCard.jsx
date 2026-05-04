@@ -9,6 +9,7 @@ import Btn from '../components/Btn';
 import FollowBtn from '../components/FollowBtn';
 import SafeHtml from '../components/SafeHtml';
 import FilePreview from '../components/FilePreview';
+import MultiImagePreview from '../components/MultiImagePreview';
 import PaperPreview from '../components/PaperPreview';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
@@ -17,8 +18,10 @@ import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
 import LikersModal from './LikersModal';
 
-const TRUNCATE_CHAR_THRESHOLD = 400;
-const TRUNCATE_LINE_HEIGHT    = 6;
+const TRUNCATE_CHAR_THRESHOLD = 180;
+const TRUNCATE_LINE_HEIGHT    = 3;
+// Approx px per line in SafeHtml (font-size 13 × line-height 1.8).
+const TRUNCATE_PX_PER_LINE    = 23.4;
 const DEEPDIVE_MIN_WORDS      = 50;
 
 // Awards Lumens for a comment: 2 to the commenter (creation), and 5 to the
@@ -194,39 +197,18 @@ export default function PostCard({
   const [editTagsText, setEditTagsText] = useState((post.tags || []).join(', '));
 
   const [abstractExpanded, setAbstractExpanded] = useState(false);
-  const [topComment,       setTopComment]       = useState(null);
-  const [commenterAvatars, setCommenterAvatars] = useState([]);
+  // Top comment + commenter avatars arrive on `post` directly via
+  // posts_with_meta (top_comment / commenter_avatars JSONB) — see
+  // migration_post_aggregates_denorm.sql. PostCard used to issue two
+  // queries per post on mount; that was 80 round-trips per 40-row feed.
+  // localTopComment lets submitQuickReply show its own reply instantly
+  // without waiting for the parent to refetch the view.
+  const [localTopComment, setLocalTopComment] = useState(null);
+  const topComment       = localTopComment ?? post.top_comment ?? null;
+  const commenterAvatars = post.commenter_avatars || [];
   const [showReplyBox,     setShowReplyBox]     = useState(false);
   const [replyText,        setReplyText]        = useState('');
   const [promptIndex,      setPromptIndex]      = useState(() => Math.floor(Math.random() * 10));
-
-  useEffect(() => {
-    if (!post.comment_count || post.comment_count === 0) return;
-    supabase
-      .from('comments')
-      .select('id, content, created_at, profiles(name, avatar_url, avatar_color)')
-      .eq('post_id', post.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-      .then(({ data }) => { if (data) setTopComment(data); });
-    supabase
-      .from('comments')
-      .select('user_id, profiles(name, avatar_url, avatar_color)')
-      .eq('post_id', post.id)
-      .order('created_at', { ascending: true })
-      .limit(10)
-      .then(({ data }) => {
-        if (!data) return;
-        const seen = new Set();
-        const unique = data.filter(c => {
-          if (seen.has(c.user_id)) return false;
-          seen.add(c.user_id);
-          return true;
-        });
-        setCommenterAvatars(unique.slice(0, 3));
-      });
-  }, [post.id, post.comment_count]);
 
   const isOwner = currentUserId && currentUserId === post.user_id;
 
@@ -457,7 +439,7 @@ export default function PostCard({
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
-    if (data) setTopComment(data);
+    if (data) setLocalTopComment(data);
     setPromptIndex(i => i + 1);
     await awardLumensForComment(post, currentUserId, currentProfile?.lumens_current_period);
     await notifyPostOwnerOfComment(post, currentUserId);
@@ -779,11 +761,14 @@ export default function PostCard({
             );
           }
 
-          // Regular text post — truncate when long, but never for paper or admin posts.
+          // Regular text post — clamp to ~3 lines, never for paper/admin.
+          // Triggers either on character length OR line breaks (a short
+          // post with multiple newlines can still exceed 3 visible lines).
+          const newlineCount = (plain.match(/\n/g) || []).length;
           const needsTruncation =
             post.post_type === 'text' &&
             !post.is_admin_post &&
-            plain.length > TRUNCATE_CHAR_THRESHOLD;
+            (plain.length > TRUNCATE_CHAR_THRESHOLD || newlineCount > 2);
           const url = post.post_type === 'text' ? extractFirstUrl(post.content || '') : null;
 
           return (
@@ -791,13 +776,13 @@ export default function PostCard({
               {post.content && (needsTruncation && !expanded ? (
                 <div style={{ position:'relative' }}>
                   <div style={{
-                    maxHeight: `${TRUNCATE_LINE_HEIGHT * 1.6 * 15}px`,
+                    maxHeight: `${TRUNCATE_LINE_HEIGHT * TRUNCATE_PX_PER_LINE}px`,
                     overflow:'hidden',
                   }}>
                     <SafeHtml html={post.content} tags={post.tags} onTagClick={onTagClick}/>
                   </div>
                   <div style={{
-                    position:'absolute', bottom:0, left:0, right:0, height:48,
+                    position:'absolute', bottom:0, left:0, right:0, height:32,
                     background:`linear-gradient(to bottom, transparent, ${cardBg})`,
                     pointerEvents:'none',
                   }}/>
@@ -830,6 +815,8 @@ export default function PostCard({
           }}>
             📎 File removed by author
           </div>
+        ) : (post.image_urls?.length > 0) ? (
+          <MultiImagePreview urls={post.image_urls}/>
         ) : post.image_url ? (
           <FilePreview url={post.image_url} fileType={post.file_type||'image'} fileName={post.file_name}/>
         ) : null}

@@ -180,12 +180,20 @@ export default function PostComposer({
   // we know the post.id. We flush record_storage_file for each after publish.
   const pendingImagesRef = useRef([]);
 
-  // Attachments
+  // Attachments — single non-image file (PDF/CSV/video/audio/file) OR
+  // multiple images. The two paths are mutually exclusive: picking one
+  // clears the other. `imageFiles` is the multi-image source of truth;
+  // when non-empty the post is published with image_urls populated and
+  // image_url mirrored to the first entry for back-compat (OG tags,
+  // legacy view code).
   const [attachType,setAttachType]       = useState(null);
   const [uploadFile,setUploadFile]       = useState(null);
   const [uploadPreview,setUploadPreview] = useState('');
   const [uploadCategory,setUploadCategory] = useState('');
   const [uploading,setUploading]         = useState(false);
+  const [imageFiles,setImageFiles]       = useState([]);  // File[]
+  const [imagePreviews,setImagePreviews] = useState([]);  // string[] (object URLs)
+  const photosInputRef = useRef(null);
 
   const [isDeepDive, setIsDeepDive]       = useState(!!editPost?.is_deep_dive);
   // Mount node for the deep-dive toolbar (rendered via portal from
@@ -375,15 +383,73 @@ export default function PostComposer({
     setUploadFile(null); setUploadPreview(''); setUploadCategory('');
   };
 
+  const clearImages = () => {
+    imagePreviews.forEach(u => { try { URL.revokeObjectURL(u); } catch {} });
+    setImageFiles([]); setImagePreviews([]);
+  };
+
   const clearAttachment = () => {
     clearFile();
+    clearImages();
     setAttachType(null);
   };
 
   const switchAttachType = (type) => {
     if (attachType === type) { clearAttachment(); return; }
     clearFile();
+    clearImages();
     setAttachType(type);
+  };
+
+  const MAX_IMAGES = 10;
+  const handlePhotosSelect = async (e) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!picked.length) return;
+    setError('');
+
+    // Drop non-images and oversize files; surface a single combined error.
+    const imgLimitMB = FILE_LIMITS.image;
+    const valid = [];
+    const issues = [];
+    for (const f of picked) {
+      if (!f.type.startsWith('image/')) { issues.push(`${f.name}: not an image`); continue; }
+      if (f.size > imgLimitMB * 1024 * 1024) { issues.push(`${f.name}: over ${imgLimitMB}MB`); continue; }
+      valid.push(f);
+    }
+
+    // Cap total at MAX_IMAGES; ignore extras (user can re-pick later).
+    const room = Math.max(0, MAX_IMAGES - imageFiles.length);
+    const accept = valid.slice(0, room);
+    if (valid.length > room) issues.push(`Only the first ${MAX_IMAGES} photos are kept`);
+
+    if (!accept.length) {
+      if (issues.length) setError(issues.join(' · '));
+      return;
+    }
+
+    // Quota: total of new images + existing single uploadFile (none, since
+    // the buttons are mutually exclusive, but the helper sums correctly).
+    const totalSize = accept.reduce((s, f) => s + f.size, 0);
+    const quotaErr = await checkRemainingQuota(totalSize);
+    if (quotaErr) { setError(quotaErr); return; }
+
+    // Switch into image mode if not already (clears single-file path).
+    if (attachType !== 'photos') { clearFile(); setAttachType('photos'); }
+
+    setImageFiles(prev => [...prev, ...accept]);
+    setImagePreviews(prev => [...prev, ...accept.map(f => URL.createObjectURL(f))]);
+    if (issues.length) setError(issues.join(' · '));
+  };
+
+  const removeImageAt = (idx) => {
+    setImagePreviews(prev => {
+      const u = prev[idx]; if (u) { try { URL.revokeObjectURL(u); } catch {} }
+      const next = prev.filter((_, i) => i !== idx);
+      if (next.length === 0) setAttachType(null);
+      return next;
+    });
+    setImageFiles(prev => prev.filter((_, i) => i !== idx));
   };
 
   // 3-way mode picker: 'text' / 'paper' / 'deepdive'. Maps to the
@@ -429,12 +495,14 @@ export default function PostComposer({
   const publish = async () => {
     const plainContent = content.replace(/<[^>]+>/g,'').trim();
     if(postType === 'paper' && !paperTitle.trim()) { setError('Please add a paper title.'); return; }
-    if(postType !== 'paper' && !plainContent && !uploadFile) {
+    if(postType !== 'paper' && !plainContent && !uploadFile && imageFiles.length === 0) {
       setError('Please write something or add an attachment.'); return;
     }
     setLoading(true); setError('');
 
     let fileUrl = '', uploadedPath = '';
+    let imageUrls = [];          // populated when imageFiles non-empty
+    let imageUploadRecords = []; // [{path,size,type,name}, ...] for storage tracking
     if(uploadFile) {
       setUploading(true);
       try {
@@ -443,10 +511,27 @@ export default function PostComposer({
       }
       catch(err) { setError(`Upload failed: ${err.message}`); setLoading(false); setUploading(false); return; }
       setUploading(false);
+    } else if (imageFiles.length > 0) {
+      setUploading(true);
+      try {
+        const results = await Promise.all(imageFiles.map(f => uploadFileToStorage(f)));
+        imageUrls          = results.map(r => r.url);
+        imageUploadRecords = results.map((r, i) => ({
+          path: r.path, size: imageFiles[i].size,
+          type: imageFiles[i].type || 'image/jpeg', name: imageFiles[i].name,
+        }));
+        // Mirror to legacy single-image fields so OG tags + legacy
+        // renderers (e.g. ShareModal previews, link unfurls) still work.
+        fileUrl      = imageUrls[0];
+        uploadedPath = '';
+      }
+      catch(err) { setError(`Upload failed: ${err.message}`); setLoading(false); setUploading(false); return; }
+      setUploading(false);
     }
 
     let resolvedPostType = postType;
-    if (uploadFile) resolvedPostType = uploadCategory || 'text';
+    if (uploadFile)             resolvedPostType = uploadCategory || 'text';
+    else if (imageFiles.length) resolvedPostType = 'image';
 
     const manualTags = tags.split(/[\s,]+/).filter(t=>t.trim()).map(t=>t.startsWith('#')?t:`#${t}`);
 
@@ -473,8 +558,9 @@ export default function PostComposer({
     if (!isEditMode) {
       payload.user_id      = user.id;
       payload.image_url    = fileUrl;
-      payload.file_type    = uploadCategory;
-      payload.file_name    = uploadFile?.name || '';
+      payload.image_urls   = imageUrls;
+      payload.file_type    = uploadFile ? uploadCategory : (imageFiles.length ? 'image' : '');
+      payload.file_name    = uploadFile?.name || (imageFiles[0]?.name || '');
       payload.tier1        = '';
       payload.tier2        = [];
       payload.context_kind = ctx;
@@ -486,10 +572,17 @@ export default function PostComposer({
       // posts" view (folderId null) leaves the post folder-less.
       if (ctx === 'project' && context.folderId) payload.folder_id = context.folderId;
     } else if (uploadFile) {
-      // Edit + new attachment uploaded → replace existing
-      payload.image_url = fileUrl;
-      payload.file_type = uploadCategory;
-      payload.file_name = uploadFile?.name || '';
+      // Edit + new single attachment uploaded → replace existing
+      payload.image_url  = fileUrl;
+      payload.image_urls = [];
+      payload.file_type  = uploadCategory;
+      payload.file_name  = uploadFile?.name || '';
+    } else if (imageFiles.length > 0) {
+      // Edit + new multi-image set → replace existing
+      payload.image_url  = imageUrls[0];
+      payload.image_urls = imageUrls;
+      payload.file_type  = 'image';
+      payload.file_name  = imageFiles[0]?.name || '';
     }
 
     let newPost, mutErr;
@@ -516,6 +609,20 @@ export default function PostComposer({
         p_source_kind: 'post',
         p_source_id:   newPost.id,
       }).then(() => {}, () => {});
+    }
+
+    if (imageUploadRecords.length > 0 && newPost?.id) {
+      for (const rec of imageUploadRecords) {
+        supabase.rpc('record_storage_file', {
+          p_bucket:      'post-files',
+          p_path:        rec.path,
+          p_size_bytes:  rec.size,
+          p_mime_type:   rec.type,
+          p_file_name:   rec.name,
+          p_source_kind: 'post',
+          p_source_id:   newPost.id,
+        }).then(() => {}, () => {});
+      }
     }
 
     if (newPost?.id && coverPath && coverFileMeta) {
@@ -1034,29 +1141,119 @@ export default function PostComposer({
         {postType !== 'paper' && (
           <div style={{marginTop:10, marginBottom:14}}>
 
-            {!uploadFile && (
+            {!uploadFile && imageFiles.length === 0 && (
               <div style={{display:"flex",gap:8}}>
+                <button style={attachBtnStyle(attachType==='photos')} onClick={()=>{
+                  switchAttachType('photos');
+                  // Open the picker immediately on first click for the
+                  // happy path; second click toggles off (handled by switchAttachType).
+                  setTimeout(() => photosInputRef.current?.click(), 0);
+                }}>
+                  <span>📸</span> Photos
+                </button>
                 <button style={attachBtnStyle(attachType==='file')} onClick={()=>switchAttachType('file')}>
                   <span>📎</span> File
                 </button>
               </div>
             )}
 
-            {attachType === 'file' && !uploadFile && (
+            <input
+              ref={photosInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{display:"none"}}
+              onChange={handlePhotosSelect}
+            />
+
+            {imageFiles.length > 0 && (
+              <div style={{
+                border:`1px solid ${T.bdr}`, borderRadius:12,
+                padding:10, marginTop:10, background:T.w,
+              }}>
+                <div style={{
+                  display:'grid',
+                  gridTemplateColumns:`repeat(${isMobile ? 3 : 4}, 1fr)`,
+                  gap:6, marginBottom:10,
+                }}>
+                  {imagePreviews.map((u, i) => (
+                    <div key={u} style={{
+                      position:'relative', aspectRatio:'1 / 1',
+                      borderRadius:8, overflow:'hidden',
+                      border:`1px solid ${T.bdr}`, background:T.s2,
+                    }}>
+                      <img src={u} alt="" style={{
+                        width:'100%', height:'100%', objectFit:'cover', display:'block',
+                      }}/>
+                      <button
+                        onClick={() => removeImageAt(i)}
+                        title="Remove"
+                        style={{
+                          position:'absolute', top:4, right:4,
+                          width:22, height:22, borderRadius:'50%',
+                          border:'none', background:'rgba(0,0,0,.65)',
+                          color:'#fff', fontSize:13, cursor:'pointer',
+                          display:'flex', alignItems:'center', justifyContent:'center',
+                          lineHeight:1, fontFamily:'inherit',
+                        }}
+                      >✕</button>
+                      {i === 0 && (
+                        <span style={{
+                          position:'absolute', bottom:4, left:4,
+                          background:'rgba(0,0,0,.65)', color:'#fff',
+                          fontSize:10, fontWeight:700,
+                          padding:'1px 6px', borderRadius:20,
+                        }}>Cover</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8}}>
+                  <span style={{fontSize:11.5, color:T.mu}}>
+                    {imageFiles.length} of {MAX_IMAGES} photo{imageFiles.length===1?'':'s'} · first is the cover
+                  </span>
+                  <div style={{display:'flex', gap:6}}>
+                    {imageFiles.length < MAX_IMAGES && (
+                      <button onClick={()=>photosInputRef.current?.click()} style={{
+                        padding:'5px 12px', borderRadius:20,
+                        border:`1.5px solid ${T.bdr}`, background:T.w,
+                        cursor:'pointer', fontSize:11.5, fontFamily:'inherit',
+                        fontWeight:600, color:T.v,
+                      }}>+ Add more</button>
+                    )}
+                    <button onClick={clearAttachment} style={{
+                      padding:'5px 12px', borderRadius:20,
+                      border:`1.5px solid ${T.bdr}`, background:T.w,
+                      cursor:'pointer', fontSize:11.5, fontFamily:'inherit',
+                      fontWeight:600, color:T.mu,
+                    }}>✕ Remove all</button>
+                  </div>
+                </div>
+                {uploading && (
+                  <div style={{marginTop:8, padding:"8px 12px", background:T.v2, borderRadius:8, display:"flex", alignItems:"center", gap:9, fontSize:12.5, color:T.v, fontWeight:600}}>
+                    <div style={{width:13,height:13,borderRadius:"50%",border:`2px solid ${T.v2}`,borderTop:`2px solid ${T.v}`,animation:"spin 1s linear infinite"}}/>
+                    Uploading {imageFiles.length} photo{imageFiles.length===1?'':'s'}…
+                  </div>
+                )}
+              </div>
+            )}
+
+            {attachType === 'file' && !uploadFile && imageFiles.length === 0 && (
               <label style={{display:"block",cursor:"pointer",marginTop:10}}>
                 <input type="file"
-                  accept="image/*,video/*,audio/*,application/pdf,text/csv,application/vnd.ms-excel"
+                  accept="video/*,audio/*,application/pdf,text/csv,application/vnd.ms-excel"
                   onChange={handleFileSelect} style={{display:"none"}}/>
                 <div style={{border:`2px dashed rgba(108,99,255,.3)`,borderRadius:12,padding:"20px 20px",textAlign:"center",background:`linear-gradient(135deg,${T.v2},${T.bl2})`}}>
                   <div style={{fontSize:26,marginBottom:6}}>📎</div>
                   <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:6}}>Click to select a file</div>
                   <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap"}}>
-                    {[["📸","Photos","10MB"],["🎥","Video","200MB"],["🎙️","Audio","50MB"],["📄","PDF","25MB"],["📊","CSV","5MB"]].map(([icon,label,limit])=>(
+                    {[["🎥","Video","200MB"],["🎙️","Audio","50MB"],["📄","PDF","25MB"],["📊","CSV","5MB"]].map(([icon,label,limit])=>(
                       <span key={label} style={{background:"rgba(255,255,255,.7)",border:"1px solid rgba(108,99,255,.2)",borderRadius:20,padding:"3px 9px",fontSize:10.5,fontWeight:700,color:T.v}}>
                         {icon} {label} · {limit}
                       </span>
                     ))}
                   </div>
+                  <div style={{marginTop:8, fontSize:10.5, color:T.mu}}>Photos? Use the 📸 Photos button above to share multiple at once.</div>
                 </div>
               </label>
             )}

@@ -8,6 +8,7 @@ import { sanitiseHtml } from '../lib/htmlUtils';
 import { useWindowSize } from '../lib/useWindowSize';
 import PaperPreview from '../components/PaperPreview';
 import FilePreview from '../components/FilePreview';
+import MultiImagePreview from '../components/MultiImagePreview';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 import FollowBtn from '../components/FollowBtn';
@@ -698,6 +699,10 @@ export default function PublicPostPage({ postId }) {
             fontSize:13.5, color:T.mu, fontStyle:'italic',
           }}>
             📎 File removed by author
+          </div>
+        ) : (post.image_urls?.length > 0) ? (
+          <div style={{ marginTop:20 }}>
+            <MultiImagePreview urls={post.image_urls}/>
           </div>
         ) : post.image_url ? (
           <div style={{ marginTop:20 }}>

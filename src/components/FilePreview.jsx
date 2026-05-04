@@ -8,7 +8,7 @@ export default function FilePreview({ url, fileType, fileName }) {
   if (fileType === 'image') {
     return (
       <div style={{borderRadius:12,overflow:"hidden",margin:"8px 0",border:`1px solid ${T.bdr}`}}>
-        <img src={url} alt={fileName||"Image"}
+        <img src={url} alt={fileName||"Image"} loading="lazy"
           style={{width:"100%",maxHeight:isMobile?300:520,objectFit:"cover",display:"block",cursor:"pointer"}}
           onClick={()=>window.open(url,'_blank')}/>
       </div>
