@@ -412,6 +412,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                   selected={selectedTopics}
                   onChange={setSelectedTopics}
                   minRequired={3}
+                  tier1={identityTier1 || profile?.identity_tier1 || ''}
                 />
                 <Btn
                   variant="s"

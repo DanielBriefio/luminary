@@ -1,15 +1,26 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { ALL_TIER2 } from './constants';
+import { ALL_TIER2, getTier2 } from './constants';
 
 /**
  * Fetches the most frequently used tags across all posts.
  * Returns top N tags sorted by frequency, excluding any already selected.
- * Falls back to ALL_TIER2 taxonomy specialities if the DB returns nothing.
+ *
+ * Cold-start fallback (RPC errors OR returns no data, e.g. fresh DB
+ * with no tagged posts yet): show specialities from the user's tier1
+ * discipline only — that's <=12 highly relevant chips instead of the
+ * full ~150-entry ALL_TIER2 list. Caller can pass `wide=true` to opt
+ * into the full taxonomy list (used by the "see all topics" button
+ * in the picker). When no tier1 is known, fallback is always wide.
+ *
+ * `narrowed` in the return tells the caller whether the current
+ * fallback is narrowed by tier1 — i.e. whether offering "see all"
+ * would actually reveal more options.
  */
-export function useSuggestedTopics(currentInterests = [], limit = 30) {
+export function useSuggestedTopics(currentInterests = [], tier1 = '', wide = false, limit = 30) {
   const [suggested, setSuggested] = useState([]);
   const [loading,   setLoading]   = useState(true);
+  const [narrowed,  setNarrowed]  = useState(false);
 
   const interestsKey = currentInterests.join(',');
 
@@ -21,22 +32,27 @@ export function useSuggestedTopics(currentInterests = [], limit = 30) {
 
       if (cancelled) return;
 
-      if (error || !data) {
-        setSuggested(ALL_TIER2.filter(t => !currentInterests.includes(t)));
-        setLoading(false);
-        return;
+      const liveTags = (!error && data)
+        ? data
+            .map(row => row.tag)
+            .filter(t => t && t.length > 1 && !currentInterests.includes(t))
+        : [];
+
+      if (liveTags.length > 0) {
+        setSuggested(liveTags);
+        setNarrowed(false);
+      } else {
+        // Cold-start fallback. Narrow to tier1 specialities when known
+        // and the caller hasn't asked for the wide list.
+        const useNarrow = !!tier1 && !wide;
+        const pool = useNarrow ? getTier2(tier1) : ALL_TIER2;
+        setSuggested(pool.filter(t => !currentInterests.includes(t)));
+        setNarrowed(useNarrow);
       }
-
-      const tags = data
-        .map(row => row.tag)
-        .filter(t => t && t.length > 1 && !currentInterests.includes(t));
-
-      // If DB returned nothing yet, show all Tier 2 taxonomy specialities
-      setSuggested(tags.length ? tags : ALL_TIER2.filter(t => !currentInterests.includes(t)));
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [interestsKey, limit]); // eslint-disable-line
+  }, [interestsKey, tier1, wide, limit]); // eslint-disable-line
 
-  return { suggested, loading };
+  return { suggested, loading, narrowed };
 }

@@ -10,10 +10,18 @@ import { useSuggestedTopics } from '../lib/useSuggestedTopics';
  *   selected     string[]  — currently selected topics (no # prefix)
  *   onChange     fn        — called with the new array on every change
  *   minRequired  number    — if > 0, shows a count nudge (0 = no minimum)
+ *   tier1        string    — user's identity_tier1, used to narrow the
+ *                            cold-start fallback list to that discipline's
+ *                            specialities. Optional: missing → wide list.
  */
-export default function TopicInterestsPicker({ selected = [], onChange, minRequired = 0 }) {
+export default function TopicInterestsPicker({ selected = [], onChange, minRequired = 0, tier1 = '' }) {
   const [input, setInput] = useState('');
-  const { suggested, loading } = useSuggestedTopics(selected);
+  // `wide` lets the user widen the cold-start fallback past their
+  // discipline. Hook surfaces `narrowed=true` only when the suggestion
+  // list is currently narrowed AND there's actually a wider list to
+  // reveal — so we only render the "see all topics" button then.
+  const [wide, setWide] = useState(false);
+  const { suggested, loading, narrowed } = useSuggestedTopics(selected, tier1, wide);
 
   const add = (raw) => {
     const clean = raw.replace(/^#+/, '').trim();
@@ -86,8 +94,18 @@ export default function TopicInterestsPicker({ selected = [], onChange, minRequi
 
       {/* ── Suggested chips ── */}
       <div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
-          Suggested topics
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, gap: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {narrowed ? `Suggested in ${tier1}` : 'Suggested topics'}
+          </div>
+          {narrowed && (
+            <button
+              onClick={() => setWide(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: T.v, fontWeight: 600, fontFamily: 'inherit', padding: 0 }}
+            >
+              See all topics →
+            </button>
+          )}
         </div>
         {loading
           ? <div style={{ padding: '8px 0' }}><Spinner /></div>
