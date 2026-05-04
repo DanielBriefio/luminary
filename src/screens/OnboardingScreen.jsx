@@ -274,18 +274,27 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
         {/* ── Step 2: Feature overview ── */}
         {step === 2 && (
           <div>
-            <button
-              onClick={() => setStep(1)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit', padding: 0, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
-              ← Back
-            </button>
+            {/* Top action row: back on the left, primary CTA on the
+                right — keeps the "Set up my profile" button above the
+                fold so users don't have to scroll past five feature
+                cards to find it. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+              <button
+                onClick={() => setStep(1)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: T.mu, fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                ← Back
+              </button>
+              <Btn variant="s" onClick={() => setStep(3)} style={{ marginLeft: 'auto', padding: '8px 16px', fontSize: 13, whiteSpace: 'nowrap' }}>
+                Set up my profile →
+              </Btn>
+            </div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>
               Your research identity, all in one place
             </div>
             <div style={{ fontSize: 13, color: T.mu, marginBottom: 20, lineHeight: 1.6 }}>
               Here's what you can do with Luminary:
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <FeatureCard
                 icon="🌐"
                 title="Public profile page"
@@ -316,9 +325,6 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                 badge="My Profile → Export"
               />
             </div>
-            <Btn variant="s" onClick={() => setStep(3)} style={{ width: '100%', padding: '12px', fontSize: 14 }}>
-              Set up my profile →
-            </Btn>
           </div>
         )}
 
