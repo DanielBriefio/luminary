@@ -1,7 +1,7 @@
 # Luminary — Privacy Policy
 
-_Last updated: April 26, 2026_
-_Effective date: April 24, 2026_
+_Last updated: May 5, 2026_
+_Effective date: May 5, 2026_
 
 ---
 
@@ -34,7 +34,22 @@ to luminary.to. It should be read alongside our Terms of Use.
 Qurio LLC
 Yakumo 2-20-2, Meguro-ku, Tokyo 152-0023, Japan
 0110-03-021185
-team@luminary.to
+legal@luminary.to
+
+**EU representative (Article 27 GDPR):**
+Pursuant to Article 27 of the EU General Data Protection Regulation,
+our representative in the European Union for matters relating to the
+processing of personal data of EU residents is:
+
+Daniel J. Ruzicka
+Hinterer Berg 3
+92310 Sulzbürg
+Germany
+legal@luminary.to
+
+EU residents may contact our EU representative directly at the address
+above for any privacy-related enquiry. You may also use this address
+to lodge concerns relating to GDPR compliance.
 
 ---
 
@@ -88,12 +103,28 @@ team@luminary.to
 - Referring URL
 
 **Usage data (analytics):**
-If you have given consent, we collect anonymised event data about
+If you have given consent, we collect pseudonymous event data about
 how you use the Platform, including which features you use, which
 screens you visit, and key actions such as creating posts, joining
 groups, and adding library items. This data is collected via PostHog
 (see Section 4.3) and is tied to a pseudonymous identifier (your
-account UUID), not your name or email address.
+account UUID), not your name or email address. The data is
+pseudonymous rather than fully anonymous because, in principle, the
+account UUID can be linked back to your account inside our own
+systems; we do not, however, share this linkage with PostHog or
+any other third party.
+
+**Internal operational analytics:**
+Independently of PostHog, we process aggregate and user-level data
+inside our own database to operate, moderate, and improve the
+Platform. This includes counting signups, measuring retention,
+identifying inactive users for re-engagement, surfacing posts that
+require moderation, detecting abuse, and understanding which
+features see use. This processing happens entirely within our own
+infrastructure (no third-party tracker is involved) and runs on
+the basis of legitimate interest (Article 6(1)(f) GDPR), which
+applies regardless of your analytics consent setting. You can
+object to this processing under Section 8.6 below.
 
 **Cookies and local storage:**
 We use browser localStorage to store your session preferences and
@@ -139,9 +170,9 @@ following legal bases:
 | Sending transactional notifications | Email address, notification preferences | Contract performance |
 | Sending product updates and news | Email address, marketing preference | Consent |
 | Showing sponsored or promoted content inside the Platform | Pseudonymous targeting attributes (e.g. discipline, work mode) | Legitimate interest, or Consent for sponsored emails |
-| Anonymised usage analytics | Pseudonymous event data | Consent |
+| Pseudonymous usage analytics (PostHog) | Pseudonymous event data | Consent |
+| Operating, moderating, and improving the Platform | Aggregate and user-level usage data | Legitimate interest |
 | Security and fraud prevention | IP address, login data | Legitimate interest |
-| Improving the Platform | Anonymised usage patterns | Legitimate interest |
 | Complying with legal obligations | As required | Legal obligation |
 | Enforcing our Terms of Use | Usage and content data | Legitimate interest |
 
@@ -168,31 +199,35 @@ our behalf and under our instructions:
 **Supabase (database and authentication)**
 - Purpose: Hosting our database, user authentication, and file storage
 - Data: All platform data
-- Location: [Supabase data region — e.g. EU (Frankfurt) / US]
-- Safeguards: [DPA in place / Standard Contractual Clauses]
+- Location: Supabase Cloud, primary region United States
+- Safeguards: Data Processing Agreement (DPA) and Standard Contractual
+  Clauses (SCCs) approved by the European Commission
 - Privacy policy: supabase.com/privacy
 
 **Vercel (web hosting)**
 - Purpose: Hosting and serving the Platform
 - Data: Request logs including IP addresses
-- Location: Global CDN with primary compute in [region]
-- Safeguards: [DPA in place / Standard Contractual Clauses]
+- Location: Global edge network with primary compute in the United States
+- Safeguards: Data Processing Agreement (DPA) and Standard Contractual
+  Clauses (SCCs) approved by the European Commission
 - Privacy policy: vercel.com/legal/privacy-policy
 
 **PostHog (analytics)**
-- Purpose: Anonymised usage analytics
+- Purpose: Pseudonymous usage analytics
 - Data: Pseudonymous event data (account UUID + actions taken)
   — only for users who have given consent
 - Location: United States (app.posthog.com)
-- Safeguards: [DPA in place / Standard Contractual Clauses]
+- Safeguards: Data Processing Agreement (DPA) and Standard Contractual
+  Clauses (SCCs) approved by the European Commission
 - Privacy policy: posthog.com/privacy
 
-**[Resend / SendGrid] (transactional email)**
+**Resend (transactional email)**
 - Purpose: Sending transactional notifications and system emails
 - Data: Email address, notification content
-- Location: [US / EU]
-- Safeguards: [DPA in place / Standard Contractual Clauses]
-- Privacy policy: [link]
+- Location: United States
+- Safeguards: Data Processing Agreement (DPA) and Standard Contractual
+  Clauses (SCCs) approved by the European Commission
+- Privacy policy: resend.com/legal/privacy-policy
 
 ### 4.3 Analytics in detail — PostHog
 
@@ -207,11 +242,18 @@ your pseudonymous account UUID — not your name, email address, or
 institution. We do not enable session recording. You can opt out of
 analytics at any time via your account settings.
 
+PostHog event data is retained for 30 days from the event date and then
+permanently deleted from PostHog's systems. After deletion, only
+aggregate metrics (counts, percentages, cohort sizes — none of which
+identify you individually) may persist in our internal dashboards.
+
 ### 4.4 Sponsored and promoted content
 
-Luminary may show sponsored or promoted content inside the Platform —
-for example a sponsored post or paper in the feed, a sponsored Paper of
-the Week, a sponsored item in a group's library, or an occasional
+We do not currently send sponsored or marketing emails. We may
+introduce sponsored or promoted content inside the Platform in the
+future — for example a sponsored post or paper in the feed, a
+sponsored Paper of the Week, a sponsored item in a group's library,
+or, if you have opted in to product updates and news, an occasional
 sponsored email sent by us. Where this happens, we will mark the
 content clearly so you can recognise it as sponsored.
 
@@ -283,9 +325,10 @@ as needed to provide the Platform. Specifically:
 |---|---|
 | Account and profile data | Duration of account + 30 days after scheduled deletion |
 | Posts and content | Duration of account + 30 days after scheduled deletion |
-| Direct messages | Duration of account + 30 days after scheduled deletion |
-| Uploaded files | Deleted within 0 days of post/library item deletion |
-| Analytics event data | 12 months from event date (PostHog) |
+| Direct messages — your side | Duration of account + 30 days after scheduled deletion |
+| Direct messages — recipient's side | Retained until the recipient deletes them; sender shown as "Deleted user" after your account is purged |
+| Uploaded files | Removed at the time of post or library item deletion |
+| Analytics event data (PostHog) | 30 days from event date |
 | Technical logs | 90 days |
 | Backup copies | Up to 90 days after original deletion |
 | Anonymised/aggregated data | Indefinitely (cannot be attributed to you) |
@@ -293,9 +336,14 @@ as needed to provide the Platform. Specifically:
 When you schedule account deletion, your profile and posts are hidden
 from other users immediately, and a 30-day grace period begins. You can
 sign in any time during that window to cancel the deletion and restore
-your account. After 30 days, your account, posts, publications,
-direct messages, and uploaded files are permanently deleted from active
-systems. Backup copies are then purged within an additional 90 days.
+your account. After 30 days, your account, posts, publications, and
+uploaded files are permanently deleted from active systems. Direct
+messages you sent are retained on the recipient's side so that their
+conversation history is not silently erased; in those threads you
+appear as "Deleted user" with no link back to your former account.
+Comments you authored are similarly retained on the parent post,
+attributed to "Deleted user". Backup copies are then purged within an
+additional 90 days.
 
 After your account is deleted, we may retain certain anonymised or
 aggregated data that cannot identify you for platform analytics and
@@ -331,21 +379,57 @@ supervisory authority as required by law.
 
 ## 7. International Data Transfers
 
-Our infrastructure is operated through Supabase and Vercel, which may
-process data in locations outside your country of residence, including
-the United States and the European Union.
+Our infrastructure is operated through Supabase and Vercel, which
+process data primarily in the United States. Qurio LLC is established
+in Japan. As a result, when you use the Platform, your personal data
+is transferred to and processed in the United States and Japan, and
+may also transit through other regions served by our service
+providers' global networks.
 
-Where we transfer personal data from the European Economic Area (EEA),
-United Kingdom, or other regions with data transfer restrictions to
-countries not recognised as providing adequate protection, we rely on
-appropriate safeguards, including:
+### 7.1 Transfers from the European Economic Area and United Kingdom
 
-- Standard Contractual Clauses (SCCs) approved by the European Commission
-- UK International Data Transfer Agreements (IDTAs) where applicable
-- Other transfer mechanisms as required by applicable law
+Where we transfer personal data from the European Economic Area (EEA)
+or United Kingdom to countries not recognised as providing an adequate
+level of data protection (including the United States), we rely on the
+following safeguards:
 
-You can request details of the specific transfer mechanisms we rely
-on by contacting us at [CONTACT EMAIL].
+- Standard Contractual Clauses (SCCs) approved by the European
+  Commission, in place with each of our service providers (Supabase,
+  Vercel, PostHog, Resend)
+- UK International Data Transfer Agreements (IDTAs) or the UK Addendum
+  to the EU SCCs, where applicable
+- Where a recipient is certified under the EU–US Data Privacy Framework
+  (DPF), the certification is also relied upon as an adequate transfer
+  mechanism
+
+You can request details of the specific transfer mechanisms we rely on,
+including a copy of the relevant SCCs, by contacting us at
+legal@luminary.to or our EU representative at the address in Section 1.
+
+### 7.2 Transfers under the Japanese Act on the Protection of Personal Information (APPI)
+
+When users in Japan provide personal data to the Platform, that data
+is transferred to and processed in the United States by Supabase,
+Vercel, PostHog, and Resend.
+
+In line with APPI Article 28 and the PPC's guidance on cross-border
+transfers, we disclose the following:
+
+- **Recipient countries:** United States.
+- **Recipient countries' data protection systems:** The United States
+  does not have a comprehensive federal data protection law equivalent
+  to APPI. State-level laws (e.g. California's CCPA/CPRA) and
+  sector-specific federal laws apply. Information about the systems in
+  these countries is published by the PPC and the European
+  Commission's adequacy assessments.
+- **Recipient measures:** Each recipient has agreed contractually to
+  protect personal data through Standard Contractual Clauses or
+  equivalent terms, to apply technical and organisational measures
+  comparable to APPI's requirements, and to permit us to audit
+  compliance.
+
+Japanese users may request additional details about these transfers by
+contacting us at legal@luminary.to.
 
 ---
 
@@ -378,7 +462,10 @@ the data.
 You have the right to receive your personal data in a structured,
 commonly used, machine-readable format, and to transmit it to another
 controller. This applies to data you have provided to us where
-processing is based on consent or contract.
+processing is based on consent or contract. You can generate a manual
+export of your account data — profile, publications, posts, comments,
+library, groups, projects, messages, and lumens history — at any time
+from **Account Settings → Export my data**.
 
 ### 8.6 Right to object
 You have the right to object to processing of your personal data where
@@ -399,10 +486,12 @@ Commissioner's Office (ICO). In Japan, this is the Personal Information
 Protection Commission (PPC).
 
 ### 8.9 How to exercise your rights
-To exercise any of these rights, contact us at [CONTACT EMAIL]. We may
-need to verify your identity before processing your request. We will
-respond within 30 days, and may extend this period by a further two
-months for complex or multiple requests, with notice.
+To exercise any of these rights, contact us at legal@luminary.to (EU
+residents may also contact our EU representative at the address listed
+in Section 1). We may need to verify your identity before processing
+your request. We will respond within 30 days, and may extend this
+period by a further two months for complex or multiple requests, with
+notice.
 
 We do not charge a fee for exercising your rights unless requests are
 manifestly unfounded or excessive.
@@ -477,7 +566,7 @@ profile and discarded after import.
 We may update this Privacy Policy from time to time to reflect changes
 in our practices, technology, legal requirements, or other factors. We
 will notify you of material changes by email or by a prominent notice
-on the Platform at least [14/30] days before the changes take effect.
+on the Platform at least 30 days before the changes take effect.
 
 The "Last updated" date at the top of this policy indicates when the
 most recent changes were made. Your continued use of the Platform after

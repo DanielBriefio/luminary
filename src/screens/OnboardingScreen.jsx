@@ -298,7 +298,7 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
               <FeatureCard
                 icon="🌐"
                 title="Public profile page"
-                desc="A beautiful page at luminary.app/p/your-name — perfect for conference posters and email signatures"
+                desc="A beautiful page at luminary.to/p/your-name — perfect for conference posters and email signatures"
                 badge="My Profile → Share"
               />
               <FeatureCard
