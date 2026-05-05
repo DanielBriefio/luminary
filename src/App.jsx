@@ -263,16 +263,15 @@ export default function App() {
     }
   },[session?.user?.id, profile?.analytics_consent_at]); // eslint-disable-line
 
+  // Show the onboarding flow whenever onboarding_completed is false.
+  // Earlier, this also bailed out if the user already had follows or
+  // publications ("not a genuinely new user") — but ORCID OAuth signup
+  // auto-imports publications via apply_signup_intent, so brand-new
+  // ORCID users were silently skipping onboarding. Trust the flag.
   useEffect(()=>{
     if (!profile) return;
     if (profile.onboarding_completed) return;
-    // Only show for genuinely new users (no follows and no publications yet)
-    Promise.all([
-      supabase.from('follows').select('id',{count:'exact',head:true}).eq('follower_id',profile.id),
-      supabase.from('publications').select('id',{count:'exact',head:true}).eq('user_id',profile.id),
-    ]).then(([{count:fc},{count:pc}])=>{
-      if ((fc||0) === 0 && (pc||0) === 0) setShowOnboarding(true);
-    });
+    setShowOnboarding(true);
   },[profile]);
 
   // Unread message badge — fetch on login and poll every 30s
