@@ -416,7 +416,12 @@ export default function PostCard({
   };
 
   const saveTagEdits = async () => {
-    const parsedTags = editTagsText.split(',').map(t => t.trim()).filter(Boolean);
+    // Strip leading '#' to match the DB convention (bare tags) — see
+    // PostComposer.publish() for the same normalisation on initial save.
+    const parsedTags = editTagsText
+      .split(',')
+      .map(t => t.replace(/^#+/, '').trim())
+      .filter(Boolean);
     await supabase.from('posts').update({ tier1: editTier1, tier2: editTier2, tags: parsedTags }).eq('id', post.id);
     setEditingTags(false);
     onRefresh && onRefresh();
