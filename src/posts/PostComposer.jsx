@@ -13,15 +13,64 @@ import CoverRepositioner from '../components/CoverRepositioner';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import { useWindowSize } from '../lib/useWindowSize';
 
-async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, paperAbstract, paperJournal, userId }) {
+// Cap on total granular tags per post — keeps the chip row readable in feed
+// cards and stops the AI from diluting user-curated tags.
+const TAG_CAP = 8;
+
+// Normalises a tag for case-insensitive dedup and storage. CLAUDE.md
+// documents the DB convention as "tags without leading #".
+const normaliseTag = (t) => String(t || '').replace(/^#+/, '').trim();
+
+// Merge user + AI tags. User's order preserved; AI tags appended only when
+// they don't case-fold onto something the user already typed. Truncated to
+// TAG_CAP. Returns a fresh array of bare tags (no #).
+function mergeTags(userTags, aiTags) {
+  const out  = [];
+  const seen = new Set();
+  const push = (raw) => {
+    const t = normaliseTag(raw);
+    if (!t) return;
+    const key = t.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(t);
+  };
+  (userTags || []).forEach(push);
+  (aiTags   || []).forEach(push);
+  return out.slice(0, TAG_CAP);
+}
+
+// userTags / hasTier1 / hasTier2 govern the merge:
+//   - tier1 / tier2 are auto-filled only when the post doesn't already have
+//     them (users almost never set these manually, so missing = always fill).
+//   - tags ALWAYS preserve the user's input verbatim. AI suggestions are
+//     appended on top, capped at TAG_CAP, with case-insensitive dedup
+//     against what the user already typed.
+async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, paperAbstract, paperJournal, userId, userTags = [], hasTier1 = false, hasTier2 = false }) {
   if (postType !== 'paper') {
     const textContent = (content || '').replace(/<[^>]+>/g, '').trim();
     if (textContent.length < 100) { console.log('Auto-tag skipped: content too short'); return; }
   }
+
+  // Build only the keys we actually want to overwrite. Empty patch = no-op.
+  const buildPatch = (suggested) => {
+    const patch = {};
+    if (!hasTier1 && suggested.tier1)              patch.tier1 = suggested.tier1;
+    if (!hasTier2 && (suggested.tier2 || []).length) patch.tier2 = suggested.tier2;
+    const merged = mergeTags(userTags, suggested.tags || []);
+    if (JSON.stringify(merged) !== JSON.stringify((userTags || []).map(normaliseTag).slice(0, TAG_CAP))) {
+      patch.tags = merged;
+    }
+    return patch;
+  };
+
   if (postType === 'paper' && paperDoi) {
     const cached = await getCachedTagsByDoi(paperDoi, supabase);
     if (cached) {
-      await supabase.from('posts').update({ tier1: cached.tier1, tier2: cached.tier2, tags: cached.tags }).eq('id', postId);
+      const patch = buildPatch({ tier1: cached.tier1, tier2: cached.tier2, tags: cached.tags });
+      if (Object.keys(patch).length > 0) {
+        await supabase.from('posts').update(patch).eq('id', postId);
+      }
       console.log('Auto-tag: used cached tags from DOI');
       return;
     }
@@ -36,8 +85,15 @@ async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, p
     const data = await res.json();
     if (!data || data.confidence === 'low') { console.log('Auto-tag skipped: low confidence'); return; }
     if (data.tier1 || data.tags?.length) {
-      await supabase.from('posts').update({ tier1: data.tier1 || '', tier2: data.tier2 || [], tags: data.tags || [] }).eq('id', postId);
+      const patch = buildPatch({ tier1: data.tier1, tier2: data.tier2 || [], tags: data.tags || [] });
+      if (Object.keys(patch).length > 0) {
+        await supabase.from('posts').update(patch).eq('id', postId);
+      }
       console.log(`Auto-tag saved: confidence=${data.confidence}`);
+      // Publications row sync — paper context only. We always mirror the
+      // AI's view here because the publication record is generally not
+      // user-curated post-import; if a user manually edits their pub
+      // metadata this can be revisited.
       if (postType === 'paper' && paperDoi && data.tier1 && userId) {
         supabase.from('publications')
           .update({ tier1: data.tier1, tier2: data.tier2 || [], tags: data.tags || [] })
@@ -533,7 +589,10 @@ export default function PostComposer({
     if (uploadFile)             resolvedPostType = uploadCategory || 'text';
     else if (imageFiles.length) resolvedPostType = 'image';
 
-    const manualTags = tags.split(/[\s,]+/).filter(t=>t.trim()).map(t=>t.startsWith('#')?t:`#${t}`);
+    // Strip leading '#' on save — DB convention is bare tags, see CLAUDE.md.
+    // PostCard / GranularTags renders bare strings; storing the '#' would
+    // double up to "##oncology" the second time the user hits Save.
+    const manualTags = tags.split(/[\s,]+/).map(t => t.replace(/^#+/, '').trim()).filter(Boolean);
 
     const payload = {
       content:       content.trim(),
@@ -700,7 +759,10 @@ export default function PostComposer({
       } catch {}
     }
 
-    // Auto-tag only on creation — preserve user's manual tag edits.
+    // Auto-tag only on creation. Augment, don't replace: the user's
+    // manual tags ride through verbatim, AI tags are appended only as
+    // gap-filler up to the cap, and tier1/tier2 are filled only when
+    // the user hasn't set them.
     if (!isEditMode && AUTO_TAG_ENABLED && newPost?.id) {
       smartAutoTag({
         postId:        newPost.id,
@@ -711,6 +773,12 @@ export default function PostComposer({
         paperAbstract: paperAbstract.trim(),
         paperJournal:  paperJournal.trim(),
         userId:        user.id,
+        userTags:      manualTags,
+        // tier1 / tier2 aren't user-facing on the composer today, so for
+        // a freshly-created post they're always empty — but pass the flags
+        // anyway in case that changes.
+        hasTier1:      false,
+        hasTier2:      false,
       }).catch(console.warn);
     }
 
