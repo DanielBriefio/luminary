@@ -369,18 +369,38 @@ export default function OnboardingScreen({ user, profile, setProfile, onComplete
                 </div>
 
                 {identityTier1 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, marginBottom: 6, color: T.text }}>
-                      Speciality within {identityTier1}:
+                  // Promoted card. Frame + tint mirror the selected Tier 1
+                  // button so the eye reads "this is the next step in the
+                  // same flow" instead of looking like a separate dropdown.
+                  <div style={{
+                    border: `2px solid ${T.v}`,
+                    background: T.v2,
+                    borderRadius: 12,
+                    padding: '14px 14px 14px',
+                    marginBottom: 20,
+                  }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: 13, fontWeight: 700,
+                      color: T.v,
+                      marginBottom: 8, lineHeight: 1.35,
+                    }}>
+                      Now pick your speciality within {identityTier1}
                     </label>
-                    <select value={identityTier2}
+                    <select
+                      value={identityTier2}
                       onChange={e => setIdentityTier2(e.target.value)}
+                      autoFocus
                       style={{
-                        width: '100%', background: T.s2, border: `1.5px solid ${T.bdr}`,
-                        borderRadius: 9, padding: '10px 13px', fontSize: 13,
-                        fontFamily: 'inherit', outline: 'none', color: T.text,
+                        width: '100%', background: T.w,
+                        border: `2px solid ${identityTier2 ? T.v : T.bdr}`,
+                        borderRadius: 10, padding: '11px 13px', fontSize: 13,
+                        fontFamily: 'inherit', outline: 'none',
+                        color: identityTier2 ? T.v : T.text,
+                        fontWeight: identityTier2 ? 700 : 500,
+                        cursor: 'pointer',
                       }}>
-                      <option value="">Select your speciality...</option>
+                      <option value="">Select your speciality…</option>
                       {getTier2(identityTier1).map(t2 =>
                         <option key={t2} value={t2}>{t2}</option>
                       )}

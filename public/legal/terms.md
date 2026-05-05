@@ -1,7 +1,7 @@
 # Luminary — Terms of Use
 
-_Last updated: April 24.2026_
-_Effective date: April 24, 2026_
+_Last updated: May 5, 2026_
+_Effective date: May 5, 2026_
 
 
 ---
@@ -267,19 +267,24 @@ these Terms using the reporting function within the Platform.
 
 ### 5.1 Privacy Policy
 
-Your use of the Platform is also governed by our Privacy Policy
-[LINK], which is incorporated into these Terms by reference. Please
-read the Privacy Policy carefully.
+Your use of the Platform is also governed by our [Privacy
+Policy](/privacy), which is incorporated into these Terms by reference.
+Please read the Privacy Policy carefully.
 
 ### 5.2 Analytics
 
-Luminary uses PostHog for anonymised usage analytics to understand how
+Luminary uses PostHog for pseudonymous usage analytics to understand how
 the Platform is used and to improve it. Analytics tracking is activated
 only after you have provided explicit consent during account registration.
 You can review your consent status in your account settings. Analytics
 data is tied to a pseudonymous identifier (your account ID) and does not
 include your name, email address, or institution without your explicit
 consent.
+
+We also process aggregate and user-level usage data inside our own
+database to operate, moderate, and improve the Platform — see Section
+2.2 of the Privacy Policy. This processing is independent of PostHog
+and runs on the basis of legitimate interest under GDPR.
 
 ### 5.3 Public profiles
 
@@ -315,9 +320,11 @@ including:
 - The right to data portability
 - The right to object to processing
 
-To exercise these rights, contact us at legal@luminary.to. We will respond
-within 30 days. Note that some data may be retained for legal or
-legitimate business purposes even after an erasure request.
+To exercise these rights, contact us at legal@luminary.to. EU residents
+may also contact our EU representative directly — see Section 1 of the
+Privacy Policy for the address. We will respond within 30 days. Note
+that some data may be retained for legal or legitimate business
+purposes even after an erasure request.
 
 ### 5.7 Account and data deletion
 
@@ -430,8 +437,10 @@ limited to loss of data, loss of revenue, or reputational harm, even
 if we have been advised of the possibility of such damages.
 
 Our total liability to you for any claims arising from these Terms or
-your use of the Platform shall not exceed the greater of the amount
-you paid to Luminary in the 12 months preceding the claim.
+your use of the Platform shall not exceed the greater of (a) the amount
+you paid to Luminary in the 12 months preceding the claim, or
+(b) USD 100. Because Luminary is currently provided free of charge,
+clause (a) will typically be zero, and the cap will be USD 100.
 
 Nothing in these Terms excludes liability that cannot be excluded by
 law, including liability for fraud, death, or personal injury caused
@@ -479,9 +488,9 @@ Sections of these Terms that by their nature should survive termination
 
 ### 10.1 Governing law
 
-These Terms are governed by the laws of Tokyo/Japan. Any disputes arising from these Terms or
-your use of the Platform shall be subject to the exclusive jurisdiction
-of the courts of Tokyo.
+These Terms are governed by the laws of Japan. Any disputes arising
+from these Terms or your use of the Platform shall be subject to the
+exclusive jurisdiction of the courts of Tokyo, Japan.
 
 Notwithstanding the foregoing, Luminary will comply with GDPR
 requirements for users located in the European Economic Area and with
@@ -492,10 +501,10 @@ governing law.
 
 Luminary may update these Terms from time to time. We will notify you
 of material changes by email or by a prominent notice on the Platform
-at least [14 / 30] days before the changes take effect. Your continued
-use of the Platform after the effective date constitutes acceptance of
-the revised Terms. If you do not agree to the revised Terms, you must
-stop using the Platform and may close your account.
+at least 30 days before the changes take effect. Your continued use of
+the Platform after the effective date constitutes acceptance of the
+revised Terms. If you do not agree to the revised Terms, you must stop
+using the Platform and may close your account.
 
 ### 10.3 Entire agreement
 
@@ -551,4 +560,4 @@ the full Terms above.
 ---
 
 _Qurio LLC · Yakumo 2-20-2, Meguro-ku, Tokyo 152-0023 · 0110-03-021185_
-_For questions: team@luminary.to_
+_For questions: legal@luminary.to_

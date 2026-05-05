@@ -1,7 +1,7 @@
 # Luminary — Cookie Policy
 
-_Last updated: April 24, 2026_
-_Effective date: April 24, 2026_
+_Last updated: May 5, 2026_
+_Effective date: May 5, 2026_
 
 
 ---
@@ -54,6 +54,9 @@ these under applicable law.
 | Dismissed UI elements | localStorage | Remembers which tips, banners, or prompts you have dismissed | Until cleared |
 | `prefill_invite_code` | sessionStorage | Temporarily stores your invite code during the signup flow | Session — deleted immediately after use |
 | `open_conversation` | sessionStorage | Temporarily stores a conversation target when navigating to messages from a user profile | Session — deleted immediately after use |
+| `prefill_paper` | sessionStorage | Temporarily stores paper details when sharing from Explore or Library to the post composer | Session — deleted immediately after use |
+| `orcid_oauth_state` | sessionStorage | Single-use random token used to verify the ORCID OAuth response (CSRF protection) | Session — deleted on return from ORCID |
+| `post_return_to` | sessionStorage | Remembers your in-app context (group / project) when you open a deep-dive article in a new tab, so the back button returns you to where you were | Session — deleted on consumption |
 
 **Operated by:** Luminary / Supabase
 **Third-party access:** None for essential storage items
@@ -77,6 +80,11 @@ Named events describing how you use the Platform (e.g. "post created",
 "group joined"). Events are associated with a pseudonymous UUID — not
 your name, email address, or institution. Session recording is
 disabled. No advertising or cross-site tracking.
+
+**Event data retention:** PostHog event data is retained for 30 days
+from the event date and then permanently deleted. The localStorage
+identifier above can persist longer (up to 1 year) but stores only
+the pseudonymous UUID and session-window state — no event content.
 
 **Operated by:** PostHog, Inc.
 **PostHog Privacy Policy:** posthog.com/privacy
