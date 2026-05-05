@@ -465,7 +465,7 @@ controller. This applies to data you have provided to us where
 processing is based on consent or contract. You can generate a manual
 export of your account data — profile, publications, posts, comments,
 library, groups, projects, messages, and lumens history — at any time
-from **Account Settings → Export my data**.
+from **Account Settings → Your Data → Download my data**.
 
 ### 8.6 Right to object
 You have the right to object to processing of your personal data where
