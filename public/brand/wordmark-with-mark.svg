@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Luminary wordmark + ✦ trailing glyph — two-tone.
+  Matches the email header chrome (welcome + confirmation templates).
+  ✦ uses the violet accent so the mark reads as one continuous lockup.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 160" role="img" aria-label="Luminary">
+  <defs>
+    <style type="text/css">
+      @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;display=swap');
+      .lumi { font-family: 'DM Serif Display', Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 110px; }
+      .star { font-family: 'DM Serif Display', Georgia, 'Times New Roman', serif; font-size: 90px; }
+    </style>
+  </defs>
+  <text x="360" y="115" text-anchor="middle" class="lumi">
+    <tspan fill="#1b1d36">Lumi</tspan><tspan fill="#6c63ff">nary</tspan><tspan class="star" fill="#6c63ff" dx="18">✦</tspan>
+  </text>
+</svg>

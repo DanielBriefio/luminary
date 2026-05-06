@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Luminary wordmark — single-tone DARK.
+  Use this on light surfaces where colour can't be used (print B&W,
+  newspaper, monochrome contexts) or for a quieter alternative to the
+  two-tone mark.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 160" role="img" aria-label="Luminary">
+  <defs>
+    <style type="text/css">
+      @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;display=swap');
+      .lumi { font-family: 'DM Serif Display', Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 110px; }
+    </style>
+  </defs>
+  <text x="300" y="115" text-anchor="middle" class="lumi" fill="#1b1d36">Luminary</text>
+</svg>

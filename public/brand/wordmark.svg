@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Luminary wordmark — two-tone (default brand mark).
+  Use this when you need the canonical Luminary logo on a light surface.
+
+  Renders correctly when DM Serif Display is loaded (in-app via Google
+  Fonts, on the website, in any browser-rendered context). Falls back to
+  the system serif when DM Serif Display is unavailable (e.g. when the
+  SVG is dropped into a tool that won't load external fonts).
+
+  For pasting into press kits / external slide decks where typography
+  must be locked: open in Figma → select text → "Outline" (Cmd+Shift+O)
+  → re-export. That bakes the letters into vector paths so the file no
+  longer depends on the font being available.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 160" role="img" aria-label="Luminary">
+  <defs>
+    <style type="text/css">
+      @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;display=swap');
+      .lumi { font-family: 'DM Serif Display', Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 110px; }
+    </style>
+  </defs>
+  <text x="300" y="115" text-anchor="middle" class="lumi">
+    <tspan fill="#1b1d36">Lumi</tspan><tspan fill="#6c63ff">nary</tspan>
+  </text>
+</svg>
