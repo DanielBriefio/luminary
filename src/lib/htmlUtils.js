@@ -23,9 +23,10 @@ export function sanitiseHtml(html) {
       el.setAttribute('target', '_blank');
       el.setAttribute('rel', 'noopener noreferrer');
     } else if (tag === 'img') {
-      const src     = el.getAttribute('src') || '';
-      const alt     = el.getAttribute('alt') || '';
-      const dataSize = el.getAttribute('data-size') || '';
+      const src      = el.getAttribute('src') || '';
+      const alt      = el.getAttribute('alt') || '';
+      const dataSize = el.getAttribute('data-size')  || '';   // legacy S/M/L
+      const dataWidth = el.getAttribute('data-width') || '';   // free-form 10-100
       [...el.attributes].forEach(a => el.removeAttribute(a.name));
       if (!/^https:\/\//i.test(src)) {
         el.replaceWith(document.createTextNode(''));
@@ -34,11 +35,24 @@ export function sanitiseHtml(html) {
       el.setAttribute('src', src);
       if (alt) el.setAttribute('alt', alt);
       el.setAttribute('loading', 'lazy');
-      // Only one of small | medium | large is honoured. 'full' is the
-      // default render and doesn't need an attribute.
-      if (['small', 'medium', 'large'].includes(dataSize)) {
+      // data-width takes precedence (free-form). Falls back to legacy
+      // data-size for posts created before the resize handle UI shipped.
+      const wNum = parseInt(dataWidth, 10);
+      if (Number.isFinite(wNum) && wNum >= 10 && wNum <= 100) {
+        el.setAttribute('data-width', String(wNum));
+      } else if (['small', 'medium', 'large'].includes(dataSize)) {
         el.setAttribute('data-size', dataSize);
       }
+    } else if (tag === 'figure') {
+      // Mark figures we own so we can scope CSS without leaking onto
+      // user-pasted figures from elsewhere. Strip every other attribute.
+      [...el.attributes].forEach(a => el.removeAttribute(a.name));
+      el.setAttribute('data-luminary-fig', '1');
+    } else if (tag === 'figcaption') {
+      // Caption is a text container — strip attributes; child sanitisation
+      // continues via the recursive walk so inline formatting (em, strong)
+      // inside the caption survives.
+      [...el.attributes].forEach(a => el.removeAttribute(a.name));
     } else if (tag === 'iframe') {
       const src = el.getAttribute('src') || '';
       [...el.attributes].forEach(a => el.removeAttribute(a.name));

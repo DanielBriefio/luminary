@@ -121,45 +121,204 @@ export default function RichTextEditor({
     };
   }, [imgToolbar]);
 
-  // Position the toolbar above the clicked image, anchored to the editor.
+  // Snap the cursor-driven width to common landmarks (25/50/75/100) when
+  // within 3% — gives the drag a slight detent for the most common sizes
+  // without taking away free-form precision elsewhere.
+  const snapWidth = (raw) => {
+    const clamped = Math.max(10, Math.min(100, Math.round(raw)));
+    for (const target of [25, 50, 75, 100]) {
+      if (Math.abs(clamped - target) <= 3) return target;
+    }
+    return clamped;
+  };
+
+  // Read the currently rendered width % from an image element, regardless
+  // of whether it was set via data-width, the legacy data-size, or
+  // neither (default = full). Used to seed the drag start state.
+  const readImgWidth = (img) => {
+    const w = parseInt(img.getAttribute('data-width') || '', 10);
+    if (Number.isFinite(w) && w >= 10 && w <= 100) return w;
+    const size = img.getAttribute('data-size') || '';
+    if (size === 'small')  return 25;
+    if (size === 'medium') return 50;
+    if (size === 'large')  return 75;
+    return 100;
+  };
+
+  // Find/return the parent <figure data-luminary-fig> for an <img>, or
+  // null if the image is unwrapped (legacy). Used to find the figcaption
+  // sibling for caption editing and to position the resize handles.
+  const findFigure = (img) => {
+    let el = img.parentElement;
+    while (el && el !== editorRef.current) {
+      if (el.tagName === 'FIGURE' && el.getAttribute('data-luminary-fig') === '1') return el;
+      el = el.parentElement;
+    }
+    return null;
+  };
+
+  // Lazily wrap an unwrapped <img> in a <figure data-luminary-fig> so
+  // captions can be added to images inserted before the figure-wrap
+  // change shipped. Returns the figure (existing or new).
+  const ensureFigure = (img) => {
+    const existing = findFigure(img);
+    if (existing) return existing;
+    const fig = document.createElement('figure');
+    fig.setAttribute('data-luminary-fig', '1');
+    img.replaceWith(fig);
+    fig.appendChild(img);
+    const cap = document.createElement('figcaption');
+    fig.appendChild(cap);
+    return fig;
+  };
+
+  // Recompute toolbar/handle layout from the currently selected image.
+  // Pulled out so it can run on click, after a drag, after a resize-window
+  // event, or after a scroll.
+  const measureImg = (img) => {
+    const editor = editorRef.current;
+    if (!editor || !img.isConnected) return null;
+    const editorRect = editor.getBoundingClientRect();
+    const imgRect    = img.getBoundingClientRect();
+    return {
+      top:    imgRect.top    - editorRect.top,
+      left:   imgRect.left   - editorRect.left,
+      width:  imgRect.width,
+      height: imgRect.height,
+    };
+  };
+
+  // Position the toolbar + handles when an image is clicked.
   const handleEditorClick = (e) => {
     if (!isDeepDive) return;
     if (e.target.tagName !== 'IMG') {
+      // Caption click? Don't dismiss the toolbar — let the caption keep focus.
+      const fc = e.target.closest?.('figcaption');
+      if (fc && fc.parentElement?.getAttribute('data-luminary-fig') === '1') return;
       setImgToolbar(null);
       return;
     }
-    const img    = e.target;
-    const editor = editorRef.current;
-    if (!editor) return;
-    const editorRect = editor.getBoundingClientRect();
-    const imgRect    = img.getBoundingClientRect();
+    const img = e.target;
+    ensureFigure(img);
+    const m = measureImg(img);
+    if (!m) return;
     setImgToolbar({
-      el:   img,
-      size: img.getAttribute('data-size') || 'full',
-      top:  imgRect.top  - editorRect.top - 36,
-      left: imgRect.left - editorRect.left + 4,
+      el:    img,
+      width: readImgWidth(img),
+      ...m,
     });
   };
 
-  const setImageSize = (newSize) => {
+  // Apply a new width %. Also strips inline style and the legacy
+  // data-size attribute so the new selector wins cleanly.
+  const setImageWidth = (next) => {
     if (!imgToolbar?.el) return;
-    if (newSize === 'full') imgToolbar.el.removeAttribute('data-size');
-    else                    imgToolbar.el.setAttribute('data-size', newSize);
-    // Strip any inline style. The editor + reader CSS already covers
-    // border-radius / margin / max-width / display; an inline max-width
-    // would otherwise outrank the data-size CSS rule and the resize
-    // would not render after save.
+    const w = snapWidth(next);
+    imgToolbar.el.setAttribute('data-width', String(w));
+    imgToolbar.el.removeAttribute('data-size');
     imgToolbar.el.removeAttribute('style');
-    setImgToolbar(t => t ? { ...t, size: newSize } : t);
-    syncContent();
+    // Re-measure on the next frame so the handle positions track the
+    // image as it visibly resizes (CSS applies on the same frame).
+    requestAnimationFrame(() => {
+      const m = imgToolbar.el && measureImg(imgToolbar.el);
+      if (m) setImgToolbar(t => (t ? { ...t, width: w, ...m } : t));
+    });
+  };
+
+  // Drag start: capture pointer X and the image's starting width%.
+  // Both handles drag symmetrically — the image stays centred.
+  const beginResize = (e, side) => {
+    if (!imgToolbar?.el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const editor = editorRef.current;
+    if (!editor) return;
+    const editorWidth = editor.getBoundingClientRect().width;
+    const startX  = e.clientX;
+    const startW  = readImgWidth(imgToolbar.el);
+    const sign    = side === 'right' ? 1 : -1; // dragging right side right = wider; left side left = wider
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX;
+      // Each handle moves at half-rate vs. the underlying width because
+      // the image is centred — dragging right edge right by Xpx grows the
+      // image by 2*X total (Xpx on each side).
+      const deltaPct = (sign * dx * 2 * 100) / editorWidth;
+      setImageWidth(startW + deltaPct);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      syncContent();
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   };
 
   const removeImage = () => {
     if (!imgToolbar?.el) return;
-    imgToolbar.el.remove();
+    const fig = findFigure(imgToolbar.el);
+    if (fig) fig.remove();
+    else     imgToolbar.el.remove();
     setImgToolbar(null);
     syncContent();
   };
+
+  // Focus the figcaption associated with the selected image so the user
+  // can start typing a caption immediately. Wraps a legacy unwrapped
+  // <img> in a figure if needed.
+  const focusCaption = () => {
+    if (!imgToolbar?.el) return;
+    const fig = ensureFigure(imgToolbar.el);
+    let cap = fig.querySelector(':scope > figcaption');
+    if (!cap) {
+      cap = document.createElement('figcaption');
+      fig.appendChild(cap);
+    }
+    cap.setAttribute('contenteditable', 'true');
+    cap.setAttribute('data-placeholder', 'Add a caption…');
+    // Move the cursor into the caption.
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(cap);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    cap.focus();
+    syncContent();
+  };
+
+  // Keep figcaptions inside our figures contenteditable while the editor
+  // is mounted so they accept typing without an explicit click. Done in
+  // an effect so it survives content updates.
+  useEffect(() => {
+    if (!isDeepDive || !editorRef.current) return;
+    const annotate = () => {
+      editorRef.current?.querySelectorAll('figure[data-luminary-fig] > figcaption').forEach(cap => {
+        cap.setAttribute('contenteditable', 'true');
+        cap.setAttribute('data-placeholder', 'Add a caption…');
+      });
+    };
+    annotate();
+    const obs = new MutationObserver(annotate);
+    obs.observe(editorRef.current, { childList: true, subtree: true });
+    return () => obs.disconnect();
+  }, [isDeepDive]);
+
+  // Reposition handles on window resize / scroll while a toolbar is open.
+  useEffect(() => {
+    if (!imgToolbar?.el) return;
+    const reflow = () => {
+      const m = imgToolbar.el && measureImg(imgToolbar.el);
+      if (m) setImgToolbar(t => (t ? { ...t, ...m } : t));
+    };
+    window.addEventListener('resize', reflow);
+    window.addEventListener('scroll', reflow, true);
+    return () => {
+      window.removeEventListener('resize', reflow);
+      window.removeEventListener('scroll', reflow, true);
+    };
+  }, [imgToolbar?.el]);
 
   const exec = (cmd, val=null) => {
     editorRef.current?.focus();
@@ -311,10 +470,14 @@ export default function RichTextEditor({
       const { url, path } = await uploadInlineImage(user, file);
       editorRef.current?.focus();
       restoreSelection();
-      // No inline style — editor + reader CSS provide max-width / margin /
-      // border-radius / display. Inline styles would override the
-      // data-size CSS used for the resize feature.
-      document.execCommand('insertHTML', false, `<img src="${url}" alt="" />`);
+      // Wrap in <figure> so the user can add a caption later via the
+      // resize toolbar. data-luminary-fig marks our own figures so the
+      // sanitiser keeps them and the global CSS scope picks them up.
+      // No inline style — editor + reader CSS provide width / margin /
+      // border-radius / display via data-width / figure selectors.
+      document.execCommand('insertHTML', false,
+        `<figure data-luminary-fig="1"><img src="${url}" alt="" /><figcaption></figcaption></figure><p><br></p>`
+      );
       syncContent();
 
       // Storage tracking — record now if we know the post id, otherwise
@@ -709,55 +872,103 @@ export default function RichTextEditor({
         }}
       />
 
-      {/* Image resize toolbar — floats above the selected inline image */}
+      {/* Image resize handles + toolbar — floats over the selected image.
+          Two drag handles (left + right edge, vertically centred) drive
+          live width %; the floating toolbar above shows the current
+          width plus actions (caption, remove). Mouse-down on any of
+          these uses preventDefault so contenteditable doesn't lose
+          selection / blur the image we're operating on. */}
       {imgToolbar && (
-        <div
-          data-img-toolbar="1"
-          onMouseDown={e => e.preventDefault()}
-          style={{
-            position: 'absolute', zIndex: 50,
-            top: imgToolbar.top, left: imgToolbar.left,
-            background: T.w, border: `1.5px solid ${T.v}`,
-            borderRadius: 8, padding: '4px 6px',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
-            display: 'flex', alignItems: 'center', gap: 2,
-            fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
-          }}
-        >
-          {[
-            { v: 'small',  label: 'S'    },
-            { v: 'medium', label: 'M'    },
-            { v: 'large',  label: 'L'    },
-            { v: 'full',   label: 'Full' },
-          ].map(opt => (
+        <>
+          {/* Left handle */}
+          <div
+            data-img-toolbar="1"
+            onMouseDown={(e) => beginResize(e, 'left')}
+            title="Drag to resize"
+            style={{
+              position: 'absolute', zIndex: 50,
+              top:    imgToolbar.top + imgToolbar.height / 2 - 14,
+              left:   imgToolbar.left - 14,
+              width: 28, height: 28, borderRadius: '50%',
+              background: T.v, border: `2px solid ${T.w}`,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+              cursor: 'col-resize',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1,
+              userSelect: 'none',
+            }}
+          >‹›</div>
+
+          {/* Right handle */}
+          <div
+            data-img-toolbar="1"
+            onMouseDown={(e) => beginResize(e, 'right')}
+            title="Drag to resize"
+            style={{
+              position: 'absolute', zIndex: 50,
+              top:    imgToolbar.top + imgToolbar.height / 2 - 14,
+              left:   imgToolbar.left + imgToolbar.width - 14,
+              width: 28, height: 28, borderRadius: '50%',
+              background: T.v, border: `2px solid ${T.w}`,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+              cursor: 'col-resize',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1,
+              userSelect: 'none',
+            }}
+          >‹›</div>
+
+          {/* Floating action toolbar above the image */}
+          <div
+            data-img-toolbar="1"
+            onMouseDown={(e) => e.preventDefault()}
+            style={{
+              position: 'absolute', zIndex: 50,
+              top:  Math.max(0, imgToolbar.top - 38),
+              left: imgToolbar.left + imgToolbar.width / 2,
+              transform: 'translateX(-50%)',
+              background: T.w, border: `1.5px solid ${T.v}`,
+              borderRadius: 8, padding: '4px 8px',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{
+              padding: '3px 8px', borderRadius: 5,
+              background: T.v2, color: T.v, fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {imgToolbar.width}%
+            </span>
             <button
-              key={opt.v}
-              onClick={() => setImageSize(opt.v)}
+              onClick={focusCaption}
+              title="Add caption"
               style={{
                 padding: '4px 8px', borderRadius: 5, border: 'none',
-                background: imgToolbar.size === opt.v ? T.v2 : 'transparent',
-                color: imgToolbar.size === opt.v ? T.v : T.text,
+                background: 'transparent', color: T.text,
                 cursor: 'pointer', fontFamily: 'inherit',
                 fontSize: 11.5, fontWeight: 700,
               }}
             >
-              {opt.label}
+              ✎ Caption
             </button>
-          ))}
-          <div style={{ width: 1, height: 14, background: T.bdr, margin: '0 2px' }}/>
-          <button
-            onClick={removeImage}
-            title="Remove image"
-            style={{
-              padding: '4px 6px', borderRadius: 5, border: 'none',
-              background: 'transparent', color: T.ro,
-              cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: 12, fontWeight: 700,
-            }}
-          >
-            ✕
-          </button>
-        </div>
+            <div style={{ width: 1, height: 14, background: T.bdr }}/>
+            <button
+              onClick={removeImage}
+              title="Remove image"
+              style={{
+                padding: '4px 8px', borderRadius: 5, border: 'none',
+                background: 'transparent', color: T.ro,
+                cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 12, fontWeight: 700,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </>
       )}
 
       <style>{`
