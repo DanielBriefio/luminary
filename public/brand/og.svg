@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Luminary Open Graph card — 1200×630.
+  Used as og:image / twitter:image. Most social platforms reject SVG
+  for og:image and require PNG/JPG, so this file is the design source
+  — rasterise to /og.png before referencing in meta tags.
+
+  Quick rasterise options:
+  * Open this file in a browser, take a 1200×630 screenshot at 2x retina.
+  * Open in Figma → Export PNG @1x at 1200×630.
+  * Inkscape / sharp / rsvg-convert from CLI.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#6c63ff"/>
+      <stop offset="100%" stop-color="#4285f4"/>
+    </linearGradient>
+    <style type="text/css">
+      @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=DM+Sans:wght@400;600&amp;display=swap');
+      .wm    { font-family: 'DM Serif Display', Georgia, serif; font-size: 132px; fill: #ffffff; }
+      .star  { font-family: 'DM Serif Display', Georgia, serif; font-size: 96px;  fill: rgba(255,255,255,.7); }
+      .sub   { font-family: 'DM Serif Display', Georgia, serif; font-size: 44px;  fill: #ffffff; }
+      .meta  { font-family: 'DM Sans', Helvetica, Arial, sans-serif; font-size: 22px; font-weight: 600; fill: rgba(255,255,255,.85); letter-spacing: .15em; }
+      .url   { font-family: 'DM Sans', Helvetica, Arial, sans-serif; font-size: 22px; font-weight: 600; fill: rgba(255,255,255,.7); letter-spacing: .04em; }
+    </style>
+  </defs>
+
+  <!-- Gradient background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Soft top-edge highlight -->
+  <rect width="1200" height="2" fill="rgba(255,255,255,.18)"/>
+
+  <!-- Quiet hairline panel for the wordmark/tagline so it floats above the gradient -->
+  <rect x="80" y="120" width="1040" height="390" rx="24" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
+
+  <!-- Top-left meta label -->
+  <text x="120" y="180" class="meta">SCIENTIFIC NETWORK · INVITE-ONLY</text>
+
+  <!-- Wordmark + ✦ -->
+  <text x="120" y="340" class="wm">Luminary<tspan class="star" dx="20">✦</tspan></text>
+
+  <!-- Tagline -->
+  <text x="120" y="420" class="sub">Built for scientists, not platforms.</text>
+
+  <!-- Bottom URL -->
+  <text x="120" y="560" class="url">luminary.to</text>
+</svg>

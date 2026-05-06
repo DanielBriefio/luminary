@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!--
+    Luminary app icon — small-size variant.
+    No "UMINARY" sublabel, so the L lettermark stays legible at favicon
+    (16-32px) and tab-bar sizes where the full app-icon.svg's sublabel
+    becomes unreadable noise.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6c63ff"/>
+      <stop offset="100%" stop-color="#5a52e8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <text
+    x="256" y="370"
+    font-family="'DM Serif Display', Georgia, 'Times New Roman', serif"
+    font-size="360"
+    font-weight="bold"
+    fill="white"
+    text-anchor="middle"
+    dominant-baseline="auto"
+    letter-spacing="-12"
+  >L</text>
+</svg>

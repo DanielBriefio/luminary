@@ -15,11 +15,32 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
     <meta name="apple-mobile-web-app-title" content="Luminary"/>
     <link rel="apple-touch-icon" href="/icon.svg"/>
-    <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
+    <!-- Small-size favicon: just the L on the gradient, no UMINARY
+         sublabel which becomes unreadable noise at 16-32px. Browsers
+         pick the small variant for the tab bar and fall back to the
+         full icon.svg for PWA install / Apple touch icon. -->
+    <link rel="icon" href="/brand/app-icon-small.svg" type="image/svg+xml" sizes="any"/>
 
     <!-- SEO -->
     <title>Luminary — The Scientific Community Network</title>
     <meta name="description" content="Luminary is the professional network for scientists and medical affairs teams. Share research, follow papers, and connect with your field."/>
+
+    <!-- Open Graph / link unfurls (Twitter, LinkedIn, Slack, Discord, etc.).
+         og:image MUST be a rasterised PNG/JPG — most platforms reject SVG.
+         Generate from /brand/og.svg (see comments in that file) and drop
+         the result at /brand/og.png. -->
+    <meta property="og:type"        content="website"/>
+    <meta property="og:site_name"   content="Luminary"/>
+    <meta property="og:title"       content="Luminary — The Scientific Community Network"/>
+    <meta property="og:description" content="Built for scientists, not platforms. Share research, follow papers, and connect with your field — invite-only."/>
+    <meta property="og:url"         content="https://luminary.to"/>
+    <meta property="og:image"       content="https://luminary.to/brand/og.png"/>
+    <meta property="og:image:width"  content="1200"/>
+    <meta property="og:image:height" content="630"/>
+    <meta name="twitter:card"        content="summary_large_image"/>
+    <meta name="twitter:title"       content="Luminary — The Scientific Community Network"/>
+    <meta name="twitter:description" content="Built for scientists, not platforms. Share research, follow papers, and connect with your field — invite-only."/>
+    <meta name="twitter:image"       content="https://luminary.to/brand/og.png"/>
 
     <style>
       * { box-sizing: border-box; }

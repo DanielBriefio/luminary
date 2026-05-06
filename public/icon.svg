@@ -7,10 +7,14 @@
   </defs>
   <!-- Rounded square background (maskable-safe: icon content is within the inner 80%) -->
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <!-- "L" lettermark centred in safe zone -->
+  <!-- "L" lettermark centred in safe zone.
+       DM Serif Display lists first so any inline embed (e.g. an HTML
+       page that has the font loaded) renders the brand serif. SVG
+       loaded as <img> can't pull external fonts and falls back to
+       Georgia bold — visually adjacent and shipped on every OS. -->
   <text
     x="256" y="350"
-    font-family="Georgia, 'Times New Roman', serif"
+    font-family="'DM Serif Display', Georgia, 'Times New Roman', serif"
     font-size="310"
     font-weight="bold"
     fill="white"
