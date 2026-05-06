@@ -306,13 +306,59 @@ export default function StorageSection({ supabase }) {
 }
 
 function DangerZone({ supabase }) {
-  const CONFIRM_PHRASE = 'WIPE PLATFORM';
-  const [open,    setOpen]    = useState(false);
-  const [phrase,  setPhrase]  = useState('');
-  const [running, setRunning] = useState(false);
-  const [result,  setResult]  = useState(null);  // { ok, message, sweptCount, sweptErrors }
+  const CONFIRM_PHRASE           = 'WIPE PLATFORM';
+  const CONFIRM_PHRASE_SELECTIVE = 'WIPE EXCEPT KEEPERS';
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+  const [open,    setOpen]    = useState(false);
+  const [running, setRunning] = useState(false);
+  const [result,  setResult]  = useState(null);  // { ok, message, sweptCount }
+
+  // Full-wipe phrase
+  const [phrase,  setPhrase]  = useState('');
   const armed = phrase === CONFIRM_PHRASE;
+
+  // Selective-wipe state
+  const [selOpen,    setSelOpen]    = useState(false);
+  const [emailsText, setEmailsText] = useState('');
+  const [selPhrase,  setSelPhrase]  = useState('');
+
+  const parsedEmails = (() => {
+    const raw = emailsText.split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    const valid = []; const invalid = []; const seen = new Set();
+    for (const e of raw) {
+      if (seen.has(e)) continue;
+      seen.add(e);
+      (EMAIL_RE.test(e) ? valid : invalid).push(e);
+    }
+    return { valid, invalid };
+  })();
+  const selArmed = selPhrase === CONFIRM_PHRASE_SELECTIVE && parsedEmails.valid.length > 0;
+
+  // Shared post-RPC storage sweep + result formatting.
+  const sweepStorage = async (paths, label) => {
+    const byBucket = {};
+    (paths || []).forEach(p => {
+      if (!byBucket[p.bucket]) byBucket[p.bucket] = [];
+      byBucket[p.bucket].push(p.path);
+    });
+
+    let swept = 0;
+    const errors = [];
+    for (const [bucket, list] of Object.entries(byBucket)) {
+      const { data: removed, error: rmErr } = await supabase.storage.from(bucket).remove(list);
+      if (rmErr) errors.push(`${bucket}: ${rmErr.message}`);
+      else       swept += (removed?.length ?? list.length);
+    }
+
+    return {
+      ok: errors.length === 0,
+      message: errors.length === 0
+        ? `${label} complete. ${swept} storage blobs removed across ${Object.keys(byBucket).length} bucket(s).`
+        : `${label} DB succeeded but storage sweep had errors:\n${errors.join('\n')}`,
+      sweptCount: swept,
+    };
+  };
 
   const runWipe = async () => {
     if (!armed) return;
@@ -324,32 +370,33 @@ function DangerZone({ supabase }) {
       setResult({ ok: false, message: error.message });
       return;
     }
+    const r = await sweepStorage(paths, 'Wipe');
+    setRunning(false);
+    setResult(r);
+    setPhrase('');
+  };
 
-    // Group paths by bucket and call storage.remove() for each
-    const byBucket = {};
-    (paths || []).forEach(p => {
-      if (!byBucket[p.bucket]) byBucket[p.bucket] = [];
-      byBucket[p.bucket].push(p.path);
+  const runSelectiveWipe = async () => {
+    if (!selArmed) return;
+    setRunning(true);
+    setResult(null);
+    const { data: paths, error } = await supabase.rpc('admin_wipe_platform_by_email', {
+      p_keep_emails: parsedEmails.valid,
     });
-
-    let swept = 0;
-    const errors = [];
-    for (const [bucket, list] of Object.entries(byBucket)) {
-      // Supabase remove() handles arbitrary list lengths
-      const { data: removed, error: rmErr } = await supabase.storage.from(bucket).remove(list);
-      if (rmErr) errors.push(`${bucket}: ${rmErr.message}`);
-      else       swept += (removed?.length ?? list.length);
+    if (error) {
+      setRunning(false);
+      setResult({ ok: false, message: error.message });
+      return;
     }
-
+    const r = await sweepStorage(paths, 'Selective wipe');
     setRunning(false);
     setResult({
-      ok: errors.length === 0,
-      message: errors.length === 0
-        ? `Wipe complete. ${swept} storage blobs removed across ${Object.keys(byBucket).length} bucket(s).`
-        : `DB wipe succeeded but storage sweep had errors:\n${errors.join('\n')}`,
-      sweptCount: swept,
+      ...r,
+      message: `${r.message}\nPreserved ${parsedEmails.valid.length} user${parsedEmails.valid.length === 1 ? '' : 's'} (plus the Luminary Team bot).`,
     });
-    setPhrase('');
+    setSelPhrase('');
+    setEmailsText('');
+    setSelOpen(false);
   };
 
   return (
@@ -431,6 +478,108 @@ function DangerZone({ supabase }) {
           >
             {running ? 'Wiping…' : '🔥 Wipe platform'}
           </button>
+
+          {/* ── Selective wipe — preserve specific users by email ── */}
+          <div style={{
+            marginTop: 26, paddingTop: 20,
+            borderTop: `1px dashed ${T.bdr}`,
+          }}>
+            <div
+              onClick={() => setSelOpen(o => !o)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                cursor: 'pointer', marginBottom: selOpen ? 12 : 0,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>
+                  🎯 Selective wipe
+                </div>
+                <div style={{ fontSize: 12, color: T.mu, marginTop: 1, lineHeight: 1.5 }}>
+                  Same wipe, but preserves the listed users (and the bot).
+                  Their account, posts, groups, projects, library, lumens, and
+                  storage all survive.
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, color: T.v, fontWeight: 600, marginLeft: 12, whiteSpace: 'nowrap' }}>
+                {selOpen ? 'Hide' : 'Show'}
+              </div>
+            </div>
+
+            {selOpen && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>
+                  Emails to preserve
+                </div>
+                <textarea
+                  value={emailsText}
+                  onChange={e => setEmailsText(e.target.value)}
+                  placeholder={'one@example.com\ntwo@example.com\n…'}
+                  rows={4}
+                  style={{
+                    width: '100%', maxWidth: 480, padding: '9px 12px',
+                    borderRadius: 8, border: `1px solid ${T.bdr}`,
+                    fontSize: 13, fontFamily: 'inherit', outline: 'none',
+                    resize: 'vertical', boxSizing: 'border-box',
+                    color: T.text, background: T.w,
+                  }}
+                />
+                <div style={{ fontSize: 11.5, color: T.mu, marginTop: 4, lineHeight: 1.55 }}>
+                  Separate by line, comma, or whitespace. Unknown emails are
+                  silently skipped (the wipe is the same whether they were
+                  on the platform or not).
+                </div>
+
+                <div style={{ marginTop: 8, fontSize: 12, lineHeight: 1.6 }}>
+                  {parsedEmails.valid.length > 0 && (
+                    <div style={{ color: T.gr }}>
+                      ✓ Will preserve {parsedEmails.valid.length} email{parsedEmails.valid.length === 1 ? '' : 's'}: {parsedEmails.valid.join(', ')}
+                    </div>
+                  )}
+                  {parsedEmails.invalid.length > 0 && (
+                    <div style={{ color: T.am, marginTop: 2 }}>
+                      ⚠ Ignoring {parsedEmails.invalid.length} invalid entr{parsedEmails.invalid.length === 1 ? 'y' : 'ies'}: {parsedEmails.invalid.join(', ')}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>
+                    Type <code style={{ background: T.s2, padding: '1px 6px', borderRadius: 4 }}>{CONFIRM_PHRASE_SELECTIVE}</code> to enable
+                  </div>
+                  <input
+                    type="text"
+                    value={selPhrase}
+                    onChange={e => setSelPhrase(e.target.value)}
+                    placeholder={CONFIRM_PHRASE_SELECTIVE}
+                    style={{
+                      width: 280, padding: '9px 12px', borderRadius: 8,
+                      border: `1px solid ${selArmed ? T.ro : T.bdr}`,
+                      fontSize: 13, fontFamily: 'inherit', outline: 'none',
+                      letterSpacing: 0.4,
+                    }}
+                  />
+                </div>
+
+                <button
+                  onClick={runSelectiveWipe}
+                  disabled={!selArmed || running}
+                  style={{
+                    marginTop: 12,
+                    padding: '10px 18px', borderRadius: 9,
+                    background: !selArmed ? T.s3 : T.ro,
+                    color: !selArmed ? T.mu : '#fff',
+                    border: 'none', fontSize: 13, fontWeight: 700,
+                    cursor: !selArmed || running ? 'default' : 'pointer',
+                    fontFamily: 'inherit', opacity: running ? 0.6 : 1,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  {running ? 'Wiping…' : `🎯 Wipe except ${parsedEmails.valid.length || 0} user${parsedEmails.valid.length === 1 ? '' : 's'}`}
+                </button>
+              </div>
+            )}
+          </div>
 
           {result && (
             <div style={{
