@@ -40,25 +40,43 @@ function mergeTags(userTags, aiTags) {
   return out.slice(0, TAG_CAP);
 }
 
-// userTags / hasTier1 / hasTier2 govern the merge:
+// Tags / tier1 / tier2 govern the merge:
 //   - tier1 / tier2 are auto-filled only when the post doesn't already have
 //     them (users almost never set these manually, so missing = always fill).
 //   - tags ALWAYS preserve the user's input verbatim. AI suggestions are
 //     appended on top, capped at TAG_CAP, with case-insensitive dedup
 //     against what the user already typed.
-async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, paperAbstract, paperJournal, userId, userTags = [], hasTier1 = false, hasTier2 = false }) {
+//
+// The merge reads current tags / tier1 / tier2 from the DB at run time
+// rather than trusting what the caller passed. This makes the function
+// self-correcting: if the post was inserted with the user's tags, those
+// tags survive even if the caller forgets (or is wrong about) them.
+async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, paperAbstract, paperJournal, userId }) {
   if (postType !== 'paper') {
     const textContent = (content || '').replace(/<[^>]+>/g, '').trim();
     if (textContent.length < 100) { console.log('Auto-tag skipped: content too short'); return; }
   }
 
+  // Source of truth for the merge — the post's current persisted state.
+  const { data: existing, error: existingErr } = await supabase
+    .from('posts')
+    .select('tags, tier1, tier2')
+    .eq('id', postId)
+    .single();
+  if (existingErr) { console.warn('Auto-tag: could not read current post', existingErr); return; }
+
+  const currentTags  = existing?.tags  || [];
+  const currentTier1 = (existing?.tier1 || '').trim();
+  const currentTier2 = existing?.tier2 || [];
+
   // Build only the keys we actually want to overwrite. Empty patch = no-op.
   const buildPatch = (suggested) => {
     const patch = {};
-    if (!hasTier1 && suggested.tier1)              patch.tier1 = suggested.tier1;
-    if (!hasTier2 && (suggested.tier2 || []).length) patch.tier2 = suggested.tier2;
-    const merged = mergeTags(userTags, suggested.tags || []);
-    if (JSON.stringify(merged) !== JSON.stringify((userTags || []).map(normaliseTag).slice(0, TAG_CAP))) {
+    if (!currentTier1 && suggested.tier1)                 patch.tier1 = suggested.tier1;
+    if (!currentTier2.length && (suggested.tier2 || []).length) patch.tier2 = suggested.tier2;
+    const merged   = mergeTags(currentTags, suggested.tags || []);
+    const baseline = (currentTags || []).map(normaliseTag).slice(0, TAG_CAP);
+    if (JSON.stringify(merged) !== JSON.stringify(baseline)) {
       patch.tags = merged;
     }
     return patch;
@@ -759,10 +777,9 @@ export default function PostComposer({
       } catch {}
     }
 
-    // Auto-tag only on creation. Augment, don't replace: the user's
-    // manual tags ride through verbatim, AI tags are appended only as
-    // gap-filler up to the cap, and tier1/tier2 are filled only when
-    // the user hasn't set them.
+    // Auto-tag only on creation. Augment, don't replace: smartAutoTag
+    // reads current tags / tier1 / tier2 directly from the DB and merges
+    // AI suggestions on top, so the user's input survives any re-run.
     if (!isEditMode && AUTO_TAG_ENABLED && newPost?.id) {
       smartAutoTag({
         postId:        newPost.id,
@@ -773,12 +790,6 @@ export default function PostComposer({
         paperAbstract: paperAbstract.trim(),
         paperJournal:  paperJournal.trim(),
         userId:        user.id,
-        userTags:      manualTags,
-        // tier1 / tier2 aren't user-facing on the composer today, so for
-        // a freshly-created post they're always empty — but pass the flags
-        // anyway in case that changes.
-        hasTier1:      false,
-        hasTier2:      false,
       }).catch(console.warn);
     }
 
