@@ -532,14 +532,14 @@ Visibility:
 profile_visibility (jsonb), activation_milestones (jsonb)
 
 Business card:
-card_email, card_phone, card_linkedin, card_website, card_visible
+card_email, card_phone, card_linkedin, card_website, card_whatsapp, card_visible
 card_show_email, card_show_phone, card_show_linkedin,
-card_show_website, card_show_orcid, card_show_twitter
+card_show_website, card_show_orcid, card_show_twitter, card_show_whatsapp
 card_address / card_show_address — LEGACY, deferred DROP
-work_phone, work_address — legacy address fields
+mobile_phone, work_address — legacy address fields (mobile_phone renamed from work_phone)
 work_street, work_city, work_postal_code, work_country — split (live)
 location_city, location_country — split (live)
-card_show_work_phone, card_show_work_address
+card_show_mobile_phone, card_show_work_address
 
 Email preferences:
 email_notifications (master toggle, default true)

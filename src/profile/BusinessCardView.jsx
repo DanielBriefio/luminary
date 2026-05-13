@@ -37,14 +37,19 @@ export function BusinessCardView({ profile, currentUserId }) {
 
   const workAddress = [profile.work_street, profile.work_city, profile.work_postal_code, profile.work_country].filter(Boolean).join(', ') || profile.work_address || '';
 
+  // wa.me requires international digits only — strip everything else.
+  const whatsappDigits = (profile.card_whatsapp || '').replace(/\D/g, '');
+  const whatsappUrl    = whatsappDigits ? `https://wa.me/${whatsappDigits}` : null;
+
   const hasContactDetails = (
     (profile.card_show_email        && profile.card_email)        ||
     (profile.card_show_phone        && profile.card_phone)        ||
     (profile.card_show_linkedin     && profile.card_linkedin)     ||
+    (profile.card_show_whatsapp     && whatsappUrl)               ||
     (profile.card_show_website      && profile.card_website)      ||
     (profile.card_show_orcid        && profile.orcid)             ||
     (profile.card_show_twitter      && profile.twitter)           ||
-    (profile.card_show_work_phone   && profile.work_phone)        ||
+    (profile.card_show_mobile_phone   && profile.mobile_phone)        ||
     (profile.card_show_work_address && workAddress)
   );
 
@@ -62,8 +67,8 @@ export function BusinessCardView({ profile, currentUserId }) {
         ? `EMAIL;TYPE=WORK:${profile.card_email}` : '',
       (profile.card_show_phone && profile.card_phone)
         ? `TEL;TYPE=WORK:${profile.card_phone}` : '',
-      (profile.card_show_work_phone && profile.work_phone)
-        ? `TEL;TYPE=WORK:${profile.work_phone}` : '',
+      (profile.card_show_mobile_phone && profile.mobile_phone)
+        ? `TEL;TYPE=CELL:${profile.mobile_phone}` : '',
       (profile.card_show_work_address && workAddress)
         ? `ADR;TYPE=WORK:;;${workAddress};;;;` : '',
       `URL:${window.location.origin}/p/${profile.profile_slug}`,
@@ -125,8 +130,8 @@ export function BusinessCardView({ profile, currentUserId }) {
 
           {/* Contact details */}
           {hasContactDetails && (() => {
-            const hasContact = (profile.card_show_work_phone && profile.work_phone) || (profile.card_show_phone && profile.card_phone) || (profile.card_show_email && profile.card_email);
-            const hasOnline  = (profile.card_show_linkedin && profile.card_linkedin) || (profile.card_show_website && profile.card_website) || (profile.card_show_orcid && profile.orcid) || (profile.card_show_twitter && profile.twitter);
+            const hasContact = (profile.card_show_mobile_phone && profile.mobile_phone) || (profile.card_show_phone && profile.card_phone) || (profile.card_show_email && profile.card_email);
+            const hasOnline  = (profile.card_show_linkedin && profile.card_linkedin) || (profile.card_show_whatsapp && whatsappUrl) || (profile.card_show_website && profile.card_website) || (profile.card_show_orcid && profile.orcid) || (profile.card_show_twitter && profile.twitter);
             const hasAddr    = (profile.card_show_work_address && workAddress);
             return (
               <>
@@ -135,7 +140,7 @@ export function BusinessCardView({ profile, currentUserId }) {
                   <div style={{ marginBottom:14 }}>
                     <div style={{ fontSize:9.5, fontWeight:700, color:'#bbb', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8 }}>Contact</div>
                     <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
-                      {profile.card_show_work_phone && profile.work_phone && <ContactRow icon="📱" label={profile.work_phone} href={`tel:${profile.work_phone}`}/>}
+                      {profile.card_show_mobile_phone && profile.mobile_phone && <ContactRow icon="📱" label={profile.mobile_phone} href={`tel:${profile.mobile_phone}`}/>}
                       {profile.card_show_phone      && profile.card_phone && <ContactRow icon="☎️" label={profile.card_phone} href={`tel:${profile.card_phone}`}/>}
                       {profile.card_show_email      && profile.card_email && <ContactRow icon="✉️" label={profile.card_email} href={`mailto:${profile.card_email}`}/>}
                     </div>
@@ -146,6 +151,7 @@ export function BusinessCardView({ profile, currentUserId }) {
                     <div style={{ fontSize:9.5, fontWeight:700, color:'#bbb', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8 }}>Online</div>
                     <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
                       {profile.card_show_linkedin && profile.card_linkedin && <ContactRow icon="💼" label={profile.card_linkedin} href={profile.card_linkedin.startsWith('http')?profile.card_linkedin:`https://${profile.card_linkedin}`}/>}
+                      {profile.card_show_whatsapp && whatsappUrl            && <ContactRow icon="💬" label={profile.card_whatsapp} href={whatsappUrl}/>}
                       {profile.card_show_website  && profile.card_website  && <ContactRow icon="🌐" label={profile.card_website}  href={profile.card_website.startsWith('http')?profile.card_website:`https://${profile.card_website}`}/>}
                       {profile.card_show_orcid    && profile.orcid         && <ContactRow icon="🔬" label={`orcid.org/${profile.orcid}`} href={`https://orcid.org/${profile.orcid}`}/>}
                       {profile.card_show_twitter  && profile.twitter       && <ContactRow icon="𝕏"  label={`@${profile.twitter.replace('@','')}`} href={`https://x.com/${profile.twitter.replace('@','')}`}/>}
@@ -196,7 +202,25 @@ export function BusinessCardView({ profile, currentUserId }) {
           📱 Save to Contacts
         </button>
 
-        {/* 3. Connect on LinkedIn — TERTIARY, only if set */}
+        {/* 3. Message on WhatsApp — TERTIARY, only if set */}
+        {profile.card_show_whatsapp && whatsappUrl && (
+          <a
+            href={whatsappUrl}
+            target="_blank" rel="noopener noreferrer"
+            style={{
+              width:'100%', padding:'10px', borderRadius:12,
+              border:'1.5px solid rgba(37,211,102,.35)', background:'rgba(37,211,102,.08)',
+              color:'#1a8f4a', fontSize:12.5, fontWeight:700, fontFamily:'inherit',
+              textDecoration:'none', cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+              boxSizing:'border-box',
+            }}
+          >
+            💬 Message on WhatsApp
+          </a>
+        )}
+
+        {/* 4. Connect on LinkedIn — TERTIARY, only if set */}
         {profile.card_show_linkedin && profile.card_linkedin && (
           <a
             href={profile.card_linkedin.startsWith('http') ? profile.card_linkedin : `https://${profile.card_linkedin}`}

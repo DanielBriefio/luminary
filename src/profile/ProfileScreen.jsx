@@ -381,10 +381,12 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
     const cardUpdates = {
       card_email:form.card_email, card_phone:form.card_phone,
       card_website:form.card_website,
+      card_whatsapp:form.card_whatsapp,
       card_show_email:form.card_show_email, card_show_phone:form.card_show_phone,
       card_show_linkedin:form.card_show_linkedin,
       card_show_website:form.card_show_website, card_show_orcid:form.card_show_orcid,
       card_show_twitter:form.card_show_twitter,
+      card_show_whatsapp:form.card_show_whatsapp,
     };
     // Work mode + clinical + work contact fields (from migration_workmode.sql)
     const workModeUpdates = {
@@ -396,9 +398,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       additional_quals: form.additional_quals,
       clinical_highlight_label: form.clinical_highlight_label,
       clinical_highlight_value: form.clinical_highlight_value,
-      work_phone:   form.work_phone,
+      mobile_phone:   form.mobile_phone,
       work_address: form.work_address,
-      card_show_work_phone:   form.card_show_work_phone,
+      card_show_mobile_phone:   form.card_show_mobile_phone,
       card_show_work_address: form.card_show_work_address,
     };
     // New address/location columns added in migration_profile_v2.sql
@@ -444,10 +446,12 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
     const cardUpdates = {
       card_email:form.card_email, card_phone:form.card_phone,
       card_website:form.card_website,
+      card_whatsapp:form.card_whatsapp,
       card_show_email:form.card_show_email, card_show_phone:form.card_show_phone,
       card_show_linkedin:form.card_show_linkedin,
       card_show_website:form.card_show_website, card_show_orcid:form.card_show_orcid,
       card_show_twitter:form.card_show_twitter,
+      card_show_whatsapp:form.card_show_whatsapp,
     };
     const workModeUpdates = {
       work_mode: form.work_mode,
@@ -458,9 +462,9 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       additional_quals: form.additional_quals,
       clinical_highlight_label: form.clinical_highlight_label,
       clinical_highlight_value: form.clinical_highlight_value,
-      work_phone:   form.work_phone,
+      mobile_phone:   form.mobile_phone,
       work_address: form.work_address,
-      card_show_work_phone:   form.card_show_work_phone,
+      card_show_mobile_phone:   form.card_show_mobile_phone,
       card_show_work_address: form.card_show_work_address,
     };
     const newColUpdates = {
@@ -598,12 +602,14 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       card_phone:   profile.card_phone   ||'',
       card_linkedin:profile.card_linkedin||'',
       card_website: profile.card_website ||'',
+      card_whatsapp:profile.card_whatsapp||'',
       card_show_email:    profile.card_show_email    ??false,
       card_show_phone:    profile.card_show_phone    ??false,
       card_show_linkedin: profile.card_show_linkedin ??true,
       card_show_website:  profile.card_show_website  ??true,
       card_show_orcid:    profile.card_show_orcid    ??true,
       card_show_twitter:  profile.card_show_twitter  ??true,
+      card_show_whatsapp: profile.card_show_whatsapp ??false,
       // work mode
       work_mode:              profile.work_mode              || 'researcher',
       // clinical fields
@@ -618,13 +624,13 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       location_city:     profile.location_city     || '',
       location_country:  profile.location_country  || '',
       // work contact
-      work_phone:        profile.work_phone        || '',
+      mobile_phone:        profile.mobile_phone        || '',
       work_address:      profile.work_address      || '',
       work_street:       profile.work_street       || '',
       work_city:         profile.work_city         || '',
       work_postal_code:  profile.work_postal_code  || '',
       work_country:      profile.work_country      || '',
-      card_show_work_phone:   profile.card_show_work_phone   ?? false,
+      card_show_mobile_phone:   profile.card_show_mobile_phone   ?? false,
       card_show_work_address: profile.card_show_work_address ?? false,
       topic_interests:        profile.topic_interests        || [],
     });
@@ -1749,10 +1755,11 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                     <PF label="Work email" field="card_email" form={form} setForm={setForm} placeholder="you@institution.com"/>
-                    <PF label="Mobile phone (📱)" field="work_phone" form={form} setForm={setForm} placeholder="+81 90 1234 5678"/>
+                    <PF label="Mobile phone (📱)" field="mobile_phone" form={form} setForm={setForm} placeholder="+81 90 1234 5678"/>
                     <PF label="Office phone (☎️)" field="card_phone" form={form} setForm={setForm} placeholder="+81 3 1234 5678"/>
                     <PF label="Personal website" field="card_website" form={form} setForm={setForm} placeholder="yourname.com"/>
                     <PF label="LinkedIn URL" field="card_linkedin" form={form} setForm={setForm} placeholder="linkedin.com/in/yourname"/>
+                    <PF label="WhatsApp (💬)" field="card_whatsapp" form={form} setForm={setForm} placeholder="+81 90 1234 5678"/>
                     <PF label="Street / building" field="work_street" form={form} setForm={setForm} placeholder="1-1 Marunouchi"/>
                     <PF label="City" field="work_city" form={form} setForm={setForm} placeholder="Tokyo"/>
                     <PF label="Postal code" field="work_postal_code" form={form} setForm={setForm} placeholder="100-0005"/>
@@ -1760,10 +1767,11 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   </div>
                   <div style={{fontSize:11,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.06em',marginTop:4,marginBottom:2}}>Visibility on public card</div>
                   <VisibilityToggle label="Show work email"        value={form.card_show_email}         onChange={v=>setForm(f=>({...f,card_show_email:v}))}/>
-                  <VisibilityToggle label="Show mobile phone (📱)" value={form.card_show_work_phone}    onChange={v=>setForm(f=>({...f,card_show_work_phone:v}))}/>
+                  <VisibilityToggle label="Show mobile phone (📱)" value={form.card_show_mobile_phone}    onChange={v=>setForm(f=>({...f,card_show_mobile_phone:v}))}/>
                   <VisibilityToggle label="Show office phone (☎️)" value={form.card_show_phone}         onChange={v=>setForm(f=>({...f,card_show_phone:v}))}/>
                   <VisibilityToggle label="Show address"           value={form.card_show_work_address}  onChange={v=>setForm(f=>({...f,card_show_work_address:v}))}/>
                   <VisibilityToggle label="Show LinkedIn"          value={form.card_show_linkedin}      onChange={v=>setForm(f=>({...f,card_show_linkedin:v}))}/>
+                  <VisibilityToggle label="Show WhatsApp (💬)"     value={form.card_show_whatsapp}      onChange={v=>setForm(f=>({...f,card_show_whatsapp:v}))}/>
                   <VisibilityToggle label="Show personal website"  value={form.card_show_website}       onChange={v=>setForm(f=>({...f,card_show_website:v}))}/>
                   <VisibilityToggle label="Show ORCID"             value={form.card_show_orcid}         onChange={v=>setForm(f=>({...f,card_show_orcid:v}))}/>
                   <VisibilityToggle label="Show Twitter / X"       value={form.card_show_twitter}       onChange={v=>setForm(f=>({...f,card_show_twitter:v}))}/>
@@ -1776,7 +1784,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               ) : (
                 <>
                   {/* Contact details preview */}
-                  {(profile?.card_email||profile?.card_phone||profile?.card_linkedin||profile?.card_website||profile?.orcid||profile?.twitter||profile?.work_phone||profile?.work_street) ? (() => {
+                  {(profile?.card_email||profile?.card_phone||profile?.card_linkedin||profile?.card_website||profile?.card_whatsapp||profile?.orcid||profile?.twitter||profile?.mobile_phone||profile?.work_street) ? (() => {
                     const workAddr = [profile.work_street,profile.work_city,profile.work_postal_code,profile.work_country].filter(Boolean).join(', ');
                     const CR = ({icon, label, hidden}) => (
                       <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5}}>
@@ -1785,8 +1793,8 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                         {hidden&&<span style={{color:T.mu,fontSize:11,flexShrink:0}}>hidden</span>}
                       </div>
                     );
-                    const hasContact = profile.card_email || profile.work_phone || profile.card_phone;
-                    const hasOnline  = profile.card_linkedin || profile.card_website || profile.orcid || profile.twitter;
+                    const hasContact = profile.card_email || profile.mobile_phone || profile.card_phone;
+                    const hasOnline  = profile.card_linkedin || profile.card_website || profile.card_whatsapp || profile.orcid || profile.twitter;
                     const hasAddr    = workAddr;
                     return (
                       <div style={{background:T.s2,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
@@ -1795,7 +1803,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                             <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}}>Contact</div>
                             <div style={{display:'flex',flexDirection:'column',gap:6}}>
                               {profile.card_email && <CR icon="✉️" label={profile.card_email} hidden={!profile.card_show_email}/>}
-                              {profile.work_phone && <CR icon="📱" label={profile.work_phone} hidden={!profile.card_show_work_phone}/>}
+                              {profile.mobile_phone && <CR icon="📱" label={profile.mobile_phone} hidden={!profile.card_show_mobile_phone}/>}
                               {profile.card_phone && <CR icon="☎️" label={profile.card_phone} hidden={!profile.card_show_phone}/>}
                             </div>
                           </div>
@@ -1805,6 +1813,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                             <div style={{fontSize:10,fontWeight:700,color:T.mu,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}}>Online</div>
                             <div style={{display:'flex',flexDirection:'column',gap:6}}>
                               {profile.card_linkedin && <CR icon="💼" label={profile.card_linkedin} hidden={!profile.card_show_linkedin}/>}
+                              {profile.card_whatsapp && <CR icon="💬" label={profile.card_whatsapp} hidden={!profile.card_show_whatsapp}/>}
                               {profile.card_website  && <CR icon="🌐" label={profile.card_website}  hidden={!profile.card_show_website}/>}
                               {profile.orcid         && <CR icon="🔬" label={`orcid.org/${profile.orcid}`} hidden={!profile.card_show_orcid}/>}
                               {profile.twitter       && <CR icon="𝕏"  label={`@${profile.twitter.replace('@','')}`} hidden={!profile.card_show_twitter}/>}
