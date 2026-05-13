@@ -517,13 +517,19 @@ export default function RichTextEditor({
     setCiteFetching(true);
     setCiteError('');
     try {
-      const resp = await fetch(`https://api.crossref.org/works/${encodeURIComponent(rawDoi)}`);
-      if (!resp.ok) throw new Error('not found');
-      const { message: w } = await resp.json();
-
-      const doiUrl = `https://doi.org/${rawDoi}`;
-      const text   = buildVancouverRef(w);
-      const newCit = { doi: rawDoi, url: doiUrl, text };
+      // Re-cite shortcut: if this DOI already lives in the references
+      // list, skip the CrossRef round-trip and reuse the existing
+      // metadata. DOIs are matching-case-insensitive per spec, so
+      // lowercase the comparison key (but keep `existing.doi`'s
+      // canonical casing for the inserted <a href>).
+      const key = rawDoi.toLowerCase();
+      const existing = citations.find(c => c.doi.toLowerCase() === key);
+      const newCit = existing || await (async () => {
+        const resp = await fetch(`https://api.crossref.org/works/${encodeURIComponent(rawDoi)}`);
+        if (!resp.ok) throw new Error('not found');
+        const { message: w } = await resp.json();
+        return { doi: rawDoi, url: `https://doi.org/${rawDoi}`, text: buildVancouverRef(w) };
+      })();
 
       // Snapshot scroll position of the editor's scrolling ancestor so the
       // view doesn't jump after focus/insert/rebuildRefs mutate the DOM
@@ -539,7 +545,7 @@ export default function RichTextEditor({
       // order, so citing in the middle of an already-cited article
       // numbers the new marker correctly and bumps subsequent ones.
       document.execCommand('insertHTML', false,
-        `<sup><a href="${doiUrl}" target="_blank" rel="noopener noreferrer" ` +
+        `<sup><a href="${newCit.url}" target="_blank" rel="noopener noreferrer" ` +
         `style="color:#6c63ff;text-decoration:none;font-weight:700;">(?)</a></sup>`
       );
 
