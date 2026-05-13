@@ -766,12 +766,14 @@ export default function PostCard({
             );
           }
 
-          // Regular text post — clamp to ~3 lines, never for paper/admin.
-          // Triggers either on character length OR line breaks (a short
-          // post with multiple newlines can still exceed 3 visible lines).
+          // Text or paper commentary — clamp to ~3 lines. Admin posts and
+          // deep dives have their own treatments (✦ header / article
+          // preview card) and stay full-bleed. Triggers on either
+          // character length OR line breaks (a short post with multiple
+          // newlines can still exceed 3 visible lines).
           const newlineCount = (plain.match(/\n/g) || []).length;
           const needsTruncation =
-            post.post_type === 'text' &&
+            (post.post_type === 'text' || post.post_type === 'paper') &&
             !post.is_admin_post &&
             (plain.length > TRUNCATE_CHAR_THRESHOLD || newlineCount > 2);
           const url = post.post_type === 'text' ? extractFirstUrl(post.content || '') : null;
