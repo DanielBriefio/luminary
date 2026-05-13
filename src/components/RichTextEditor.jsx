@@ -448,26 +448,20 @@ export default function RichTextEditor({
     return out;
   };
 
-  // When the user deletes a citation marker in the body (backspace through
-  // the (N) sup, or any other edit that removes it), drop the matching
-  // entry from `citations`, renumber the remaining markers + refs
-  // sequentially in reading order, and rebuild the refs block. No-op
-  // when the marker set hasn't changed (cheap on every keystroke).
-  const syncCitationsFromBody = () => {
-    if (!editorRef.current || citations.length === 0) return;
+  // Renumber the citation set so it matches the body's document order.
+  // `pool` is the set of citation metadata available (current state +
+  // any just-inserted citation) — the body decides which survive and in
+  // what order. Updates each in-body marker's "(N)" text, then sets
+  // state and rebuilds the refs block.
+  const renumberFromBody = (pool) => {
+    if (!editorRef.current) return;
     const orderedDois = readBodyCitationDois();
-    const sameLen = orderedDois.length === citations.length;
-    const sameOrder = sameLen && orderedDois.every((d, i) => d === citations[i].doi);
-    if (sameOrder) return;
-
-    const byDoi = Object.fromEntries(citations.map(c => [c.doi, c]));
+    const byDoi = Object.fromEntries(pool.map(c => [c.doi, c]));
     const next = orderedDois
       .map(doi => byDoi[doi])
       .filter(Boolean)
       .map((c, i) => ({ ...c, n: i + 1 }));
 
-    // Update each in-body marker's visible "(N)" to match the new
-    // sequential number.
     const numByDoi = Object.fromEntries(next.map(c => [c.doi, c.n]));
     const refsBlock = editorRef.current.querySelector('[data-luminary-refs]');
     editorRef.current.querySelectorAll('sup > a[href*="doi.org"]').forEach(a => {
@@ -480,6 +474,20 @@ export default function RichTextEditor({
 
     setCitations(next);
     rebuildRefs(next);
+  };
+
+  // When the user deletes a citation marker in the body (backspace through
+  // the (N) sup, or any other edit that removes it), drop the matching
+  // entry from `citations`, renumber the remaining markers + refs
+  // sequentially in reading order, and rebuild the refs block. No-op
+  // when the marker set hasn't changed (cheap on every keystroke).
+  const syncCitationsFromBody = () => {
+    if (!editorRef.current || citations.length === 0) return;
+    const orderedDois = readBodyCitationDois();
+    const sameLen = orderedDois.length === citations.length;
+    const sameOrder = sameLen && orderedDois.every((d, i) => d === citations[i].doi);
+    if (sameOrder) return;
+    renumberFromBody(citations);
   };
 
   // Rebuild the references section at the bottom of the editor
@@ -513,10 +521,9 @@ export default function RichTextEditor({
       if (!resp.ok) throw new Error('not found');
       const { message: w } = await resp.json();
 
-      const N      = citations.length + 1;
       const doiUrl = `https://doi.org/${rawDoi}`;
       const text   = buildVancouverRef(w);
-      const updated = [...citations, { n: N, doi: rawDoi, url: doiUrl, text }];
+      const newCit = { doi: rawDoi, url: doiUrl, text };
 
       // Snapshot scroll position of the editor's scrolling ancestor so the
       // view doesn't jump after focus/insert/rebuildRefs mutate the DOM
@@ -527,13 +534,16 @@ export default function RichTextEditor({
 
       editorRef.current?.focus({ preventScroll: true });
       restoreSelection();
+      // Insert with a placeholder "(?)" — renumberFromBody below assigns
+      // the real number based on where the marker landed in document
+      // order, so citing in the middle of an already-cited article
+      // numbers the new marker correctly and bumps subsequent ones.
       document.execCommand('insertHTML', false,
         `<sup><a href="${doiUrl}" target="_blank" rel="noopener noreferrer" ` +
-        `style="color:#6c63ff;text-decoration:none;font-weight:700;">(${N})</a></sup>`
+        `style="color:#6c63ff;text-decoration:none;font-weight:700;">(?)</a></sup>`
       );
 
-      setCitations(updated);
-      rebuildRefs(updated);
+      renumberFromBody([...citations, newCit]);
       setShowDoiCite(false);
       setCiteDoiInput('');
 
