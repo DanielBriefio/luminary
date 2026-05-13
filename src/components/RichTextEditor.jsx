@@ -102,6 +102,33 @@ export default function RichTextEditor({
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || '';
     }
+    // Hydrate the citations array from any References block already in the
+    // initial HTML — without this, opening an existing deep dive leaves
+    // `citations` empty and the auto-delete-on-marker-remove path can't
+    // find the matching ref to drop.
+    if (editorRef.current) {
+      const refsBlock = editorRef.current.querySelector('[data-luminary-refs]');
+      if (refsBlock) {
+        const cits = [];
+        refsBlock.querySelectorAll(':scope > p').forEach(p => {
+          // Skip the "References" header paragraph.
+          const txt = p.textContent.trim();
+          if (/^references$/i.test(txt)) return;
+          const a = p.querySelector('a[href*="doi.org"]');
+          if (!a) return;
+          const url = a.getAttribute('href') || '';
+          const doi = url.replace(/^https?:\/\/(dx\.)?doi\.org\//, '');
+          // Citation text is everything between "N. " and the trailing
+          // "doi:xxx" link text.
+          const text = txt
+            .replace(/^\s*\d+\.\s*/, '')
+            .replace(/\s*doi:\S+\s*$/i, '')
+            .trim();
+          cits.push({ n: cits.length + 1, doi, url, text });
+        });
+        if (cits.length) setCitations(cits);
+      }
+    }
   }, []); // eslint-disable-line
 
   // Close the image toolbar on outside clicks / scroll / Escape.
@@ -372,6 +399,19 @@ export default function RichTextEditor({
     syncContent();
   };
 
+  // Walk up the ancestor chain to find the element that actually scrolls
+  // — could be the editor div itself (overflowY:auto) or PostComposer's
+  // outer scroll wrapper depending on content length.
+  const findScrollableAncestor = (el) => {
+    let n = el;
+    while (n && n !== document.body) {
+      const s = getComputedStyle(n);
+      if (/(auto|scroll)/.test(s.overflowY) && n.scrollHeight > n.clientHeight) return n;
+      n = n.parentElement;
+    }
+    return null;
+  };
+
   // Save cursor position before popover steals focus, restore before insert
   const saveSelection = () => {
     const sel = window.getSelection();
@@ -384,6 +424,62 @@ export default function RichTextEditor({
       sel.removeAllRanges();
       sel.addRange(savedRangeRef.current);
     }
+  };
+
+  // Read the DOIs currently referenced by <sup><a> markers in the body
+  // (excluding anything inside the References block itself). Order is
+  // document order, first occurrence wins — so renumbering matches the
+  // reading order, not insertion order.
+  const readBodyCitationDois = () => {
+    if (!editorRef.current) return [];
+    const refsBlock = editorRef.current.querySelector('[data-luminary-refs]');
+    const seen = new Set();
+    const out = [];
+    editorRef.current.querySelectorAll('sup').forEach(sup => {
+      if (refsBlock && refsBlock.contains(sup)) return;
+      const a = sup.querySelector('a[href*="doi.org"]');
+      if (!a) return;
+      const url = a.getAttribute('href') || '';
+      const doi = url.replace(/^https?:\/\/(dx\.)?doi\.org\//, '');
+      if (!doi || seen.has(doi)) return;
+      seen.add(doi);
+      out.push(doi);
+    });
+    return out;
+  };
+
+  // When the user deletes a citation marker in the body (backspace through
+  // the (N) sup, or any other edit that removes it), drop the matching
+  // entry from `citations`, renumber the remaining markers + refs
+  // sequentially in reading order, and rebuild the refs block. No-op
+  // when the marker set hasn't changed (cheap on every keystroke).
+  const syncCitationsFromBody = () => {
+    if (!editorRef.current || citations.length === 0) return;
+    const orderedDois = readBodyCitationDois();
+    const sameLen = orderedDois.length === citations.length;
+    const sameOrder = sameLen && orderedDois.every((d, i) => d === citations[i].doi);
+    if (sameOrder) return;
+
+    const byDoi = Object.fromEntries(citations.map(c => [c.doi, c]));
+    const next = orderedDois
+      .map(doi => byDoi[doi])
+      .filter(Boolean)
+      .map((c, i) => ({ ...c, n: i + 1 }));
+
+    // Update each in-body marker's visible "(N)" to match the new
+    // sequential number.
+    const numByDoi = Object.fromEntries(next.map(c => [c.doi, c.n]));
+    const refsBlock = editorRef.current.querySelector('[data-luminary-refs]');
+    editorRef.current.querySelectorAll('sup > a[href*="doi.org"]').forEach(a => {
+      if (refsBlock && refsBlock.contains(a)) return;
+      const url = a.getAttribute('href') || '';
+      const doi = url.replace(/^https?:\/\/(dx\.)?doi\.org\//, '');
+      const n   = numByDoi[doi];
+      if (n !== undefined) a.textContent = `(${n})`;
+    });
+
+    setCitations(next);
+    rebuildRefs(next);
   };
 
   // Rebuild the references section at the bottom of the editor
@@ -422,7 +518,14 @@ export default function RichTextEditor({
       const text   = buildVancouverRef(w);
       const updated = [...citations, { n: N, doi: rawDoi, url: doiUrl, text }];
 
-      editorRef.current?.focus();
+      // Snapshot scroll position of the editor's scrolling ancestor so the
+      // view doesn't jump after focus/insert/rebuildRefs mutate the DOM
+      // (browsers default focus() to scroll-into-view, which can pull a
+      // scrolled-down deep dive back to the top).
+      const scroller = findScrollableAncestor(editorRef.current);
+      const scrollTop = scroller?.scrollTop ?? 0;
+
+      editorRef.current?.focus({ preventScroll: true });
       restoreSelection();
       document.execCommand('insertHTML', false,
         `<sup><a href="${doiUrl}" target="_blank" rel="noopener noreferrer" ` +
@@ -433,6 +536,10 @@ export default function RichTextEditor({
       rebuildRefs(updated);
       setShowDoiCite(false);
       setCiteDoiInput('');
+
+      // Restore the scroll position the user had before the insert — they
+      // stay reading right where they were citing.
+      if (scroller) scroller.scrollTop = scrollTop;
     } catch {
       setCiteError('DOI not found. Try e.g. 10.1038/s41586-021-03819-2');
     }
@@ -842,7 +949,7 @@ export default function RichTextEditor({
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
-        onInput={syncContent}
+        onInput={() => { syncCitationsFromBody(); syncContent(); }}
         onKeyUp={updateActiveFormats}
         onMouseUp={updateActiveFormats}
         onPaste={handlePaste}
