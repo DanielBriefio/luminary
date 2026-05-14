@@ -19,9 +19,13 @@ import ReportModal from '../components/ReportModal';
 import LikersModal from './LikersModal';
 
 const TRUNCATE_CHAR_THRESHOLD = 180;
-const TRUNCATE_LINE_HEIGHT    = 3;
+// Show 3 lines fully + the top half of line 4 fading into the bg. The
+// gradient overlay below covers that half-line so the cut feels soft
+// rather than chopping mid-sentence.
+const TRUNCATE_LINE_HEIGHT    = 3.5;
 // Approx px per line in SafeHtml (font-size 13 × line-height 1.8).
 const TRUNCATE_PX_PER_LINE    = 23.4;
+const TRUNCATE_FADE_PX        = 14;
 const DEEPDIVE_MIN_WORDS      = 50;
 
 // Awards Lumens for a comment: 2 to the commenter (creation), and 5 to the
@@ -766,14 +770,17 @@ export default function PostCard({
             );
           }
 
-          // Text or paper commentary — clamp to ~3 lines. Admin posts and
-          // deep dives have their own treatments (✦ header / article
-          // preview card) and stay full-bleed. Triggers on either
-          // character length OR line breaks (a short post with multiple
-          // newlines can still exceed 3 visible lines).
+          // Any post that lands here gets clamped — text, paper
+          // commentary, and text-with-attachment (image/video/audio/pdf/
+          // file all set post_type to the attachment kind, so a
+          // post_type gate would let those slip through full-bleed).
+          // Admin posts and deep dives have their own treatments
+          // (✦ header / article preview card) and reach this block via
+          // earlier branches, so an !is_admin_post guard is enough.
+          // Triggers on either character length OR line breaks (a short
+          // post with multiple newlines can still exceed 3 visible lines).
           const newlineCount = (plain.match(/\n/g) || []).length;
           const needsTruncation =
-            (post.post_type === 'text' || post.post_type === 'paper') &&
             !post.is_admin_post &&
             (plain.length > TRUNCATE_CHAR_THRESHOLD || newlineCount > 2);
           const url = post.post_type === 'text' ? extractFirstUrl(post.content || '') : null;
@@ -789,7 +796,7 @@ export default function PostCard({
                     <SafeHtml html={post.content} tags={post.tags} onTagClick={onTagClick}/>
                   </div>
                   <div style={{
-                    position:'absolute', bottom:0, left:0, right:0, height:32,
+                    position:'absolute', bottom:0, left:0, right:0, height:TRUNCATE_FADE_PX,
                     background:`linear-gradient(to bottom, transparent, ${cardBg})`,
                     pointerEvents:'none',
                   }}/>
