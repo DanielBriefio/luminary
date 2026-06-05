@@ -6,7 +6,7 @@ import { T, AUTO_TAG_ENABLED, EDGE_HEADERS, COMPOSER_PROMPTS, LUMENS_ENABLED } f
 const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto-tag';
 import { getFileCategory } from '../lib/fileUtils';
 import { checkRemainingQuota } from '../lib/storageQuota';
-import { getCachedTagsByDoi, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
+import { getCachedTagsByDoi, buildCitationFromEpmc, buildCitationFromCrossRef, extractCorrespondingAuthorFromEpmc } from '../lib/utils';
 import Btn from '../components/Btn';
 import RichTextEditor from '../components/RichTextEditor';
 import CoverRepositioner from '../components/CoverRepositioner';
@@ -233,6 +233,8 @@ export default function PostComposer({
   const [paperAuthors,setPaperAuthors]   = useState(editPost?.paper_authors  || '');
   const [paperYear,setPaperYear]         = useState(editPost?.paper_year     || '');
   const [paperCitation,setPaperCitation] = useState(editPost?.paper_citation || '');
+  const [paperCorrespEmail,setPaperCorrespEmail] = useState(editPost?.paper_corresp_email || '');
+  const [paperCorrespName, setPaperCorrespName]  = useState(editPost?.paper_corresp_name  || '');
   const [doiFetching,setDoiFetching]     = useState(false);
   const [doiFetched,setDoiFetched]       = useState(false);
   const [paperInputMode,setPaperInputMode] = useState('search');
@@ -319,6 +321,8 @@ export default function PostComposer({
       if (paper.year)     setPaperYear(paper.year);
       if (paper.doi)      setPaperDoi(paper.doi);
       if (paper.citation) setPaperCitation(paper.citation);
+      if (paper.corresp_email) setPaperCorrespEmail(paper.corresp_email);
+      if (paper.corresp_name)  setPaperCorrespName(paper.corresp_name);
       if (paper.title || paper.doi) setDoiFetched(true);
     } catch(e) {}
   }, []); // eslint-disable-line
@@ -329,7 +333,17 @@ export default function PostComposer({
     const clean = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//,'').trim();
     if(!clean || doiFetched) return;
     setDoiFetching(true);
-    const meta = await fetchDoiMetadata(clean);
+    // CrossRef = bibliographic metadata; EuropePMC = corresponding author
+    // email (not exposed by CrossRef). Fire both in parallel — either may
+    // fail without blocking the other.
+    const [meta, epmcResult] = await Promise.all([
+      fetchDoiMetadata(clean),
+      fetch(
+        `https://www.ebi.ac.uk/europepmc/webservices/rest/search`
+        + `?query=${encodeURIComponent('DOI:' + clean)}`
+        + `&resultType=core&pageSize=1&format=json`
+      ).then(r => r.json()).then(j => j.resultList?.result?.[0] || null).catch(() => null),
+    ]);
     setDoiFetching(false);
     if(meta) {
       if(!paperTitle)   setPaperTitle(meta.title);
@@ -339,6 +353,13 @@ export default function PostComposer({
       setPaperYear(meta.year);
       setPaperDoi(meta.doi);
       setPaperCitation(meta.citation || '');
+      if (epmcResult) {
+        const corresp = extractCorrespondingAuthorFromEpmc(epmcResult);
+        if (corresp.email) {
+          setPaperCorrespEmail(corresp.email);
+          setPaperCorrespName(corresp.name);
+        }
+      }
       setDoiFetched(true);
     } else {
       setError('Could not find this DOI in CrossRef. Check it and fill in details manually.');
@@ -348,6 +369,7 @@ export default function PostComposer({
   const resetDoi = () => {
     setPaperDoi(''); setPaperTitle(''); setPaperJournal('');
     setPaperAuthors(''); setPaperAbstract(''); setPaperYear(''); setPaperCitation('');
+    setPaperCorrespEmail(''); setPaperCorrespName('');
     setDoiFetched(false); setError('');
   };
 
@@ -408,6 +430,7 @@ export default function PostComposer({
     const year    = result.pubYear || '';
     const doi     = result.doi || '';
     const abstract= result.abstractText?.slice(0, 300) || '';
+    const corresp = extractCorrespondingAuthorFromEpmc(result);
 
     if (doi) {
       setPaperDoi(doi);
@@ -417,6 +440,8 @@ export default function PostComposer({
       setPaperAbstract(abstract);
       setPaperYear(year);
       setPaperCitation(buildCitationFromEpmc(result));
+      setPaperCorrespEmail(corresp.email);
+      setPaperCorrespName(corresp.name);
       setDoiFetched(false);
       await handleDoiLookup(doi);
     } else {
@@ -426,6 +451,8 @@ export default function PostComposer({
       setPaperCitation(buildCitationFromEpmc(result));
       setPaperAbstract(abstract);
       setPaperYear(year);
+      setPaperCorrespEmail(corresp.email);
+      setPaperCorrespName(corresp.name);
       setDoiFetched(true);
     }
     setEpResults([]);
@@ -622,6 +649,8 @@ export default function PostComposer({
       paper_authors: paperAuthors.trim(),
       paper_year:     paperYear.trim(),
       paper_citation: paperCitation.trim(),
+      paper_corresp_email: paperCorrespEmail.trim() || null,
+      paper_corresp_name:  paperCorrespName.trim()  || null,
       tags:           manualTags.slice(0, 10),
       visibility,
       is_deep_dive:   isDeepDive,

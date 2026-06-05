@@ -182,6 +182,8 @@ export default function GroupLibrary({ groupId, user, myRole, onStatsChanged, on
       authors:  item.authors  || '',
       abstract: item.abstract || '',
       citation: item.citation || '',
+      corresp_email: item.corresp_email || '',
+      corresp_name:  item.corresp_name  || '',
     }));
     onNavigateToPost();
   };

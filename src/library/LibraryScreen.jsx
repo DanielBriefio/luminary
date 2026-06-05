@@ -127,6 +127,8 @@ export default function LibraryScreen({ user, profile, onSaveToggled, onViewGrou
       authors:  item.authors  || '',
       abstract: item.abstract || '',
       citation: item.citation || '',
+      corresp_email: item.corresp_email || '',
+      corresp_name:  item.corresp_name  || '',
     }));
     onNavigateToPost();
   };

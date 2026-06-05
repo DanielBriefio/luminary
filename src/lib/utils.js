@@ -25,6 +25,42 @@ export function buildCitationFromEpmc(r) {
   return cite.trim();
 }
 
+// Pull the corresponding author's email + name out of an EuropePMC core
+// result. EuropePMC doesn't expose a structured "corresponding author"
+// field — the email lives inside each author's `affiliation` string,
+// usually tagged "Electronic address: foo@bar.edu" (PubMed convention)
+// for the corresponding author specifically. We prefer that tagged form,
+// fall back to an explicit `email` field if present, then to any email
+// found in any affiliation. Coverage is roughly 40–60 % of papers
+// (best for recent open-access biomed); callers must handle empty.
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+const ELECTRONIC_RE = /Electronic address:\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
+
+function authorDisplayName(a) {
+  return (a?.fullName || `${a?.firstName || ''} ${a?.lastName || ''}`).trim();
+}
+
+export function extractCorrespondingAuthorFromEpmc(result) {
+  const authors = result?.authorList?.author || [];
+  for (const a of authors) {
+    const m = String(a?.affiliation || '').match(ELECTRONIC_RE);
+    if (m) return { email: m[1], name: authorDisplayName(a) };
+  }
+  for (const a of authors) {
+    if (a?.email) {
+      const m = String(a.email).match(EMAIL_RE);
+      if (m) return { email: m[0], name: authorDisplayName(a) };
+    }
+  }
+  for (const a of authors) {
+    const m = String(a?.affiliation || '').match(EMAIL_RE);
+    if (m) return { email: m[0], name: authorDisplayName(a) };
+  }
+  const flat = String(result?.affiliation || '').match(EMAIL_RE);
+  if (flat) return { email: flat[0], name: '' };
+  return { email: '', name: '' };
+}
+
 export function buildCitationFromCrossRef(w, doi) {
   if (!w) return '';
   const journal = w['short-container-title']?.[0] || w['container-title']?.[0] || '';

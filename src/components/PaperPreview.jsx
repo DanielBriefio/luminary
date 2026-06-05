@@ -25,6 +25,18 @@ export default function PaperPreview({ post, currentUserId, onViewPaper, abstrac
           : <div style={{fontFamily:"'DM Serif Display',serif",fontSize:15,lineHeight:1.4,marginBottom:5,overflowWrap:"break-word"}}>{post.paper_title}</div>
         }
         {post.paper_authors&&<div style={{fontSize:11,color:T.mu,marginBottom:4}}>{post.paper_authors}</div>}
+        {post.paper_corresp_email && (
+          <div style={{fontSize:11.5,color:T.mu,marginBottom:4,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+            <span>✉</span>
+            <a
+              href={`mailto:${post.paper_corresp_email}?subject=${encodeURIComponent('Re: ' + (post.paper_title || ''))}`}
+              style={{color:T.v,textDecoration:"none",fontWeight:600,overflowWrap:"anywhere"}}
+            >
+              {post.paper_corresp_email}
+            </a>
+            {post.paper_corresp_name && <span style={{color:T.mu}}>· {post.paper_corresp_name}</span>}
+          </div>
+        )}
         {(post.paper_citation || post.paper_journal) && (
           <div style={{fontSize:11.5,color:T.mu,marginBottom:10,lineHeight:1.5}}>
             {post.paper_citation || post.paper_journal}

@@ -6,7 +6,7 @@ import PostCard from '../posts/PostCard';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
 import FollowBtn from '../components/FollowBtn';
-import { timeAgo, buildCitationFromEpmc } from '../lib/utils';
+import { timeAgo, buildCitationFromEpmc, extractCorrespondingAuthorFromEpmc } from '../lib/utils';
 
 // ─── Researcher result card ───────────────────────────────────────────────────
 
@@ -225,6 +225,7 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
   const cleanTitle = (t) => t?.replace(/<[^>]+>/g, '') || '';
 
   const handleShare = () => {
+    const corresp = extractCorrespondingAuthorFromEpmc(paper);
     sessionStorage.setItem('prefill_paper', JSON.stringify({
       doi:      paper.doi || '',
       title:    cleanTitle(paper.title),
@@ -233,6 +234,8 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
       authors:  paper.authorString || '',
       abstract: paper.abstractText?.slice(0, 500) || '',
       citation: buildCitationFromEpmc(paper),
+      corresp_email: corresp.email,
+      corresp_name:  corresp.name,
     }));
     onNavigateToPost && onNavigateToPost();
   };
@@ -240,6 +243,7 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
   const handleAdd = async () => {
     if (!currentUserId || adding || added) return;
     setAdding(true);
+    const corresp = extractCorrespondingAuthorFromEpmc(paper);
     const { error } = await supabase.from('library_items').insert({
       added_by:       currentUserId,
       folder_id:      null,
@@ -252,6 +256,8 @@ function EpmcCard({ paper, currentUserId, onNavigateToPost }) {
       cited_by_count: paper.citedByCount || 0,
       is_open_access: paper.isOpenAccess === 'Y',
       full_text_url:  paper.fullTextUrlList?.fullTextUrl?.[0]?.url || '',
+      corresp_email:  corresp.email || null,
+      corresp_name:   corresp.name  || null,
     });
     setAdding(false);
     if (error) { console.error('library_items insert error:', error); alert('Failed to add to library: ' + error.message); return; }

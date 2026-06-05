@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { T } from '../lib/constants';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
-import { buildCitationFromEpmc } from '../lib/utils';
+import { buildCitationFromEpmc, extractCorrespondingAuthorFromEpmc } from '../lib/utils';
 
 const PAGE_SIZE = 10;
 
@@ -93,20 +93,25 @@ export default function LibraryPaperSearch({ onSelect, buttonLabel }) {
     setLoadingMore(false);
   };
 
-  const mapResult = (r) => ({
-    title:          r.title?.replace(/<[^>]+>/g,'') || '',
-    authors:        r.authorString || '',
-    journal:        r.journalTitle || '',
-    year:           r.pubYear || '',
-    doi:            r.doi || '',
-    pmid:           r.pmid || '',
-    epmc_id:        r.id || '',
-    abstract:       r.abstractText?.slice(0,500) || '',
-    cited_by_count: r.citedByCount || 0,
-    is_open_access: r.isOpenAccess === 'Y',
-    full_text_url:  r.fullTextUrlList?.fullTextUrl?.[0]?.url || '',
-    citation:       buildCitationFromEpmc(r),
-  });
+  const mapResult = (r) => {
+    const corresp = extractCorrespondingAuthorFromEpmc(r);
+    return {
+      title:          r.title?.replace(/<[^>]+>/g,'') || '',
+      authors:        r.authorString || '',
+      journal:        r.journalTitle || '',
+      year:           r.pubYear || '',
+      doi:            r.doi || '',
+      pmid:           r.pmid || '',
+      epmc_id:        r.id || '',
+      abstract:       r.abstractText?.slice(0,500) || '',
+      cited_by_count: r.citedByCount || 0,
+      is_open_access: r.isOpenAccess === 'Y',
+      full_text_url:  r.fullTextUrlList?.fullTextUrl?.[0]?.url || '',
+      citation:       buildCitationFromEpmc(r),
+      corresp_email:  corresp.email || null,
+      corresp_name:   corresp.name  || null,
+    };
+  };
 
   const inputStyle = {
     flex:1, padding:'7px 11px', borderRadius:8,
