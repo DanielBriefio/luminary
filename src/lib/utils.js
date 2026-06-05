@@ -40,22 +40,44 @@ function authorDisplayName(a) {
   return (a?.fullName || `${a?.firstName || ''} ${a?.lastName || ''}`).trim();
 }
 
+// All affiliation strings attached to an EPMC author. The JSON `core`
+// response nests them under authorAffiliationDetailsList.authorAffiliation[],
+// not a flat author.affiliation field (which is what the XML form uses).
+// We collect from both shapes so the extractor is robust to either.
+function authorAffiliations(a) {
+  const out = [];
+  if (a?.affiliation) out.push(String(a.affiliation));
+  const nested = a?.authorAffiliationDetailsList?.authorAffiliation || [];
+  for (const x of nested) {
+    if (x?.affiliation) out.push(String(x.affiliation));
+  }
+  return out;
+}
+
 export function extractCorrespondingAuthorFromEpmc(result) {
   const authors = result?.authorList?.author || [];
+  // Pass 1: PubMed "Electronic address:" tag — explicit corresp-author marker.
   for (const a of authors) {
-    const m = String(a?.affiliation || '').match(ELECTRONIC_RE);
-    if (m) return { email: m[1], name: authorDisplayName(a) };
+    for (const aff of authorAffiliations(a)) {
+      const m = aff.match(ELECTRONIC_RE);
+      if (m) return { email: m[1], name: authorDisplayName(a) };
+    }
   }
+  // Pass 2: explicit email field on the author (rare in JSON core).
   for (const a of authors) {
     if (a?.email) {
       const m = String(a.email).match(EMAIL_RE);
       if (m) return { email: m[0], name: authorDisplayName(a) };
     }
   }
+  // Pass 3: any email in any affiliation string.
   for (const a of authors) {
-    const m = String(a?.affiliation || '').match(EMAIL_RE);
-    if (m) return { email: m[0], name: authorDisplayName(a) };
+    for (const aff of authorAffiliations(a)) {
+      const m = aff.match(EMAIL_RE);
+      if (m) return { email: m[0], name: authorDisplayName(a) };
+    }
   }
+  // Pass 4: top-level affiliation string (older results).
   const flat = String(result?.affiliation || '').match(EMAIL_RE);
   if (flat) return { email: flat[0], name: '' };
   return { email: '', name: '' };
