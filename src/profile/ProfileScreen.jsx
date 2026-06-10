@@ -659,7 +659,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       setPubStats({hIndex, totalCitations, pubCount:data.length});
     });
   };
-  useEffect(refreshPubStats, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(refreshPubStats, [user]);
 
 
   const wh  = profile?.work_history   || [];
