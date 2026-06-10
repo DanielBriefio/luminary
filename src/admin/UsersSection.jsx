@@ -1,10 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { T, TIER_CONFIG, getTierFromLumens } from '../lib/constants';
 import Av from '../components/Av';
 import Spinner from '../components/Spinner';
 import { timeAgo } from '../lib/utils';
 import UserDetailPanel from './UserDetailPanel';
 import BulkNudgeModal from './BulkNudgeModal';
+
+// Look up a user's count for a specific tier1 from their sorted
+// topic_distribution array. Returns 0 if the tier1 isn't present.
+function topicCount(user, tier1) {
+  if (!tier1) return 0;
+  const td = user.topic_distribution || [];
+  for (const t of td) if (t.tier1 === tier1) return t.count;
+  return 0;
+}
 
 const STAGE_STYLES = {
   visible:    { bg: T.v2,  color: T.v3, label: 'Visible'    },
@@ -37,6 +46,8 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
   const [stageFilter, setStageFilter] = useState(initialParams.stageFilter || '');
   const [ghostFilter, setGhostFilter] = useState(initialParams.ghostFilter || '');
   const [modeFilter, setModeFilter]   = useState(initialParams.modeFilter  || '');
+  const [topicFilter, setTopicFilter] = useState('');
+  const [topicMin, setTopicMin]       = useState(1);
   const [selected, setSelected]       = useState(new Set());
   const [detailUser, setDetailUser]   = useState(null);
   const [showNudge, setShowNudge]     = useState(false);
@@ -61,10 +72,22 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
 
   useEffect(() => { load(); }, [load]);
 
+  // Union of every tier1 ever posted, sorted alphabetically, for the
+  // topic filter dropdown. Memoised because users[] is the entire admin
+  // table — recomputing on every keystroke would be wasteful.
+  const allTopics = useMemo(() => {
+    const set = new Set();
+    for (const u of users) {
+      for (const t of (u.topic_distribution || [])) set.add(t.tier1);
+    }
+    return Array.from(set).sort();
+  }, [users]);
+
   const filtered = users.filter(u => {
     if (stageFilter && u.activation_stage !== stageFilter) return false;
     if (ghostFilter && u.ghost_segment    !== ghostFilter) return false;
     if (modeFilter  && u.work_mode        !== modeFilter)  return false;
+    if (topicFilter && topicCount(u, topicFilter) < topicMin) return false;
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -76,19 +99,28 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
     return true;
   });
 
+  // When a topic filter is active, default-sort users by their count for
+  // that topic (desc) — that's almost always what the operator wants
+  // ("show me the heaviest cardiology posters"). The explicit column
+  // headers still override via toggleSort.
+  const effectiveSortBy  = topicFilter && sortBy === 'created_at' ? 'topic' : sortBy;
+  const effectiveSortDir = effectiveSortBy === 'topic' ? 'desc' : sortDir;
+
   const sorted = [...filtered].sort((a, b) => {
-    const aVal = a[sortBy];
-    const bVal = b[sortBy];
-    // Nulls sort last regardless of direction
+    if (effectiveSortBy === 'topic') {
+      return topicCount(b, topicFilter) - topicCount(a, topicFilter);
+    }
+    const aVal = a[effectiveSortBy];
+    const bVal = b[effectiveSortBy];
     if (aVal == null && bVal == null) return 0;
     if (aVal == null) return 1;
     if (bVal == null) return -1;
-    if (sortBy === 'created_at' || sortBy === 'last_active') {
+    if (effectiveSortBy === 'created_at' || effectiveSortBy === 'last_active') {
       const aT = new Date(aVal).getTime();
       const bT = new Date(bVal).getTime();
-      return sortDir === 'asc' ? aT - bT : bT - aT;
+      return effectiveSortDir === 'asc' ? aT - bT : bT - aT;
     }
-    return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    return effectiveSortDir === 'asc' ? aVal - bVal : bVal - aVal;
   });
 
   const allSelected  = sorted.length > 0 && sorted.every(u => selected.has(u.id));
@@ -169,11 +201,33 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
           placeholder="All modes"
           options={MODES.map(m => ({ value: m, label: WORK_MODE_LABELS[m] }))}
         />
-        {(stageFilter || ghostFilter || modeFilter || search) && (
+        <FilterSelect
+          value={topicFilter}
+          onChange={setTopicFilter}
+          placeholder="All topics"
+          options={allTopics.map(t => ({ value: t, label: t }))}
+        />
+        {topicFilter && (
+          <input
+            type="number"
+            min={1}
+            value={topicMin}
+            onChange={e => setTopicMin(Math.max(1, Number(e.target.value) || 1))}
+            title="Minimum post count for this topic"
+            style={{
+              width: 60, padding: '8px 10px', borderRadius: 9,
+              border: `1px solid ${T.bdr}`, background: T.s2,
+              fontSize: 13, color: T.text, fontFamily: 'inherit',
+              outline: 'none', textAlign: 'center',
+            }}
+          />
+        )}
+        {(stageFilter || ghostFilter || modeFilter || topicFilter || search) && (
           <button
             onClick={() => {
               setStageFilter(''); setGhostFilter('');
-              setModeFilter(''); setSearch('');
+              setModeFilter(''); setTopicFilter(''); setTopicMin(1);
+              setSearch('');
             }}
             style={{
               padding: '8px 12px', borderRadius: 9,
@@ -219,6 +273,12 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
             <SortableHeader label="Groups"      col="groups_count"           sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <SortableHeader label="Codes"       col="invite_codes_remaining" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <SortableHeader label="Lumens"      col="lumens_current_period"  sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+            <div title={topicFilter
+              ? `Filtered & sorted by ${topicFilter} (≥${topicMin})`
+              : 'Top tier1 topics by post count'}
+            >
+              Topics{topicFilter && <span style={{color:T.v}}> ↓</span>}
+            </div>
             <div>Stage</div>
             <div>Ghost</div>
             <div></div>
@@ -238,6 +298,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
                 user={u}
                 isLast={i === sorted.length - 1}
                 selected={selected.has(u.id)}
+                topicFilter={topicFilter}
                 onToggle={() => toggleOne(u.id)}
                 onOpen={() => setDetailUser(u)}
                 onDirectMessage={() => handleDirectMessage(u.id)}
@@ -325,7 +386,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
   );
 }
 
-function UserRow({ user, isLast, selected, onToggle, onOpen, onDirectMessage }) {
+function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDirectMessage }) {
   const stage = STAGE_STYLES[user.activation_stage] || STAGE_STYLES.identified;
   const ghost = user.ghost_segment ? GHOST_STYLES[user.ghost_segment] : null;
   const codes = user.invite_codes_remaining ?? 0;
@@ -408,6 +469,8 @@ function UserRow({ user, isLast, selected, onToggle, onOpen, onDirectMessage }) 
         </div>
       </div>
 
+      <TopicsCell topics={user.topic_distribution} highlight={topicFilter} />
+
       <div>
         <span style={{
           fontSize: 11, fontWeight: 700, padding: '2px 8px',
@@ -457,7 +520,45 @@ function UserRow({ user, isLast, selected, onToggle, onOpen, onDirectMessage }) 
   );
 }
 
-const GRID_COLS = '32px 1fr 110px 90px 90px 50px 50px 60px 80px 100px 80px 100px';
+// columns: chk / User / Mode / Joined / LastActive / Posts / Groups / Codes / Lumens / Topics / Stage / Ghost / actions
+const GRID_COLS = '32px 1fr 110px 90px 90px 50px 50px 60px 80px 180px 100px 80px 100px';
+
+function TopicsCell({ topics, highlight }) {
+  const list = topics || [];
+  if (list.length === 0) {
+    return <div style={{ fontSize: 11.5, color: T.mu, fontStyle: 'italic' }}>—</div>;
+  }
+  const top   = list.slice(0, 2);
+  const extra = list.length - top.length;
+  return (
+    <div
+      title={list.map(t => `${t.tier1} ${t.count}`).join(' · ')}
+      style={{
+        fontSize: 11.5, color: T.mu, lineHeight: 1.35,
+        overflow: 'hidden', textOverflow: 'ellipsis',
+      }}
+    >
+      {top.map((t, i) => {
+        const isHi = highlight && t.tier1 === highlight;
+        return (
+          <span key={t.tier1}>
+            {i > 0 && <span style={{ color: T.bdr }}> · </span>}
+            <span style={{
+              color:    isHi ? T.v : T.text,
+              fontWeight: isHi ? 700 : 600,
+            }}>
+              {t.tier1}
+            </span>{' '}
+            <span style={{ color: T.mu }}>{t.count}</span>
+          </span>
+        );
+      })}
+      {extra > 0 && (
+        <span style={{ color: T.mu }}> · +{extra}</span>
+      )}
+    </div>
+  );
+}
 
 function SortableHeader({ label, col, sortBy, sortDir, onSort }) {
   const active = sortBy === col;

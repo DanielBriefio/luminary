@@ -248,6 +248,13 @@ export default function UserDetailPanel({
             </div>
           )}
 
+          {/* Topic distribution — behavioural tier1, sorted desc by count */}
+          {(user.topic_distribution || []).length > 0 && (
+            <Section title="Topics posted about">
+              <TopicBreakdown topics={user.topic_distribution} />
+            </Section>
+          )}
+
           {loadingDetail ? (
             <div style={{ textAlign: 'center', padding: 20 }}><Spinner /></div>
           ) : (
@@ -374,5 +381,40 @@ function Section({ title, children }) {
 function Empty({ children }) {
   return (
     <div style={{ fontSize: 13, color: T.mu, fontStyle: 'italic' }}>{children}</div>
+  );
+}
+
+// Proportional horizontal bars for the user's full tier1 distribution.
+// Top topic = 100% width; everything else relative to that.
+function TopicBreakdown({ topics }) {
+  const max = Math.max(...topics.map(t => t.count), 1);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {topics.map(t => {
+        const pct = Math.round((t.count / max) * 100);
+        return (
+          <div key={t.tier1} style={{ position: 'relative' }}>
+            <div style={{
+              height: 22, borderRadius: 6, background: T.s2,
+              border: `1px solid ${T.bdr}`, overflow: 'hidden',
+            }}>
+              <div style={{
+                width: `${pct}%`, height: '100%', background: T.v2,
+                borderRight: pct < 100 ? `1px solid ${T.v}` : 'none',
+              }} />
+            </div>
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center',
+              padding: '0 9px', fontSize: 12,
+              justifyContent: 'space-between',
+            }}>
+              <span style={{ color: T.text, fontWeight: 600 }}>{t.tier1}</span>
+              <span style={{ color: T.mu, fontWeight: 600 }}>{t.count}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
