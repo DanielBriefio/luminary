@@ -4,7 +4,7 @@ import { T, PUB_TYPES } from '../lib/constants';
 import { typeIcon, typeLabel } from '../lib/pubUtils';
 import Btn from '../components/Btn';
 
-export default function PubRow({ pub, setPubs }) {
+export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm]       = useState({title:pub.title||'',authors:pub.authors||'',journal:pub.journal||'',year:pub.year||'',doi:pub.doi||'',pub_type:pub.pub_type||'journal',venue:pub.venue||''});
   const [rowSaving, setRowSaving] = useState(false);
@@ -21,13 +21,21 @@ export default function PubRow({ pub, setPubs }) {
   const saveEdit = async () => {
     setRowSaving(true);
     setSaveError('');
-    const { error } = await supabase.from('publications').update(form).eq('id', pub.id);
-    if (!error) {
-      setPubs(p => p.map(x => x.id === pub.id ? { ...pub, ...form } : x).sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
-      setEditing(false);
-    } else {
+    // Chain .select() so a silent RLS rejection (error: null, data: null)
+    // becomes visible — without this the UI showed "saved" but the row
+    // reverted on reload because no DB rows were actually updated.
+    const { data, error } = await supabase
+      .from('publications').update(form).eq('id', pub.id).select();
+    if (error) {
       console.error('Publication save error:', error);
       setSaveError('Save failed. Please try again.');
+    } else if (!data || data.length === 0) {
+      console.warn('Publication save: 0 rows updated (likely RLS block)');
+      setSaveError('Save blocked — the row exists but the database rejected the update. (RLS policy may be missing.)');
+    } else {
+      setPubs(p => p.map(x => x.id === pub.id ? { ...pub, ...form } : x).sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+      setEditing(false);
+      onPubStatsChanged?.();
     }
     setRowSaving(false);
   };

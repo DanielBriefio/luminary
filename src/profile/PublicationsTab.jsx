@@ -196,7 +196,7 @@ function doExportRis(pubs) {
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
 import { capture } from '../lib/analytics';
-import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef, fetchOpenAlexCitationsByDoi, mapWithConcurrency, enrichPublicationsWithOpenAlex } from '../lib/utils';
+import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef, fetchOpenAlexWorkByDoi, mapWithConcurrency, enrichPublicationsWithOpenAlex } from '../lib/utils';
 import { parseRis, parseBib, buildCitationFromRef } from '../lib/referenceUtils';
 import { typeIcon, typeLabel } from '../lib/pubUtils';
 import Btn from '../components/Btn';
@@ -271,30 +271,40 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     }
     setRefreshing(true);
     setRefreshMsg(`Looking up ${withDoi.length} publication${withDoi.length===1?'':'s'} on OpenAlex…`);
-    const results = await mapWithConcurrency(withDoi, async (p) => {
-      const n = await fetchOpenAlexCitationsByDoi(p.doi);
-      return { id: p.id, citations: n };
+    // Reuse the enrichment helper so the refresh button picks up the
+    // same `pub_type` auto-detection as the per-insert path.
+    let citationCount = 0;
+    let typeCount     = 0;
+    let foundCount    = 0;
+    await mapWithConcurrency(withDoi, async (p) => {
+      const w = await fetchOpenAlexWorkByDoi(p.doi);
+      if (!w) return;
+      foundCount++;
+      const patch = {};
+      if (w.citations != null && w.citations !== (p.citations || 0)) {
+        patch.citations = w.citations;
+      }
+      const isDefault = !p.pub_type || p.pub_type === 'journal';
+      if (w.pubType && isDefault && w.pubType !== p.pub_type) {
+        patch.pub_type = w.pubType;
+      }
+      if (!Object.keys(patch).length) return;
+      await supabase.from('publications').update(patch).eq('id', p.id);
+      if (patch.citations != null) citationCount++;
+      if (patch.pub_type)          typeCount++;
+      setPubs(prev => prev.map(x => x.id === p.id ? { ...x, ...patch } : x));
     }, 5);
-    const updates = results.filter(r => r.citations != null && r.citations !== (pubs.find(p=>p.id===r.id)?.citations || 0));
-    if (updates.length) {
-      // Update DB sequentially-but-parallel — each row independently.
-      await Promise.all(updates.map(u =>
-        supabase.from('publications').update({ citations: u.citations }).eq('id', u.id)
-      ));
-      // Local state merge.
-      setPubs(prev => prev.map(p => {
-        const u = updates.find(x => x.id === p.id);
-        return u ? { ...p, citations: u.citations } : p;
-      }));
-    }
-    const missed = withDoi.length - results.filter(r => r.citations != null).length;
-    const parts = [`Updated ${updates.length} publication${updates.length===1?'':'s'}`];
+    const missed = withDoi.length - foundCount;
+    const parts = [];
+    if (citationCount) parts.push(`${citationCount} citation${citationCount===1?'':'s'} updated`);
+    if (typeCount)     parts.push(`${typeCount} re-categorised`);
+    if (!parts.length) parts.push('No changes — everything was already up to date');
     if (missed) parts.push(`${missed} not found on OpenAlex`);
     setRefreshMsg(parts.join(' · '));
     setRefreshing(false);
     setTimeout(() => setRefreshMsg(''), 6000);
-    capture('publications_citations_refreshed', { total: withDoi.length, updated: updates.length, missed });
-    if (updates.length) onPubStatsChanged?.();
+    capture('publications_citations_refreshed', { total: withDoi.length, citations_updated: citationCount, types_updated: typeCount, missed });
+    if (citationCount) onPubStatsChanged?.();
   };
 
   useEffect(()=>{
@@ -337,9 +347,9 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         if(data) {
           setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
           capture('publication_added', { source: 'ai' });
-          enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
-            setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
-            onPubStatsChanged?.();
+          enrichPublicationsWithOpenAlex(data, supabase, (id, patch) => {
+            setPubs(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+            if (patch.citations != null) onPubStatsChanged?.();
           });
         }
       }
@@ -598,9 +608,9 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         if(data) {
           setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
           capture('publication_added', { source: 'ai' });
-          enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
-            setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
-            onPubStatsChanged?.();
+          enrichPublicationsWithOpenAlex(data, supabase, (id, patch) => {
+            setPubs(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+            if (patch.citations != null) onPubStatsChanged?.();
           });
         }
       }
@@ -663,9 +673,9 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     if(data) {
       setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
       capture('publication_added', { source: 'ai' });
-      enrichPublicationsWithOpenAlex([data], supabase, (id, n) => {
-        setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
-        onPubStatsChanged?.();
+      enrichPublicationsWithOpenAlex([data], supabase, (id, patch) => {
+        setPubs(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+        if (patch.citations != null) onPubStatsChanged?.();
       });
     }
   };
@@ -718,9 +728,9 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     if (data) {
       setPubs(prev => [...data, ...prev].sort((a, b) => (b.year||'').localeCompare(a.year||'')));
       capture('publication_added', { source: 'ris' });
-      enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
-        setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
-        onPubStatsChanged?.();
+      enrichPublicationsWithOpenAlex(data, supabase, (id, patch) => {
+        setPubs(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+        if (patch.citations != null) onPubStatsChanged?.();
       });
     }
     setRisSaving(false);
@@ -837,9 +847,9 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     if(data) {
       setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
       capture('publication_added', { source: 'manual' });
-      enrichPublicationsWithOpenAlex([data], supabase, (id, n) => {
-        setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
-        onPubStatsChanged?.();
+      enrichPublicationsWithOpenAlex([data], supabase, (id, patch) => {
+        setPubs(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+        if (patch.citations != null) onPubStatsChanged?.();
       });
     }
     setSaving(false);
@@ -1339,10 +1349,10 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         </div>
       ):(
         <>
-          <SectionGroup title="Journal Articles & Reviews" items={journals} setPubs={setPubs}/>
-          <SectionGroup title="Presentations & Posters" items={presentations} setPubs={setPubs}/>
-          <SectionGroup title="Book Chapters" items={books} setPubs={setPubs}/>
-          <SectionGroup title="Other" items={others} setPubs={setPubs}/>
+          <SectionGroup title="Journal Articles & Reviews" items={journals} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
+          <SectionGroup title="Presentations & Posters" items={presentations} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
+          <SectionGroup title="Book Chapters" items={books} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
+          <SectionGroup title="Other" items={others} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
         </>
       )}
     </div>

@@ -85,41 +85,88 @@ export function extractCorrespondingAuthorFromEpmc(result) {
 
 // OpenAlex is the open scholarly index that maintains live citation
 // counts for ~250M works. Free, no auth needed. We look up by DOI and
-// pull `cited_by_count` to keep `publications.citations` current.
-// Returns the integer count, or null if the DOI isn't indexed / the
-// request fails — callers must handle null gracefully (don't overwrite
-// an existing citation value with 0).
-export async function fetchOpenAlexCitationsByDoi(doi) {
+// pull `cited_by_count` + `type` to keep `publications.citations` and
+// `publications.pub_type` current.
+// Returns `{ citations, pubType }` (both may be null) or null if the
+// DOI isn't indexed / the request fails. Callers must handle nulls
+// gracefully (never overwrite a value with null).
+export async function fetchOpenAlexWorkByDoi(doi) {
   if (!doi) return null;
   const clean = String(doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').trim();
   if (!clean) return null;
   try {
     const r = await fetch(
       `https://api.openalex.org/works/doi:${encodeURIComponent(clean)}` +
-      `?select=cited_by_count`
+      `?select=cited_by_count,type`
     );
     if (!r.ok) return null;
     const j = await r.json();
-    const n = j?.cited_by_count;
-    return Number.isFinite(n) ? n : null;
+    const citations = Number.isFinite(j?.cited_by_count) ? j.cited_by_count : null;
+    const pubType   = openAlexTypeToPubType(j?.type);
+    return { citations, pubType };
   } catch { return null; }
+}
+
+// Back-compat shim — the older helper name only returned the count.
+// Anything still calling it gets the same result.
+export async function fetchOpenAlexCitationsByDoi(doi) {
+  const w = await fetchOpenAlexWorkByDoi(doi);
+  return w?.citations ?? null;
+}
+
+// Map OpenAlex's `type` enum to Luminary's pub_type values.
+// OpenAlex types: article / book / book-chapter / dissertation /
+// preprint / proceedings-article / report / dataset / other / etc.
+// Luminary types: journal / review / preprint / conference / poster /
+// book / lecture / other.
+// We can't distinguish journal vs. review from OpenAlex (both come
+// back as "article"), so we leave "review" alone — only set it on
+// genuine misclassifications (e.g. an OpenAlex "book" stored as
+// "journal" in Luminary). Returns null when OpenAlex's type is
+// missing or doesn't map cleanly.
+function openAlexTypeToPubType(t) {
+  if (!t) return null;
+  const v = String(t).toLowerCase();
+  if (v === 'article')              return 'journal';
+  if (v === 'preprint')             return 'preprint';
+  if (v === 'book')                 return 'book';
+  if (v === 'book-chapter')         return 'book';
+  if (v === 'proceedings-article')  return 'conference';
+  if (v === 'proceedings')          return 'conference';
+  if (v === 'dissertation')         return 'other';
+  if (v === 'report')               return 'other';
+  if (v === 'dataset')              return 'other';
+  return null;
 }
 
 // Fire-and-forget OpenAlex enrichment for newly-inserted publications.
 // Rows must come from a .select() chained on the insert so we have ids
 // to update. Optional onUpdate callback fires per-row so the UI can
-// merge the new count as it arrives. Safe to await OR drop on the
-// floor — never throws.
+// merge the new count as it arrives. Patches `pub_type` too when the
+// current value is null or the inserter's 'journal' default and
+// OpenAlex returns a more specific type (book, conference, preprint).
+// Safe to await OR drop on the floor — never throws.
 export async function enrichPublicationsWithOpenAlex(rows, supabase, onUpdate) {
   if (!rows?.length) return;
-  const candidates = rows.filter(r => r?.id && r?.doi && !(r.citations > 0));
+  const candidates = rows.filter(r => r?.id && r?.doi);
   if (!candidates.length) return;
   try {
     await mapWithConcurrency(candidates, async (r) => {
-      const n = await fetchOpenAlexCitationsByDoi(r.doi);
-      if (n == null || n === (r.citations || 0)) return;
-      await supabase.from('publications').update({ citations: n }).eq('id', r.id);
-      if (onUpdate) onUpdate(r.id, n);
+      const w = await fetchOpenAlexWorkByDoi(r.doi);
+      if (!w) return;
+      const patch = {};
+      if (w.citations != null && w.citations !== (r.citations || 0)) {
+        patch.citations = w.citations;
+      }
+      // Only auto-set pub_type when the row has the import default
+      // (null or 'journal') — don't overwrite a user's manual choice.
+      const isDefault = !r.pub_type || r.pub_type === 'journal';
+      if (w.pubType && isDefault && w.pubType !== r.pub_type) {
+        patch.pub_type = w.pubType;
+      }
+      if (!Object.keys(patch).length) return;
+      await supabase.from('publications').update(patch).eq('id', r.id);
+      if (onUpdate) onUpdate(r.id, patch);
     }, 5);
   } catch { /* fire-and-forget */ }
 }
