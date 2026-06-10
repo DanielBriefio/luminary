@@ -12,6 +12,7 @@ export default function PublicProfilePage({ slug }) {
   const [profile,  setProfile]  = useState(null);
   const [pubs,     setPubs]     = useState([]);
   const [pubStats, setPubStats] = useState({ hIndex: 0, totalCitations: 0, pubCount: 0 });
+  const [followStats, setFollowStats] = useState({ followers: 0, following: 0 });
   const [loading,  setLoading]  = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [tab,      setTab]      = useState('about');
@@ -43,6 +44,20 @@ export default function PublicProfilePage({ slug }) {
         const displayName = [p.name_prefix, p.name, p.name_suffix ? p.name_suffix : null].filter(Boolean).join(' ');
         document.title = `${displayName} — Luminary`;
       }
+
+      // Follower / following counts — same query shape as ProfileScreen.
+      // Public page had hardcoded '—' placeholders before this.
+      Promise.all([
+        supabase.from('follows').select('id', { count: 'exact', head: true })
+          .eq('target_type', 'user').eq('target_id', p.id),
+        supabase.from('follows').select('id', { count: 'exact', head: true })
+          .eq('follower_id', p.id).eq('target_type', 'user'),
+      ]).then(([{ count: followers }, { count: following }]) => {
+        if (!cancelled) setFollowStats({
+          followers: followers || 0,
+          following: following || 0,
+        });
+      });
 
       const vis = p.profile_visibility || {};
       if (vis.publications !== false) {
@@ -221,15 +236,15 @@ export default function PublicProfilePage({ slug }) {
             {(() => {
               const isClinician = profile.work_mode === 'clinician';
               const statItems = isClinician ? [
-                ['—', 'Followers'],
-                ['—', 'Following'],
+                [followStats.followers, 'Followers'],
+                [followStats.following, 'Following'],
                 ...(profile.years_in_practice ? [[profile.years_in_practice, 'Yrs Practice']] : []),
                 profile.clinical_highlight_value
                   ? [profile.clinical_highlight_value, profile.clinical_highlight_label || 'Highlight']
                   : [pubStats.pubCount || '—', 'Publications'],
               ] : [
-                ['—', 'Followers'],
-                ['—', 'Following'],
+                [followStats.followers, 'Followers'],
+                [followStats.following, 'Following'],
                 [pubStats.pubCount || '—', 'Publications'],
                 [pubStats.totalCitations || '—', 'Citations'],
                 [pubStats.hIndex > 0 ? `h${pubStats.hIndex}` : '—', 'h-index'],
