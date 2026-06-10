@@ -20,16 +20,32 @@ export function formatAuthorsVancouver(authorsStr) {
 }
 
 // Full Vancouver/NLM-style citation string. Used by the export +
-// per-row Copy button. Falls back to pub.citation (the pre-built
-// citation from EPMC/CrossRef) for fields it can't derive.
+// per-row Copy button. Branches on pub_type: journal articles use
+// the standard "Authors. Title. Journal. Year. doi: ..." form;
+// conference / poster / lecture entries use the "Presented at:
+// Venue; Date; Location." form which is what CVs and grants expect
+// for talks. Falls back to pub.citation when fields are missing.
 export function formatVancouver(pub) {
   const segs = [];
   const authors = formatAuthorsVancouver(pub.authors);
   if (authors) segs.push(authors + '.');
   if (pub.title) segs.push(pub.title.replace(/[.\s]+$/, '') + '.');
-  const venue = pub.journal || pub.venue;
-  if (venue) segs.push(venue + '.');
-  if (pub.year)  segs.push(pub.year + '.');
+
+  const isEvent = ['conference','poster','lecture'].includes(pub.pub_type);
+  if (isEvent) {
+    const venue = pub.venue || pub.journal;
+    const parts = [];
+    if (venue)             parts.push(venue);
+    if (pub.event_date)    parts.push(pub.event_date);
+    else if (pub.year)     parts.push(pub.year);
+    if (pub.event_location) parts.push(pub.event_location);
+    if (parts.length) segs.push('Presented at: ' + parts.join('; ') + '.');
+  } else {
+    const venue = pub.journal || pub.venue;
+    if (venue) segs.push(venue + '.');
+    if (pub.year) segs.push(pub.year + '.');
+  }
+
   const extras = [];
   if (pub.doi) {
     const doi = pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`;

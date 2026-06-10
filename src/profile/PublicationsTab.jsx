@@ -28,6 +28,8 @@ function pubToBib(pub) {
     type === 'incollection'   && venue && `  booktitle = {${venue}}`,
     type === 'misc'           && venue && `  howpublished = {${venue}}`,
     pub.year   && `  year      = {${pub.year}}`,
+    pub.event_location && `  address   = {${pub.event_location}}`,
+    pub.event_date     && `  month     = {${pub.event_date}}`,
     doi        && `  doi       = {${doi}}`,
     pub.pmid   && `  note      = {PubMed PMID: ${pub.pmid}}`,
   ].filter(Boolean);
@@ -147,9 +149,11 @@ function doExportRis(pubs) {
     for (const au of splitAuthors(pub.authors)) lines.push(`AU  - ${au}`);
     const venue = pub.journal || pub.venue || '';
     if (venue) lines.push((ty === 'CONF' || ty === 'ABST') ? `BT  - ${venue}` : `JO  - ${venue}`);
-    if (pub.year)  lines.push(`PY  - ${pub.year}`);
-    if (doi)       lines.push(`DO  - ${doi}`);
-    if (pub.pmid)  lines.push(`AN  - ${pub.pmid}`);
+    if (pub.year)           lines.push(`PY  - ${pub.year}`);
+    if (pub.event_date)     lines.push(`DA  - ${pub.event_date}`);
+    if (pub.event_location) lines.push(`CY  - ${pub.event_location}`);
+    if (doi)                lines.push(`DO  - ${doi}`);
+    if (pub.pmid)           lines.push(`AN  - ${pub.pmid}`);
     lines.push('ER  - ');
     return lines.join('\n');
   });

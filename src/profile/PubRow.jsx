@@ -6,7 +6,7 @@ import Btn from '../components/Btn';
 
 export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
   const [editing, setEditing] = useState(false);
-  const [form, setForm]       = useState({title:pub.title||'',authors:pub.authors||'',journal:pub.journal||'',year:pub.year||'',doi:pub.doi||'',pub_type:pub.pub_type||'journal',venue:pub.venue||''});
+  const [form, setForm]       = useState({title:pub.title||'',authors:pub.authors||'',journal:pub.journal||'',year:pub.year||'',doi:pub.doi||'',pub_type:pub.pub_type||'journal',venue:pub.venue||'',event_date:pub.event_date||'',event_location:pub.event_location||''});
   const [rowSaving, setRowSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [showMenu, setShowMenu] = useState(false);
@@ -71,23 +71,33 @@ export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
           ))}
         </div>
       </div>
-      {[
-        ['title','Title *','Full title of publication or presentation'],
-        ['authors','Authors','Smith J, Jones A et al.'],
-        ['year','Year','2024'],
-        ['journal',['journal','review','preprint'].includes(form.pub_type)?'Journal':'Venue / Conference',
-          ['conference','poster'].includes(form.pub_type)?'e.g. ASCO Annual Meeting':'e.g. Nature Medicine'],
-        ['doi','DOI / URL','10.1038/... or https://...'],
-      ].map(([f,l,ph])=>(
-        <div key={f} style={{marginBottom:10}}>
-          <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:4}}>{l}</label>
-          <input value={form[f]} onChange={e=>setForm(p=>({...p,[f]:e.target.value}))} placeholder={ph}
-            style={{width:'100%',background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
-        </div>
-      ))}
+      {(() => {
+        const isEvent = ['conference','poster','lecture'].includes(form.pub_type);
+        const fields = [
+          ['title','Title *','Full title of publication or presentation'],
+          ['authors','Authors','Smith J, Jones A et al.'],
+          ['year','Year','2024'],
+          ['journal', isEvent ? 'Venue / Conference' : (['journal','review','preprint'].includes(form.pub_type) ? 'Journal' : 'Venue / Conference'),
+            isEvent ? 'e.g. ASCO Annual Meeting' : 'e.g. Nature Medicine'],
+          // Event-only fields — show right after the venue so they're
+          // in the natural reading order for a presentation entry.
+          ...(isEvent ? [
+            ['event_date',     'Event date (optional)',     'e.g. 2024-08-30, Aug 2024, or 2024'],
+            ['event_location', 'Event location (optional)', 'e.g. Barcelona, Spain'],
+          ] : []),
+          ['doi', isEvent ? 'DOI / URL (optional)' : 'DOI / URL', '10.1038/... or https://...'],
+        ];
+        return fields.map(([f,l,ph])=>(
+          <div key={f} style={{marginBottom:10}}>
+            <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:4}}>{l}</label>
+            <input value={form[f]} onChange={e=>setForm(p=>({...p,[f]:e.target.value}))} placeholder={ph}
+              style={{width:'100%',background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
+          </div>
+        ));
+      })()}
       {saveError && <div style={{fontSize:12,color:T.ro,marginBottom:8}}>{saveError}</div>}
       <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-        <Btn onClick={()=>{setEditing(false);setSaveError('');setForm({title:pub.title||'',authors:pub.authors||'',journal:pub.journal||'',year:pub.year||'',doi:pub.doi||'',pub_type:pub.pub_type||'journal',venue:pub.venue||''});}}>Cancel</Btn>
+        <Btn onClick={()=>{setEditing(false);setSaveError('');setForm({title:pub.title||'',authors:pub.authors||'',journal:pub.journal||'',year:pub.year||'',doi:pub.doi||'',pub_type:pub.pub_type||'journal',venue:pub.venue||'',event_date:pub.event_date||'',event_location:pub.event_location||''});}}>Cancel</Btn>
         <Btn variant="s" onClick={saveEdit} disabled={rowSaving||!form.title.trim()}>{rowSaving?'Saving...':'Save'}</Btn>
       </div>
     </div>
@@ -129,6 +139,12 @@ export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
             :pub.title}
         </div>
         {pub.authors&&<div style={{fontSize:11.5,color:T.mu,marginBottom:4}}>{formatAuthorsVancouver(pub.authors)}</div>}
+        {(pub.event_date || pub.event_location) && (
+          <div style={{fontSize:11.5,color:T.mu,marginBottom:4,display:'flex',gap:10,flexWrap:'wrap'}}>
+            {pub.event_date     && <span>📅 {pub.event_date}</span>}
+            {pub.event_location && <span>📍 {pub.event_location}</span>}
+          </div>
+        )}
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
           {(pub.citation||pub.journal||pub.venue)&&<span style={{fontSize:11.5,color:T.mu}}>{pub.citation||pub.journal||pub.venue}</span>}
           {pub.citations>0&&<span style={{fontSize:10.5,color:T.mu,background:T.s2,borderRadius:10,padding:'1px 7px'}}>{pub.citations} cited</span>}
