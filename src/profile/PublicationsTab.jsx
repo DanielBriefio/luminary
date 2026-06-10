@@ -196,7 +196,7 @@ function doExportRis(pubs) {
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
 import { capture } from '../lib/analytics';
-import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef } from '../lib/utils';
+import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef, fetchOpenAlexCitationsByDoi, mapWithConcurrency, enrichPublicationsWithOpenAlex } from '../lib/utils';
 import { parseRis, parseBib, buildCitationFromRef } from '../lib/referenceUtils';
 import { typeIcon, typeLabel } from '../lib/pubUtils';
 import Btn from '../components/Btn';
@@ -254,6 +254,47 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
   const [risSaving,     setRisSaving]     = useState(false);
   const [showExport,   setShowExport]   = useState(false);
   const exportRef = useRef(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState('');
+
+  // One-click bulk: pull cited_by_count from OpenAlex for every pub that
+  // has a DOI and update the row when the value differs from what's
+  // stored. Concurrency-capped so we don't hammer the API even for users
+  // with hundreds of publications.
+  const refreshCitations = async () => {
+    if (refreshing) return;
+    const withDoi = pubs.filter(p => p.doi);
+    if (!withDoi.length) {
+      setRefreshMsg('No publications with a DOI to look up.');
+      setTimeout(() => setRefreshMsg(''), 4000);
+      return;
+    }
+    setRefreshing(true);
+    setRefreshMsg(`Looking up ${withDoi.length} publication${withDoi.length===1?'':'s'} on OpenAlex…`);
+    const results = await mapWithConcurrency(withDoi, async (p) => {
+      const n = await fetchOpenAlexCitationsByDoi(p.doi);
+      return { id: p.id, citations: n };
+    }, 5);
+    const updates = results.filter(r => r.citations != null && r.citations !== (pubs.find(p=>p.id===r.id)?.citations || 0));
+    if (updates.length) {
+      // Update DB sequentially-but-parallel — each row independently.
+      await Promise.all(updates.map(u =>
+        supabase.from('publications').update({ citations: u.citations }).eq('id', u.id)
+      ));
+      // Local state merge.
+      setPubs(prev => prev.map(p => {
+        const u = updates.find(x => x.id === p.id);
+        return u ? { ...p, citations: u.citations } : p;
+      }));
+    }
+    const missed = withDoi.length - results.filter(r => r.citations != null).length;
+    const parts = [`Updated ${updates.length} publication${updates.length===1?'':'s'}`];
+    if (missed) parts.push(`${missed} not found on OpenAlex`);
+    setRefreshMsg(parts.join(' · '));
+    setRefreshing(false);
+    setTimeout(() => setRefreshMsg(''), 6000);
+    capture('publications_citations_refreshed', { total: withDoi.length, updated: updates.length, missed });
+  };
 
   useEffect(()=>{
     if(!user) return;
@@ -292,7 +333,13 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
             year:String(p.year||''), doi:p.doi||'', authors:p.authors||'',
             pmid:'', pub_type:p.pub_type||'journal', venue:p.venue||'', source:'cv' }))
         ).select();
-        if(data) { setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'ai' }); }
+        if(data) {
+          setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+          capture('publication_added', { source: 'ai' });
+          enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
+            setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+          });
+        }
       }
       onPendingConsumed?.();
     };
@@ -546,7 +593,13 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
             year:String(p.year||''), doi:p.doi||'', authors:p.authors||'',
             pmid:'', pub_type:p.pub_type||'journal', venue:p.venue||'', source:'cv' }))
         ).select();
-        if(data) { setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'ai' }); }
+        if(data) {
+          setPubs(prev=>[...data,...prev].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+          capture('publication_added', { source: 'ai' });
+          enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
+            setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+          });
+        }
       }
     }
 
@@ -604,7 +657,13 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       pmid:'', pub_type:pub.pub_type||'other', venue:pub.venue||pub.journal||'',
       source:'document'
     }).select().single();
-    if(data) { setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'ai' }); }
+    if(data) {
+      setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+      capture('publication_added', { source: 'ai' });
+      enrichPublicationsWithOpenAlex([data], supabase, (id, n) => {
+        setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+      });
+    }
   };
 
   const rejectImportPub = (idx) => setImportRejected(s=>new Set([...s,idx]));
@@ -652,7 +711,13 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         citation: buildCitationFromRef(p),
       }))
     ).select();
-    if (data) { setPubs(prev => [...data, ...prev].sort((a, b) => (b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'ris' }); }
+    if (data) {
+      setPubs(prev => [...data, ...prev].sort((a, b) => (b.year||'').localeCompare(a.year||'')));
+      capture('publication_added', { source: 'ris' });
+      enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
+        setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+      });
+    }
     setRisSaving(false);
     setShowRisImport(false);
     setRisProposals([]);
@@ -764,7 +829,13 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     const { data } = await supabase.from('publications').insert({
       user_id:user.id, ...newPub, pmid:'', source:'manual'
     }).select().single();
-    if(data) { setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||''))); capture('publication_added', { source: 'manual' }); }
+    if(data) {
+      setPubs(p=>[data,...p].sort((a,b)=>(b.year||'').localeCompare(a.year||'')));
+      capture('publication_added', { source: 'manual' });
+      enrichPublicationsWithOpenAlex([data], supabase, (id, n) => {
+        setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+      });
+    }
     setSaving(false);
     closeAddPanel();
   };
@@ -860,8 +931,18 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         </div>
       )}
 
-      <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:20,flexWrap:'wrap'}}>
+      <div style={{display:'flex',alignItems:'center',gap:9,marginBottom: refreshMsg ? 6 : 20,flexWrap:'wrap'}}>
         <div style={{fontWeight:700,fontSize:13,flex:1}}>{pubs.length} publication{pubs.length!==1?'s':''}</div>
+        {pubs.length > 0 && pubs.some(p => p.doi) && (
+          <button
+            onClick={refreshCitations}
+            disabled={refreshing}
+            title="Pull live citation counts from OpenAlex for every publication with a DOI"
+            style={{display:'inline-flex',alignItems:'center',gap:5,padding:'6px 14px',borderRadius:22,cursor:refreshing?'default':'pointer',fontSize:12,fontWeight:600,border:`1.5px solid ${T.bdr}`,background:refreshing?T.s2:'transparent',color:T.mu,fontFamily:'inherit',opacity:refreshing?0.7:1}}
+          >
+            {refreshing ? <><Spinner size={11}/> Refreshing…</> : '↻ Refresh citations'}
+          </button>
+        )}
         {pubs.length > 0 && (
           <div ref={exportRef} style={{position:'relative'}}>
             <button
@@ -905,6 +986,10 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         </label>
         <Btn variant="v" onClick={()=>{ if(showAdd) closeAddPanel(); else setShowAdd(true); }} style={{fontSize:12}}>+ Add publication</Btn>
       </div>
+
+      {refreshMsg && (
+        <div style={{fontSize:11.5,color:T.mu,marginBottom:14}}>{refreshMsg}</div>
+      )}
 
       {showSearch&&(
         <div style={{background:`linear-gradient(135deg,${T.v2},${T.bl2})`,borderRadius:12,padding:16,marginBottom:20,border:`1px solid rgba(108,99,255,.15)`}}>

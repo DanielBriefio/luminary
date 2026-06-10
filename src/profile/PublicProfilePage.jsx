@@ -235,6 +235,12 @@ export default function PublicProfilePage({ slug }) {
             {/* Stats */}
             {(() => {
               const isClinician = profile.work_mode === 'clinician';
+              // Citations + h-index tiles only render when we have real
+              // data — showing "—" for users with un-enriched publications
+              // signals "this person has no impact" which is the wrong
+              // empty-state message. OpenAlex enrichment fills these
+              // automatically on import + via the Refresh button.
+              const hasImpactData = pubStats.totalCitations > 0 || pubStats.hIndex > 0;
               const statItems = isClinician ? [
                 [followStats.followers, 'Followers'],
                 [followStats.following, 'Following'],
@@ -246,8 +252,10 @@ export default function PublicProfilePage({ slug }) {
                 [followStats.followers, 'Followers'],
                 [followStats.following, 'Following'],
                 [pubStats.pubCount || '—', 'Publications'],
-                [pubStats.totalCitations || '—', 'Citations'],
-                [pubStats.hIndex > 0 ? `h${pubStats.hIndex}` : '—', 'h-index'],
+                ...(hasImpactData ? [
+                  [pubStats.totalCitations, 'Citations'],
+                  [`h${pubStats.hIndex}`, 'h-index'],
+                ] : []),
               ];
               return (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${statItems.length},1fr)`, gap: 9, margin: '14px 0' }}>

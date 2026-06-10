@@ -83,6 +83,64 @@ export function extractCorrespondingAuthorFromEpmc(result) {
   return { email: '', name: '' };
 }
 
+// OpenAlex is the open scholarly index that maintains live citation
+// counts for ~250M works. Free, no auth needed. We look up by DOI and
+// pull `cited_by_count` to keep `publications.citations` current.
+// Returns the integer count, or null if the DOI isn't indexed / the
+// request fails — callers must handle null gracefully (don't overwrite
+// an existing citation value with 0).
+export async function fetchOpenAlexCitationsByDoi(doi) {
+  if (!doi) return null;
+  const clean = String(doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').trim();
+  if (!clean) return null;
+  try {
+    const r = await fetch(
+      `https://api.openalex.org/works/doi:${encodeURIComponent(clean)}` +
+      `?select=cited_by_count`
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    const n = j?.cited_by_count;
+    return Number.isFinite(n) ? n : null;
+  } catch { return null; }
+}
+
+// Fire-and-forget OpenAlex enrichment for newly-inserted publications.
+// Rows must come from a .select() chained on the insert so we have ids
+// to update. Optional onUpdate callback fires per-row so the UI can
+// merge the new count as it arrives. Safe to await OR drop on the
+// floor — never throws.
+export async function enrichPublicationsWithOpenAlex(rows, supabase, onUpdate) {
+  if (!rows?.length) return;
+  const candidates = rows.filter(r => r?.id && r?.doi && !(r.citations > 0));
+  if (!candidates.length) return;
+  try {
+    await mapWithConcurrency(candidates, async (r) => {
+      const n = await fetchOpenAlexCitationsByDoi(r.doi);
+      if (n == null || n === (r.citations || 0)) return;
+      await supabase.from('publications').update({ citations: n }).eq('id', r.id);
+      if (onUpdate) onUpdate(r.id, n);
+    }, 5);
+  } catch { /* fire-and-forget */ }
+}
+
+// Bounded-concurrency map for the bulk enrichment path — OpenAlex is
+// fine with 10/sec without an API key, so 5 in flight is comfortably
+// under that even with retries.
+export async function mapWithConcurrency(items, fn, concurrency = 5) {
+  const out = new Array(items.length);
+  let i = 0;
+  async function worker() {
+    while (true) {
+      const idx = i++;
+      if (idx >= items.length) return;
+      out[idx] = await fn(items[idx], idx);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return out;
+}
+
 export function buildCitationFromCrossRef(w, doi) {
   if (!w) return '';
   const journal = w['short-container-title']?.[0] || w['container-title']?.[0] || '';

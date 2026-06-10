@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
-import { deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
+import { deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, enrichPublicationsWithOpenAlex } from '../lib/utils';
 import { formatDateRange } from '../lib/linkedInUtils';
 import Btn from '../components/Btn';
 import ConflictResolverModal from '../components/ConflictResolverModal';
@@ -194,9 +194,10 @@ export default function OrcidImporter({ user, profile, setProfile, onClose }) {
       const existingDois = new Set((existingPubs||[]).map(p=>(p.doi||'').toLowerCase()).filter(Boolean));
       const toInsert = publications.filter(p => p.title && !(p.doi && existingDois.has(p.doi.toLowerCase())));
       if (toInsert.length) {
-        await supabase.from('publications').insert(
+        const { data: inserted } = await supabase.from('publications').insert(
           toInsert.map(p=>({ user_id:user.id, title:p.title, journal:p.journal, year:p.year, doi:p.doi, pmid:p.pmid||'', authors:'', pub_type:p.pub_type||'journal', source:'orcid' }))
-        );
+        ).select();
+        enrichPublicationsWithOpenAlex(inserted || [], supabase);
       }
     }
     const { data } = await supabase.from('profiles').update(baseUpdates).eq('id', user.id).select().single();

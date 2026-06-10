@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T, TIER1_LIST, getTier2, getTier1ForTier2, WORK_MODE_MAP, TIER_CONFIG, getTierFromLumens } from '../lib/constants';
-import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher } from '../lib/utils';
+import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, enrichPublicationsWithOpenAlex } from '../lib/utils';
 import { formatDateRange } from '../lib/linkedInUtils';
 import Av from '../components/Av';
 import Btn from '../components/Btn';
@@ -254,11 +254,12 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
         return true;
       });
       if(toInsert.length) {
-        await supabase.from('publications').insert(
+        const { data: inserted } = await supabase.from('publications').insert(
           toInsert.map(p=>({ user_id:user.id, title:p.title||'', journal:p.journal||'',
             year:String(p.year||''), doi:p.doi||'', authors:p.authors||'',
             pmid:'', pub_type:p.pub_type||'journal', venue:p.venue||'', source:'cv' }))
-        );
+        ).select();
+        enrichPublicationsWithOpenAlex(inserted || [], supabase);
         pubsInserted = toInsert.length;
       }
     }
@@ -1346,13 +1347,21 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
                   profile?.clinical_highlight_value
                     ? [profile.clinical_highlight_value, profile.clinical_highlight_label||'Highlight', null, false]
                     : [userPosts.length, 'Posts', null, false],
-                ] : [
-                  [followStats.followers, 'Followers', 'followers', false],
-                  [followStats.following, 'Following', 'following', false],
-                  [pubStats.pubCount||'—', 'Publications', null, false],
-                  [pubStats.totalCitations||'—', 'Citations', null, false],
-                  [pubStats.hIndex>0?`h${pubStats.hIndex}`:'—', 'h-index', null, false],
-                ];
+                ] : (() => {
+                  // Drop Citations + h-index tiles when both are zero —
+                  // un-enriched publications would render as "—" twice
+                  // which signals "no impact" rather than "no data yet".
+                  const hasImpactData = pubStats.totalCitations > 0 || pubStats.hIndex > 0;
+                  return [
+                    [followStats.followers, 'Followers', 'followers', false],
+                    [followStats.following, 'Following', 'following', false],
+                    [pubStats.pubCount||'—', 'Publications', null, false],
+                    ...(hasImpactData ? [
+                      [pubStats.totalCitations, 'Citations', null, false],
+                      [`h${pubStats.hIndex}`, 'h-index', null, false],
+                    ] : []),
+                  ];
+                })();
                 return (
                   <div style={{
                     display:'grid',
