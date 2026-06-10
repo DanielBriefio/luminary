@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { T, PUB_TYPES } from '../lib/constants';
-import { typeIcon, typeLabel } from '../lib/pubUtils';
+import { typeIcon, typeLabel, formatAuthorsVancouver, formatVancouver } from '../lib/pubUtils';
 import Btn from '../components/Btn';
 
 export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
@@ -10,7 +10,20 @@ export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
   const [rowSaving, setRowSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [showMenu, setShowMenu] = useState(false);
+  const [copied, setCopied]   = useState(false);
   const menuRef = useRef(null);
+
+  const copyCitation = async () => {
+    const text = formatVancouver(pub);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // navigator.clipboard rejects on insecure contexts / older browsers
+      setCopied(false);
+    }
+  };
   useEffect(() => {
     if (!showMenu) return;
     const handler = (e) => { if (!menuRef.current?.contains(e.target)) setShowMenu(false); };
@@ -115,13 +128,17 @@ export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
             ?<a href={pub.doi.startsWith('http')?pub.doi:`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer" style={{color:T.text,textDecoration:'none'}}>{pub.title}</a>
             :pub.title}
         </div>
-        {pub.authors&&<div style={{fontSize:11.5,color:T.mu,marginBottom:4}}>{pub.authors}</div>}
+        {pub.authors&&<div style={{fontSize:11.5,color:T.mu,marginBottom:4}}>{formatAuthorsVancouver(pub.authors)}</div>}
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
           {(pub.citation||pub.journal||pub.venue)&&<span style={{fontSize:11.5,color:T.mu}}>{pub.citation||pub.journal||pub.venue}</span>}
           {pub.citations>0&&<span style={{fontSize:10.5,color:T.mu,background:T.s2,borderRadius:10,padding:'1px 7px'}}>{pub.citations} cited</span>}
           {pub.full_text_url&&<a href={pub.full_text_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'#059669',textDecoration:'none',background:'#d1fae5',padding:'2px 8px',borderRadius:10}}>Full Text ↗</a>}
           {pub.doi&&<a href={pub.doi.startsWith('http')?pub.doi:`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:T.v,textDecoration:'none',background:T.v2,padding:'2px 8px',borderRadius:10}}>DOI ↗</a>}
           {pub.pmid&&<a href={`https://pubmed.ncbi.nlm.nih.gov/${pub.pmid}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:T.bl,textDecoration:'none',background:T.bl2,padding:'2px 8px',borderRadius:10}}>PubMed ↗</a>}
+          <button onClick={copyCitation} title="Copy citation in Vancouver format"
+            style={{fontSize:11,color:copied?T.gr:T.mu,background:copied?T.gr2:T.s2,border:'none',padding:'2px 8px',borderRadius:10,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>
+            {copied ? '✓ Copied' : '📋 Copy'}
+          </button>
         </div>
       </div>
     </div>

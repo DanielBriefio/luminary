@@ -2,39 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 
 // ─── Export helpers ───────────────────────────────────────────────────────────
 
-function splitAuthors(str) {
-  if (!str?.trim()) return [];
-  // PubMed/EPMC format: "Smith J, Jones A, Brown B"
-  // Split on ", " — handles "Last FI, Last FI" correctly
-  return str.split(/\s*;\s*|\s*,\s*(?=[A-Z\u00C0-\u024F])/)
-    .map(a => a.trim()).filter(Boolean);
-}
-
-function formatAuthorsVancouver(authorsStr) {
-  const parts = splitAuthors(authorsStr);
-  if (!parts.length) return '';
-  if (parts.length <= 6) return parts.join(', ');
-  return parts.slice(0, 6).join(', ') + ', et al.';
-}
-
-function formatVancouver(pub) {
-  const segs = [];
-  const authors = formatAuthorsVancouver(pub.authors);
-  if (authors) segs.push(authors + '.');
-  if (pub.title) segs.push(pub.title.replace(/[.\s]+$/, '') + '.');
-  const venue = pub.journal || pub.venue;
-  if (venue) segs.push(venue + '.');
-  if (pub.year)  segs.push(pub.year + '.');
-  const extras = [];
-  if (pub.doi) {
-    const doi = pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`;
-    extras.push(`doi: ${doi}`);
-  }
-  if (pub.pmid) extras.push(`PubMed PMID: ${pub.pmid}`);
-  if (extras.length) segs.push(extras.join('; ') + '.');
-  return segs.join(' ');
-}
-
 function bibKey(pub) {
   const first = splitAuthors(pub.authors)[0] || '';
   const lastName = first.split(/\s+/).slice(-1)[0].replace(/[^a-zA-Z]/g, '') || 'Unknown';
@@ -196,9 +163,9 @@ function doExportRis(pubs) {
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
 import { capture } from '../lib/analytics';
-import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef, fetchOpenAlexWorkByDoi, mapWithConcurrency, enrichPublicationsWithOpenAlex } from '../lib/utils';
+import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef, fetchOpenAlexWorkByDoi, fetchCrossRefWorkByDoi, mapWithConcurrency, enrichPublicationsWithOpenAlex } from '../lib/utils';
 import { parseRis, parseBib, buildCitationFromRef } from '../lib/referenceUtils';
-import { typeIcon, typeLabel } from '../lib/pubUtils';
+import { typeIcon, typeLabel, splitAuthors, formatAuthorsVancouver, formatVancouver } from '../lib/pubUtils';
 import Btn from '../components/Btn';
 import Spinner from '../components/Spinner';
 import ConflictResolverModal from '../components/ConflictResolverModal';
@@ -270,40 +237,52 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       return;
     }
     setRefreshing(true);
-    setRefreshMsg(`Looking up ${withDoi.length} publication${withDoi.length===1?'':'s'} on OpenAlex…`);
-    // Reuse the enrichment helper so the refresh button picks up the
-    // same `pub_type` auto-detection as the per-insert path.
+    setRefreshMsg(`Looking up ${withDoi.length} publication${withDoi.length===1?'':'s'}…`);
+    // Mirror the per-insert enrichment: OpenAlex for citation count +
+    // type, CrossRef for the formal Vancouver-style citation string
+    // when the row doesn't already have one.
     let citationCount = 0;
     let typeCount     = 0;
+    let citeStrCount  = 0;
     let foundCount    = 0;
     await mapWithConcurrency(withDoi, async (p) => {
-      const w = await fetchOpenAlexWorkByDoi(p.doi);
-      if (!w) return;
+      const needsCitation = !p.citation || !p.citation.trim();
+      const [w, cr] = await Promise.all([
+        fetchOpenAlexWorkByDoi(p.doi),
+        needsCitation ? fetchCrossRefWorkByDoi(p.doi) : Promise.resolve(null),
+      ]);
+      if (!w && !cr) return;
       foundCount++;
       const patch = {};
-      if (w.citations != null && w.citations !== (p.citations || 0)) {
+      if (w?.citations != null && w.citations !== (p.citations || 0)) {
         patch.citations = w.citations;
       }
       const isDefault = !p.pub_type || p.pub_type === 'journal';
-      if (w.pubType && isDefault && w.pubType !== p.pub_type) {
+      if (w?.pubType && isDefault && w.pubType !== p.pub_type) {
         patch.pub_type = w.pubType;
+      }
+      if (cr) {
+        const citation = buildCitationFromCrossRef(cr, p.doi);
+        if (citation) patch.citation = citation;
       }
       if (!Object.keys(patch).length) return;
       await supabase.from('publications').update(patch).eq('id', p.id);
       if (patch.citations != null) citationCount++;
       if (patch.pub_type)          typeCount++;
+      if (patch.citation)          citeStrCount++;
       setPubs(prev => prev.map(x => x.id === p.id ? { ...x, ...patch } : x));
     }, 5);
     const missed = withDoi.length - foundCount;
     const parts = [];
     if (citationCount) parts.push(`${citationCount} citation${citationCount===1?'':'s'} updated`);
     if (typeCount)     parts.push(`${typeCount} re-categorised`);
+    if (citeStrCount)  parts.push(`${citeStrCount} formal citation${citeStrCount===1?'':'s'} added`);
     if (!parts.length) parts.push('No changes — everything was already up to date');
-    if (missed) parts.push(`${missed} not found on OpenAlex`);
+    if (missed) parts.push(`${missed} not found`);
     setRefreshMsg(parts.join(' · '));
     setRefreshing(false);
     setTimeout(() => setRefreshMsg(''), 6000);
-    capture('publications_citations_refreshed', { total: withDoi.length, citations_updated: citationCount, types_updated: typeCount, missed });
+    capture('publications_citations_refreshed', { total: withDoi.length, citations_updated: citationCount, types_updated: typeCount, citations_str_added: citeStrCount, missed });
     if (citationCount) onPubStatsChanged?.();
   };
 

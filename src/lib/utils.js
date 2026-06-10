@@ -139,30 +139,50 @@ function openAlexTypeToPubType(t) {
   return null;
 }
 
-// Fire-and-forget OpenAlex enrichment for newly-inserted publications.
-// Rows must come from a .select() chained on the insert so we have ids
-// to update. Optional onUpdate callback fires per-row so the UI can
-// merge the new count as it arrives. Patches `pub_type` too when the
-// current value is null or the inserter's 'journal' default and
-// OpenAlex returns a more specific type (book, conference, preprint).
-// Safe to await OR drop on the floor — never throws.
+// CrossRef returns canonical bibliographic data (journal short name,
+// volume, issue, pages) we use to build the formal Vancouver-style
+// `citation` string. Free, no auth. Returns the work object or null.
+export async function fetchCrossRefWorkByDoi(doi) {
+  if (!doi) return null;
+  const clean = String(doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').trim();
+  if (!clean) return null;
+  try {
+    const r = await fetch(`https://api.crossref.org/works/${encodeURIComponent(clean)}`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j?.message || null;
+  } catch { return null; }
+}
+
+// Fire-and-forget OpenAlex + CrossRef enrichment for newly-inserted
+// publications. Rows must come from a .select() chained on the insert
+// so we have ids to update. Optional onUpdate callback fires per-row
+// so the UI can merge the new patch as it arrives. The patch may
+// include `citations`, `pub_type`, and `citation` (the formal
+// Vancouver string). Won't overwrite user choices on pub_type, and
+// won't refetch a citation that's already populated. Never throws.
 export async function enrichPublicationsWithOpenAlex(rows, supabase, onUpdate) {
   if (!rows?.length) return;
   const candidates = rows.filter(r => r?.id && r?.doi);
   if (!candidates.length) return;
   try {
     await mapWithConcurrency(candidates, async (r) => {
-      const w = await fetchOpenAlexWorkByDoi(r.doi);
-      if (!w) return;
+      const needsCitation = !r.citation || !r.citation.trim();
+      const [w, cr] = await Promise.all([
+        fetchOpenAlexWorkByDoi(r.doi),
+        needsCitation ? fetchCrossRefWorkByDoi(r.doi) : Promise.resolve(null),
+      ]);
       const patch = {};
-      if (w.citations != null && w.citations !== (r.citations || 0)) {
+      if (w?.citations != null && w.citations !== (r.citations || 0)) {
         patch.citations = w.citations;
       }
-      // Only auto-set pub_type when the row has the import default
-      // (null or 'journal') — don't overwrite a user's manual choice.
       const isDefault = !r.pub_type || r.pub_type === 'journal';
-      if (w.pubType && isDefault && w.pubType !== r.pub_type) {
+      if (w?.pubType && isDefault && w.pubType !== r.pub_type) {
         patch.pub_type = w.pubType;
+      }
+      if (cr) {
+        const citation = buildCitationFromCrossRef(cr, r.doi);
+        if (citation) patch.citation = citation;
       }
       if (!Object.keys(patch).length) return;
       await supabase.from('publications').update(patch).eq('id', r.id);
