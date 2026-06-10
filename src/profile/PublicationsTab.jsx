@@ -163,7 +163,7 @@ function doExportRis(pubs) {
 import { supabase } from '../supabase';
 import { T, PUB_TYPES, EDGE_FN, EDGE_HEADERS } from '../lib/constants';
 import { capture } from '../lib/analytics';
-import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef, fetchOpenAlexWorkByDoi, fetchCrossRefWorkByDoi, mapWithConcurrency, enrichPublicationsWithOpenAlex } from '../lib/utils';
+import { normForMatch, deduplicateSectionFuzzy, scoreWorkMatch, scoreEduMatch, mergeRicher, buildCitationFromEpmc, buildCitationFromCrossRef, fetchOpenAlexWorkByDoi, fetchCrossRefWorkByDoi, authorsFromCrossRef, mapWithConcurrency, enrichPublicationsWithOpenAlex } from '../lib/utils';
 import { parseRis, parseBib, buildCitationFromRef } from '../lib/referenceUtils';
 import { typeIcon, typeLabel, splitAuthors, formatAuthorsVancouver, formatVancouver } from '../lib/pubUtils';
 import Btn from '../components/Btn';
@@ -244,12 +244,15 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     let citationCount = 0;
     let typeCount     = 0;
     let citeStrCount  = 0;
+    let authorsCount  = 0;
     let foundCount    = 0;
     await mapWithConcurrency(withDoi, async (p) => {
       const needsCitation = !p.citation || !p.citation.trim();
+      const needsAuthors  = !p.authors  || !p.authors.trim();
+      const wantCrossRef  = needsCitation || needsAuthors;
       const [w, cr] = await Promise.all([
         fetchOpenAlexWorkByDoi(p.doi),
-        needsCitation ? fetchCrossRefWorkByDoi(p.doi) : Promise.resolve(null),
+        wantCrossRef ? fetchCrossRefWorkByDoi(p.doi) : Promise.resolve(null),
       ]);
       if (!w && !cr) return;
       foundCount++;
@@ -262,14 +265,21 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
         patch.pub_type = w.pubType;
       }
       if (cr) {
-        const citation = buildCitationFromCrossRef(cr, p.doi);
-        if (citation) patch.citation = citation;
+        if (needsCitation) {
+          const citation = buildCitationFromCrossRef(cr, p.doi);
+          if (citation) patch.citation = citation;
+        }
+        if (needsAuthors) {
+          const authors = authorsFromCrossRef(cr);
+          if (authors) patch.authors = authors;
+        }
       }
       if (!Object.keys(patch).length) return;
       await supabase.from('publications').update(patch).eq('id', p.id);
       if (patch.citations != null) citationCount++;
       if (patch.pub_type)          typeCount++;
       if (patch.citation)          citeStrCount++;
+      if (patch.authors)           authorsCount++;
       setPubs(prev => prev.map(x => x.id === p.id ? { ...x, ...patch } : x));
     }, 5);
     const missed = withDoi.length - foundCount;
@@ -277,12 +287,13 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     if (citationCount) parts.push(`${citationCount} citation${citationCount===1?'':'s'} updated`);
     if (typeCount)     parts.push(`${typeCount} re-categorised`);
     if (citeStrCount)  parts.push(`${citeStrCount} formal citation${citeStrCount===1?'':'s'} added`);
+    if (authorsCount)  parts.push(`${authorsCount} author list${authorsCount===1?'':'s'} added`);
     if (!parts.length) parts.push('No changes — everything was already up to date');
     if (missed) parts.push(`${missed} not found`);
     setRefreshMsg(parts.join(' · '));
     setRefreshing(false);
     setTimeout(() => setRefreshMsg(''), 6000);
-    capture('publications_citations_refreshed', { total: withDoi.length, citations_updated: citationCount, types_updated: typeCount, citations_str_added: citeStrCount, missed });
+    capture('publications_citations_refreshed', { total: withDoi.length, citations_updated: citationCount, types_updated: typeCount, citations_str_added: citeStrCount, authors_added: authorsCount, missed });
     if (citationCount) onPubStatsChanged?.();
   };
 

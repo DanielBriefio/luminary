@@ -139,6 +139,24 @@ function openAlexTypeToPubType(t) {
   return null;
 }
 
+// PubMed-style author string ("Smith J, Jones A, Brown B") from a
+// CrossRef work's `author` array. CrossRef gives structured names,
+// we reduce to "Family Initials" — first letter of each given
+// name word. ORCID-imported rows arrive with authors=''; this is
+// how the Refresh path fills them in.
+export function authorsFromCrossRef(work) {
+  const authors = work?.author || [];
+  if (!authors.length) return '';
+  return authors.map(a => {
+    const family = (a.family || a.name || '').trim();
+    const initials = (a.given || '')
+      .split(/\s+/).filter(Boolean)
+      .map(g => g[0])
+      .join('');
+    return family + (initials ? ' ' + initials : '');
+  }).filter(s => s.trim()).join(', ');
+}
+
 // CrossRef returns canonical bibliographic data (journal short name,
 // volume, issue, pages) we use to build the formal Vancouver-style
 // `citation` string. Free, no auth. Returns the work object or null.
@@ -168,9 +186,11 @@ export async function enrichPublicationsWithOpenAlex(rows, supabase, onUpdate) {
   try {
     await mapWithConcurrency(candidates, async (r) => {
       const needsCitation = !r.citation || !r.citation.trim();
+      const needsAuthors  = !r.authors  || !r.authors.trim();
+      const wantCrossRef  = needsCitation || needsAuthors;
       const [w, cr] = await Promise.all([
         fetchOpenAlexWorkByDoi(r.doi),
-        needsCitation ? fetchCrossRefWorkByDoi(r.doi) : Promise.resolve(null),
+        wantCrossRef ? fetchCrossRefWorkByDoi(r.doi) : Promise.resolve(null),
       ]);
       const patch = {};
       if (w?.citations != null && w.citations !== (r.citations || 0)) {
@@ -181,8 +201,14 @@ export async function enrichPublicationsWithOpenAlex(rows, supabase, onUpdate) {
         patch.pub_type = w.pubType;
       }
       if (cr) {
-        const citation = buildCitationFromCrossRef(cr, r.doi);
-        if (citation) patch.citation = citation;
+        if (needsCitation) {
+          const citation = buildCitationFromCrossRef(cr, r.doi);
+          if (citation) patch.citation = citation;
+        }
+        if (needsAuthors) {
+          const authors = authorsFromCrossRef(cr);
+          if (authors) patch.authors = authors;
+        }
       }
       if (!Object.keys(patch).length) return;
       await supabase.from('publications').update(patch).eq('id', r.id);
