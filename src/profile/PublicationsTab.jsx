@@ -204,7 +204,7 @@ import Spinner from '../components/Spinner';
 import ConflictResolverModal from '../components/ConflictResolverModal';
 import SectionGroup from './SectionGroup';
 
-export default function PublicationsTab({ user, profile, setProfile, pendingCvPubs=[], onPendingConsumed, initialMode }) {
+export default function PublicationsTab({ user, profile, setProfile, pendingCvPubs=[], onPendingConsumed, initialMode, onPubStatsChanged }) {
   const [pubs,      setPubs]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [searching, setSearching] = useState(false);
@@ -294,6 +294,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     setRefreshing(false);
     setTimeout(() => setRefreshMsg(''), 6000);
     capture('publications_citations_refreshed', { total: withDoi.length, updated: updates.length, missed });
+    if (updates.length) onPubStatsChanged?.();
   };
 
   useEffect(()=>{
@@ -338,6 +339,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
           capture('publication_added', { source: 'ai' });
           enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
             setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+            onPubStatsChanged?.();
           });
         }
       }
@@ -598,6 +600,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
           capture('publication_added', { source: 'ai' });
           enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
             setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+            onPubStatsChanged?.();
           });
         }
       }
@@ -662,6 +665,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       capture('publication_added', { source: 'ai' });
       enrichPublicationsWithOpenAlex([data], supabase, (id, n) => {
         setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+        onPubStatsChanged?.();
       });
     }
   };
@@ -716,6 +720,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       capture('publication_added', { source: 'ris' });
       enrichPublicationsWithOpenAlex(data, supabase, (id, n) => {
         setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+        onPubStatsChanged?.();
       });
     }
     setRisSaving(false);
@@ -834,6 +839,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
       capture('publication_added', { source: 'manual' });
       enrichPublicationsWithOpenAlex([data], supabase, (id, n) => {
         setPubs(prev => prev.map(p => p.id === id ? { ...p, citations: n } : p));
+        onPubStatsChanged?.();
       });
     }
     setSaving(false);

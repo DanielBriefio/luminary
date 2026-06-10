@@ -646,16 +646,20 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       setFollowStats({followers:followers||0,following:following||0});
     });
   },[user]);
-  useEffect(()=>{
-    if(!user) return;
-    supabase.from('publications').select('citations').eq('user_id',user.id).then(({data})=>{
+  // Extracted so children (PublicationsTab) can fire it after they
+  // change citation data — otherwise this useEffect only runs on mount
+  // and the Citations / h-index tiles stay stale.
+  const refreshPubStats = () => {
+    if (!user) return;
+    supabase.from('publications').select('citations').eq('user_id', user.id).then(({data})=>{
       if(!data) return;
       const counts = data.map(p=>p.citations||0).sort((a,b)=>b-a);
       const hIndex = counts.reduce((h,c,i)=>c>=(i+1)?i+1:h, 0);
       const totalCitations = counts.reduce((s,c)=>s+c, 0);
       setPubStats({hIndex, totalCitations, pubCount:data.length});
     });
-  },[user]);
+  };
+  useEffect(refreshPubStats, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const wh  = profile?.work_history   || [];
@@ -1856,7 +1860,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               :<div style={{display:'flex',flexDirection:'column',gap:12}}>{userPosts.map(p=><PostCard key={p.id} post={p} currentUserId={user?.id} currentProfile={profile}/>)}</div>
           )}
 
-          {tab==='publications'&&<PublicationsTab user={user} profile={profile} setProfile={setProfile} pendingCvPubs={pendingCvPubs} onPendingConsumed={()=>setPendingCvPubs([])} initialMode={pubsInitialMode}/>}
+          {tab==='publications'&&<PublicationsTab user={user} profile={profile} setProfile={setProfile} pendingCvPubs={pendingCvPubs} onPendingConsumed={()=>setPendingCvPubs([])} initialMode={pubsInitialMode} onPubStatsChanged={refreshPubStats}/>}
         </div>
       </div>
 
