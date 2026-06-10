@@ -15,6 +15,14 @@ function topicCount(user, tier1) {
   return 0;
 }
 
+// Total tagged posts across all tier1s. Used when the Topics column is
+// sorted with no specific topic filter active.
+function topicTotal(user) {
+  let n = 0;
+  for (const t of (user.topic_distribution || [])) n += t.count;
+  return n;
+}
+
 const STAGE_STYLES = {
   visible:    { bg: T.v2,  color: T.v3, label: 'Visible'    },
   active:     { bg: T.gr2, color: T.gr, label: 'Active'     },
@@ -99,28 +107,36 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
     return true;
   });
 
-  // When a topic filter is active, default-sort users by their count for
-  // that topic (desc) — that's almost always what the operator wants
-  // ("show me the heaviest cardiology posters"). The explicit column
-  // headers still override via toggleSort.
-  const effectiveSortBy  = topicFilter && sortBy === 'created_at' ? 'topic' : sortBy;
-  const effectiveSortDir = effectiveSortBy === 'topic' ? 'desc' : sortDir;
+  // Setting a topic filter implicitly switches the sort to that topic's
+  // count desc — that's what an operator picking "cardiology" wants by
+  // default. They can override by clicking any other column header.
+  const handleTopicFilterChange = (val) => {
+    setTopicFilter(val);
+    if (val) { setSortBy('topic'); setSortDir('desc'); }
+    else if (sortBy === 'topic') { setSortBy('created_at'); setSortDir('desc'); }
+  };
 
   const sorted = [...filtered].sort((a, b) => {
-    if (effectiveSortBy === 'topic') {
-      return topicCount(b, topicFilter) - topicCount(a, topicFilter);
+    if (sortBy === 'topic') {
+      const aN = topicFilter ? topicCount(a, topicFilter) : topicTotal(a);
+      const bN = topicFilter ? topicCount(b, topicFilter) : topicTotal(b);
+      return sortDir === 'asc' ? aN - bN : bN - aN;
     }
-    const aVal = a[effectiveSortBy];
-    const bVal = b[effectiveSortBy];
+    if (sortBy === 'name') {
+      const cmp = (a.name || '').localeCompare(b.name || '');
+      return sortDir === 'asc' ? cmp : -cmp;
+    }
+    const aVal = a[sortBy];
+    const bVal = b[sortBy];
     if (aVal == null && bVal == null) return 0;
     if (aVal == null) return 1;
     if (bVal == null) return -1;
-    if (effectiveSortBy === 'created_at' || effectiveSortBy === 'last_active') {
+    if (sortBy === 'created_at' || sortBy === 'last_active') {
       const aT = new Date(aVal).getTime();
       const bT = new Date(bVal).getTime();
-      return effectiveSortDir === 'asc' ? aT - bT : bT - aT;
+      return sortDir === 'asc' ? aT - bT : bT - aT;
     }
-    return effectiveSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
   });
 
   const allSelected  = sorted.length > 0 && sorted.every(u => selected.has(u.id));
@@ -203,7 +219,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
         />
         <FilterSelect
           value={topicFilter}
-          onChange={setTopicFilter}
+          onChange={handleTopicFilterChange}
           placeholder="All topics"
           options={allTopics.map(t => ({ value: t, label: t }))}
         />
@@ -265,7 +281,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
               onChange={toggleAll}
               style={{ cursor: 'pointer' }}
             />
-            <div>User</div>
+            <SortableHeader label="User"        col="name"                   sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <div>Work mode</div>
             <SortableHeader label="Joined"      col="created_at"             sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <SortableHeader label="Last active" col="last_active"            sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
@@ -273,12 +289,13 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
             <SortableHeader label="Groups"      col="groups_count"           sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <SortableHeader label="Codes"       col="invite_codes_remaining" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
             <SortableHeader label="Lumens"      col="lumens_current_period"  sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-            <div title={topicFilter
-              ? `Filtered & sorted by ${topicFilter} (≥${topicMin})`
-              : 'Top tier1 topics by post count'}
-            >
-              Topics{topicFilter && <span style={{color:T.v}}> ↓</span>}
-            </div>
+            <SortableHeader
+              label={topicFilter ? `Topics (${topicFilter})` : 'Topics'}
+              col="topic"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={toggleSort}
+            />
             <div>Stage</div>
             <div>Ghost</div>
             <div></div>
@@ -414,15 +431,23 @@ function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDire
 
       <div
         onClick={onOpen}
-        style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', minWidth: 0 }}
       >
         <Av size={30} name={user.name} color={user.avatar_color} url={user.avatar_url || ''} />
-        <div>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>
+        <div style={{ minWidth: 0, overflow: 'hidden' }}>
+          <div style={{
+            fontSize: 13.5, fontWeight: 600, color: T.text,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
             {user.name || '—'}
           </div>
           {user.institution && (
-            <div style={{ fontSize: 11.5, color: T.mu }}>{user.institution}</div>
+            <div style={{
+              fontSize: 11.5, color: T.mu,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {user.institution}
+            </div>
           )}
         </div>
       </div>
@@ -521,7 +546,10 @@ function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDire
 }
 
 // columns: chk / User / Mode / Joined / LastActive / Posts / Groups / Codes / Lumens / Topics / Stage / Ghost / actions
-const GRID_COLS = '32px 1fr 110px 90px 90px 50px 50px 60px 80px 180px 100px 80px 100px';
+// `minmax(0,1fr)` on User keeps long names+institutions from pushing
+// later columns out of alignment (CSS Grid's default min-content track
+// size lets cells expand beyond their slot when content is wide).
+const GRID_COLS = 'minmax(32px,32px) minmax(0,1fr) 110px 90px 90px 50px 50px 60px 80px 170px 100px 80px 100px';
 
 function TopicsCell({ topics, highlight }) {
   const list = topics || [];
@@ -535,7 +563,8 @@ function TopicsCell({ topics, highlight }) {
       title={list.map(t => `${t.tier1} ${t.count}`).join(' · ')}
       style={{
         fontSize: 11.5, color: T.mu, lineHeight: 1.35,
-        overflow: 'hidden', textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap', overflow: 'hidden',
+        textOverflow: 'ellipsis', minWidth: 0,
       }}
     >
       {top.map((t, i) => {
