@@ -435,17 +435,27 @@ function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDire
       >
         <Av size={30} name={user.name} color={user.avatar_color} url={user.avatar_url || ''} />
         <div style={{ minWidth: 0, overflow: 'hidden' }}>
-          <div style={{
-            fontSize: 13.5, fontWeight: 600, color: T.text,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
+          <div
+            title={user.name || ''}
+            style={{
+              fontSize: 13.5, fontWeight: 600, color: T.text,
+              lineHeight: 1.25, wordBreak: 'break-word',
+              // Two-line clamp: full name visible for the vast majority
+              // of users, ellipsis + tooltip for extreme outliers.
+              display: '-webkit-box', WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}
+          >
             {user.name || '—'}
           </div>
           {user.institution && (
-            <div style={{
-              fontSize: 11.5, color: T.mu,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
+            <div
+              title={user.institution}
+              style={{
+                fontSize: 11.5, color: T.mu, marginTop: 1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
               {user.institution}
             </div>
           )}
