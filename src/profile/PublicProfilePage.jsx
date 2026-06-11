@@ -7,8 +7,10 @@ import Spinner from '../components/Spinner';
 import { formatDateRange } from '../lib/linkedInUtils';
 import { BusinessCardView } from './BusinessCardView';
 import OrcidBadge from '../components/OrcidBadge';
+import { useWindowSize } from '../lib/useWindowSize';
 
 export default function PublicProfilePage({ slug }) {
+  const { isMobile } = useWindowSize();
   const [profile,  setProfile]  = useState(null);
   const [pubs,     setPubs]     = useState([]);
   const [pubStats, setPubStats] = useState({ hIndex: 0, totalCitations: 0, pubCount: 0 });
@@ -258,10 +260,21 @@ export default function PublicProfilePage({ slug }) {
                 ] : []),
               ];
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${statItems.length},1fr)`, gap: 9, margin: '14px 0' }}>
+                <div style={{
+                  display: 'grid',
+                  // On phones the 5-tile researcher layout (Followers,
+                  // Following, Publications, Citations, h-index) gives
+                  // each tile ~65 px which truncates the labels and
+                  // overflows the numbers. Wrap to 2 cols whenever
+                  // there are >2 tiles — matches ProfileScreen.
+                  gridTemplateColumns: isMobile && statItems.length > 2
+                    ? 'repeat(2, 1fr)'
+                    : `repeat(${statItems.length},1fr)`,
+                  gap: 9, margin: '14px 0',
+                }}>
                   {statItems.map(([v, l]) => (
-                    <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 19, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v }}>{v}</div>
+                    <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center', minWidth: 0 }}>
+                      <div style={{ fontSize: 19, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div>
                       <div style={{ fontSize: 9.5, color: T.mu, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{l}</div>
                     </div>
                   ))}
