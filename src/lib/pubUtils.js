@@ -31,8 +31,19 @@ export function formatVancouver(pub) {
   if (authors) segs.push(authors + '.');
   if (pub.title) segs.push(pub.title.replace(/[.\s]+$/, '') + '.');
 
-  const isEvent = ['conference','poster','lecture'].includes(pub.pub_type);
-  if (isEvent) {
+  const isEvent  = ['conference','poster','lecture'].includes(pub.pub_type);
+  const isPatent = pub.pub_type === 'patent';
+  if (isPatent) {
+    // Patents overload columns: journal = patent number,
+    // event_date = filing date, event_location = jurisdiction/assignee.
+    // Format: "Inventors. Title. Patent number. Filed: date; jurisdiction."
+    if (pub.journal) segs.push(pub.journal + '.');
+    const tail = [];
+    if (pub.event_date)     tail.push('Filed: ' + pub.event_date);
+    else if (pub.year)      tail.push(pub.year);
+    if (pub.event_location) tail.push(pub.event_location);
+    if (tail.length) segs.push(tail.join('; ') + '.');
+  } else if (isEvent) {
     const venue = pub.venue || pub.journal;
     const parts = [];
     if (venue)             parts.push(venue);
@@ -48,8 +59,8 @@ export function formatVancouver(pub) {
 
   const extras = [];
   if (pub.doi) {
-    const doi = pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`;
-    extras.push(`doi: ${doi}`);
+    const url = pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`;
+    extras.push(isPatent ? `Available at: ${url}` : `doi: ${url}`);
   }
   if (pub.pmid) extras.push(`PubMed PMID: ${pub.pmid}`);
   if (extras.length) segs.push(extras.join('; ') + '.');

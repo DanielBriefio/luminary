@@ -14,6 +14,7 @@ function pubToBib(pub) {
   const type = ['journal','review','preprint'].includes(pub.pub_type) ? 'article'
     : ['conference','poster'].includes(pub.pub_type) ? 'inproceedings'
     : pub.pub_type === 'book' ? 'incollection'
+    : pub.pub_type === 'patent' ? 'misc'
     : 'misc';
   const venue = pub.journal || pub.venue || '';
   const doi = pub.doi
@@ -26,7 +27,8 @@ function pubToBib(pub) {
     type === 'article'        && venue && `  journal   = {${venue}}`,
     type === 'inproceedings'  && venue && `  booktitle = {${venue}}`,
     type === 'incollection'   && venue && `  booktitle = {${venue}}`,
-    type === 'misc'           && venue && `  howpublished = {${venue}}`,
+    type === 'misc' && pub.pub_type === 'patent' && venue && `  howpublished = {Patent: ${venue}}`,
+    type === 'misc' && pub.pub_type !== 'patent' && venue && `  howpublished = {${venue}}`,
     pub.year   && `  year      = {${pub.year}}`,
     pub.event_location && `  address   = {${pub.event_location}}`,
     pub.event_date     && `  month     = {${pub.event_date}}`,
@@ -51,6 +53,7 @@ function doExportPdf(pubs, authorName) {
     ['Journal Articles &amp; Reviews',   pubs.filter(p => !p.pub_type || ['journal','review','preprint'].includes(p.pub_type))],
     ['Presentations &amp; Posters',       pubs.filter(p => ['conference','poster','lecture'].includes(p.pub_type))],
     ['Book Chapters',                     pubs.filter(p => p.pub_type === 'book')],
+    ['Patents &amp; Inventions',          pubs.filter(p => p.pub_type === 'patent')],
     ['Other',                             pubs.filter(p => p.pub_type === 'other')],
   ].filter(([, items]) => items.length > 0);
 
@@ -137,7 +140,7 @@ function doExportRis(pubs) {
   const TY_MAP = {
     journal:'JOUR', review:'JOUR', preprint:'JOUR',
     conference:'CONF', poster:'ABST', lecture:'CONF',
-    book:'CHAP', other:'GEN',
+    book:'CHAP', patent:'PAT', other:'GEN',
   };
   const entries = pubs.map(pub => {
     const ty = TY_MAP[pub.pub_type] || 'JOUR';
@@ -858,6 +861,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
   const journals      = pubs.filter(p=>!p.pub_type||p.pub_type==='journal'||p.pub_type==='review'||p.pub_type==='preprint');
   const presentations = pubs.filter(p=>['conference','poster','lecture'].includes(p.pub_type));
   const books         = pubs.filter(p=>p.pub_type==='book');
+  const patents       = pubs.filter(p=>p.pub_type==='patent');
   const others        = pubs.filter(p=>p.pub_type==='other');
 
   return (
@@ -1346,6 +1350,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
           <SectionGroup title="Journal Articles & Reviews" items={journals} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
           <SectionGroup title="Presentations & Posters" items={presentations} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
           <SectionGroup title="Book Chapters" items={books} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
+          <SectionGroup title="Patents & Inventions" items={patents} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
           <SectionGroup title="Other" items={others} setPubs={setPubs} onPubStatsChanged={onPubStatsChanged}/>
         </>
       )}

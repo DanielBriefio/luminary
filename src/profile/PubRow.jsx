@@ -72,20 +72,32 @@ export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
         </div>
       </div>
       {(() => {
-        const isEvent = ['conference','poster','lecture'].includes(form.pub_type);
+        const isEvent  = ['conference','poster','lecture'].includes(form.pub_type);
+        const isPatent = form.pub_type === 'patent';
+        // Patents overload existing columns: journal=patent number,
+        // doi=URL, event_date=filing date, event_location=jurisdiction
+        // or assignee. Reuses the publications table without a schema
+        // bump — see CLAUDE.md guidance on starting cheap and migrating
+        // only if usage justifies a dedicated table.
         const fields = [
-          ['title','Title *','Full title of publication or presentation'],
-          ['authors','Authors','Smith J, Jones A et al.'],
-          ['year','Year','2024'],
+          ['title', isPatent ? 'Patent title *' : 'Title *',
+            isPatent ? 'e.g. Method and apparatus for X' : 'Full title of publication or presentation'],
+          ['authors', isPatent ? 'Inventors' : 'Authors',
+            isPatent ? 'e.g. Smith J, Jones A' : 'Smith J, Jones A et al.'],
+          ['year', isPatent ? 'Year (filing or grant)' : 'Year', '2024'],
           ['journal',
-            isEvent
-              ? 'Venue / Conference'
-              : form.pub_type === 'book'
-                ? 'Book'
-                : (['journal','review','preprint'].includes(form.pub_type) ? 'Journal' : 'Venue / Conference'),
-            isEvent
-              ? 'e.g. ASCO Annual Meeting'
-              : (form.pub_type === 'book' ? 'e.g. Harrison\'s Principles of Internal Medicine' : 'e.g. Nature Medicine'),
+            isPatent
+              ? 'Patent number'
+              : isEvent
+                ? 'Venue / Conference'
+                : form.pub_type === 'book'
+                  ? 'Book'
+                  : (['journal','review','preprint'].includes(form.pub_type) ? 'Journal' : 'Venue / Conference'),
+            isPatent
+              ? 'e.g. US 10,123,456 B2 or EP 3 456 789 A1'
+              : isEvent
+                ? 'e.g. ASCO Annual Meeting'
+                : (form.pub_type === 'book' ? 'e.g. Harrison\'s Principles of Internal Medicine' : 'e.g. Nature Medicine'),
           ],
           // Event-only fields — show right after the venue so they're
           // in the natural reading order for a presentation entry.
@@ -93,7 +105,15 @@ export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
             ['event_date',     'Event date (optional)',     'e.g. 2024-08-30, Aug 2024, or 2024'],
             ['event_location', 'Event location (optional)', 'e.g. Barcelona, Spain'],
           ] : []),
-          ['doi', isEvent ? 'DOI / URL (optional)' : 'DOI / URL', '10.1038/... or https://...'],
+          // Patent-only: filing/grant date + jurisdiction or assignee.
+          ...(isPatent ? [
+            ['event_date',     'Filing date (optional)',           'e.g. 2023-05-15'],
+            ['event_location', 'Jurisdiction / assignee (optional)', 'e.g. USPTO or Stanford University'],
+          ] : []),
+          ['doi',
+            isPatent ? 'Patent URL (optional)' : (isEvent ? 'DOI / URL (optional)' : 'DOI / URL'),
+            isPatent ? 'https://patents.google.com/...' : '10.1038/... or https://...',
+          ],
         ];
         return fields.map(([f,l,ph])=>(
           <div key={f} style={{marginBottom:10}}>

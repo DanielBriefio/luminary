@@ -106,6 +106,7 @@ export const PUB_TYPES = [
   {id:'review',     label:'Review Article',   icon:'🔍'},
   {id:'preprint',    label:'Preprint',         icon:'📝'},
   {id:'peer_review', label:'Peer Review',      icon:'⭐'},
+  {id:'patent',      label:'Patent / Invention', icon:'⚙️'},
   {id:'other',       label:'Other',            icon:'📎'},
 ];
 
