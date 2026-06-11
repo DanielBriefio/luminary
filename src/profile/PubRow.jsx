@@ -77,8 +77,14 @@ export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
           ['title','Title *','Full title of publication or presentation'],
           ['authors','Authors','Smith J, Jones A et al.'],
           ['year','Year','2024'],
-          ['journal', isEvent ? 'Venue / Conference' : (['journal','review','preprint'].includes(form.pub_type) ? 'Journal' : 'Venue / Conference'),
-            isEvent ? 'e.g. ASCO Annual Meeting' : 'e.g. Nature Medicine'],
+          ['journal',
+            isEvent
+              ? 'Venue / Conference'
+              : (['journal','review','preprint','book'].includes(form.pub_type) ? 'Journal' : 'Venue / Conference'),
+            isEvent
+              ? 'e.g. ASCO Annual Meeting'
+              : (form.pub_type === 'book' ? 'e.g. Harrison\'s Principles of Internal Medicine' : 'e.g. Nature Medicine'),
+          ],
           // Event-only fields — show right after the venue so they're
           // in the natural reading order for a presentation entry.
           ...(isEvent ? [
