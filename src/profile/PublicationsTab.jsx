@@ -192,7 +192,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
   const [importProposals, setImportProposals] = useState([]);
   const [importConfirmed, setImportConfirmed] = useState(new Set());
   const [importRejected,  setImportRejected]  = useState(new Set());
-  const [newPub,    setNewPub]    = useState({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:'',citation:''});
+  const [newPub,    setNewPub]    = useState({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:'',citation:'',event_date:'',event_location:''});
   const [saving,    setSaving]    = useState(false);
   const [nameVariants, setNameVariants] = useState('');
   // Add-publication panel state
@@ -832,7 +832,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
     setAddAuthor(''); setAddYearFrom(''); setAddYearTo(''); setAddJournal('');
     setShowAddAdv(false); setAddNextCursor(null); setAddHasMore(false); setAddTotal(null);
     setAddDoi(''); setAddDoiFetching(false);
-    setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:'',citation:''});
+    setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:'',citation:'',event_date:'',event_location:''});
   };
 
   const addManual = async () => {
@@ -1297,7 +1297,7 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
           {addSelected&&(
             <div style={{display:'flex',alignItems:'center',gap:8,background:T.gr2,border:`1px solid rgba(16,185,129,.25)`,borderRadius:9,padding:'8px 12px',marginBottom:12}}>
               <span style={{fontSize:12,color:T.gr,fontWeight:700}}>✓ Paper found — review and save</span>
-              <button onClick={()=>{ setAddSelected(false); setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:''}); setAddDoi(''); }}
+              <button onClick={()=>{ setAddSelected(false); setNewPub({title:'',authors:'',journal:'',year:'',doi:'',pub_type:'journal',venue:'',event_date:'',event_location:''}); setAddDoi(''); }}
                 style={{marginLeft:'auto',fontSize:11,color:T.mu,border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>← Search again</button>
             </div>
           )}
@@ -1316,20 +1316,50 @@ export default function PublicationsTab({ user, profile, setProfile, pendingCvPu
                   ))}
                 </div>
               </div>
-              {[
-                ['title','Title *','Full title of publication or presentation'],
-                ['authors','Authors','Smith J, Jones A et al.'],
-                ['year','Year','2024'],
-                ['journal',['journal','review','preprint'].includes(newPub.pub_type)?'Journal':'Venue / Conference',
-                  ['conference','poster'].includes(newPub.pub_type)?'e.g. ASCO Annual Meeting':'e.g. Nature Medicine'],
-                ['doi','DOI / URL','10.1038/... or https://...'],
-              ].map(([f,l,ph])=>(
-                <div key={f} style={{marginBottom:10}}>
-                  <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:4}}>{l}</label>
-                  <input value={newPub[f]} onChange={e=>setNewPub(p=>({...p,[f]:e.target.value}))} placeholder={ph}
-                    style={{width:'100%',background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
-                </div>
-              ))}
+              {(() => {
+                const isEvent  = ['conference','poster','lecture'].includes(newPub.pub_type);
+                const isPatent = newPub.pub_type === 'patent';
+                const fields = [
+                  ['title', isPatent ? 'Patent title *' : 'Title *',
+                    isPatent ? 'e.g. Method and apparatus for X' : 'Full title of publication or presentation'],
+                  ['authors', isPatent ? 'Inventors' : 'Authors',
+                    isPatent ? 'e.g. Smith J, Jones A' : 'Smith J, Jones A et al.'],
+                  ['year', isPatent ? 'Year (filing or grant)' : 'Year', '2024'],
+                  ['journal',
+                    isPatent
+                      ? 'Patent number'
+                      : isEvent
+                        ? 'Venue / Conference'
+                        : newPub.pub_type === 'book'
+                          ? 'Book'
+                          : (['journal','review','preprint'].includes(newPub.pub_type) ? 'Journal' : 'Venue / Conference'),
+                    isPatent
+                      ? 'e.g. US 10,123,456 B2 or EP 3 456 789 A1'
+                      : isEvent
+                        ? 'e.g. ASCO Annual Meeting'
+                        : (newPub.pub_type === 'book' ? 'e.g. Harrison\'s Principles of Internal Medicine' : 'e.g. Nature Medicine'),
+                  ],
+                  ...(isEvent ? [
+                    ['event_date',     'Event date (optional)',     'e.g. 2024-08-30, Aug 2024, or 2024'],
+                    ['event_location', 'Event location (optional)', 'e.g. Barcelona, Spain'],
+                  ] : []),
+                  ...(isPatent ? [
+                    ['event_date',     'Filing date (optional)',           'e.g. 2023-05-15'],
+                    ['event_location', 'Jurisdiction / assignee (optional)', 'e.g. USPTO or Stanford University'],
+                  ] : []),
+                  ['doi',
+                    isPatent ? 'Patent URL (optional)' : (isEvent ? 'DOI / URL (optional)' : 'DOI / URL'),
+                    isPatent ? 'https://patents.google.com/...' : '10.1038/... or https://...',
+                  ],
+                ];
+                return fields.map(([f,l,ph])=>(
+                  <div key={f} style={{marginBottom:10}}>
+                    <label style={{display:'block',fontSize:11.5,fontWeight:600,marginBottom:4}}>{l}</label>
+                    <input value={newPub[f]} onChange={e=>setNewPub(p=>({...p,[f]:e.target.value}))} placeholder={ph}
+                      style={{width:'100%',background:T.w,border:`1.5px solid ${T.bdr}`,borderRadius:9,padding:'8px 12px',fontSize:12.5,fontFamily:'inherit',outline:'none'}}/>
+                  </div>
+                ));
+              })()}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <Btn onClick={closeAddPanel}>Cancel</Btn>
                 <Btn variant="s" onClick={addManual} disabled={saving||!newPub.title.trim()}>{saving?'Saving…':'Add Publication'}</Btn>
