@@ -80,7 +80,9 @@ export default function PubRow({ pub, setPubs, onPubStatsChanged }) {
           ['journal',
             isEvent
               ? 'Venue / Conference'
-              : (['journal','review','preprint','book'].includes(form.pub_type) ? 'Journal' : 'Venue / Conference'),
+              : form.pub_type === 'book'
+                ? 'Book'
+                : (['journal','review','preprint'].includes(form.pub_type) ? 'Journal' : 'Venue / Conference'),
             isEvent
               ? 'e.g. ASCO Annual Meeting'
               : (form.pub_type === 'book' ? 'e.g. Harrison\'s Principles of Internal Medicine' : 'e.g. Nature Medicine'),
