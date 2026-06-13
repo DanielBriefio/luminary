@@ -186,6 +186,10 @@ export default function PostCard({
   const [expanded,setExpanded]           = useState(false);
 
   const [comments,  setComments]   = useState([]);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingContent,   setEditingContent]   = useState('');
+  const [editingSaving,    setEditingSaving]    = useState(false);
+  const [editingError,     setEditingError]     = useState('');
   const [commLoaded,setCommLoaded] = useState(false);
   const [commLoading,setCommLoading]=useState(false);
   const [commText,  setCommText]   = useState('');
@@ -406,6 +410,44 @@ export default function PostCard({
     await supabase.from('comments').delete().eq('id', id);
     setComments(c => c.filter(x => x.id !== id));
     setCommCount(n => Math.max(0, n - 1));
+  };
+
+  const startEditComment = (c) => {
+    setEditingCommentId(c.id);
+    setEditingContent(c.content || '');
+    setEditingError('');
+  };
+
+  const cancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditingContent('');
+    setEditingError('');
+  };
+
+  const saveEditComment = async () => {
+    const next = editingContent.trim();
+    if (!next || editingSaving) return;
+    setEditingSaving(true);
+    setEditingError('');
+    // Chain .select() so a silent RLS rejection surfaces — same
+    // pattern as PubRow.saveEdit. The DB trigger stamps edited_at.
+    const { data, error } = await supabase
+      .from('comments')
+      .update({ content: next })
+      .eq('id', editingCommentId)
+      .select();
+    if (error) {
+      console.error('Comment edit error:', error);
+      setEditingError('Save failed. Please try again.');
+    } else if (!data || data.length === 0) {
+      setEditingError('Save blocked by database policy.');
+    } else {
+      setComments(cs => cs.map(x =>
+        x.id === editingCommentId ? { ...x, content: next, edited_at: data[0].edited_at } : x
+      ));
+      cancelEditComment();
+    }
+    setEditingSaving(false);
   };
 
   const toggleSave = async () => {
@@ -1087,6 +1129,7 @@ export default function PostCard({
           {commLoading&&<div style={{padding:"14px 16px",fontSize:12.5,color:T.mu}}>Loading comments...</div>}
           {!commLoading&&comments.map(c=>{
             const removed = !c.profiles;
+            const isEditing = editingCommentId === c.id;
             return (
             <div key={c.id} style={{display:"flex",gap:10,padding:"12px 16px",borderBottom:`1px solid ${T.bdr}`,background:T.w}}>
               <div onClick={removed?undefined:()=>goToProfile(c.user_id,c.profiles?.profile_slug)} style={{cursor:removed?"default":"pointer",flexShrink:0}}>
@@ -1096,13 +1139,40 @@ export default function PostCard({
                 <div style={{display:"flex",alignItems:"baseline",gap:7,marginBottom:4,flexWrap:"wrap"}}>
                   <span onClick={removed?undefined:()=>goToProfile(c.user_id,c.profiles?.profile_slug)} style={{fontSize:12.5,fontWeight:700,cursor:removed?"default":"pointer",color:removed?T.mu:T.v,fontStyle:removed?"italic":"normal"}}>{c.profiles?.name||"Deleted user"}</span>
                   {c.profiles?.institution&&<span style={{fontSize:10.5,color:T.mu}}>{c.profiles.institution}</span>}
-                  <span style={{fontSize:10.5,color:T.mu,marginLeft:"auto"}}>{timeAgo(c.created_at)}</span>
+                  <span style={{fontSize:10.5,color:T.mu,marginLeft:"auto"}} title={c.edited_at?`Edited ${new Date(c.edited_at).toLocaleString()}`:undefined}>
+                    {timeAgo(c.created_at)}{c.edited_at && <span style={{marginLeft:4,fontStyle:"italic"}}>· edited</span>}
+                  </span>
                 </div>
-                <div style={{fontSize:13,lineHeight:1.65,color:removed?T.mu:T.text,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{c.content}</div>
+                {isEditing ? (
+                  <div>
+                    <textarea
+                      value={editingContent}
+                      onChange={e=>setEditingContent(e.target.value)}
+                      autoFocus
+                      rows={3}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:8,border:`1.5px solid ${T.v}`,background:T.w,fontSize:13,fontFamily:"inherit",color:T.text,outline:"none",resize:"vertical",boxSizing:"border-box",lineHeight:1.5}}
+                    />
+                    {editingError && <div style={{fontSize:11.5,color:T.ro,marginTop:4}}>{editingError}</div>}
+                    <div style={{display:"flex",gap:8,marginTop:6,justifyContent:"flex-end"}}>
+                      <button onClick={cancelEditComment}
+                        style={{fontSize:12,color:T.mu,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                      <button onClick={saveEditComment} disabled={editingSaving||!editingContent.trim()}
+                        style={{fontSize:12,color:"#fff",background:T.v,border:"none",borderRadius:8,padding:"5px 14px",cursor:editingSaving?"default":"pointer",fontFamily:"inherit",fontWeight:600,opacity:(editingSaving||!editingContent.trim())?0.6:1}}>
+                        {editingSaving?"Saving…":"Save"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{fontSize:13,lineHeight:1.65,color:removed?T.mu:T.text,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{c.content}</div>
+                )}
               </div>
-              {currentUserId===c.user_id&&(
-                <button onClick={()=>deleteComment(c.id)}
-                  style={{fontSize:12,color:T.mu,border:"none",background:"transparent",cursor:"pointer",flexShrink:0,opacity:.5,padding:"0 4px",alignSelf:"flex-start"}}>✕</button>
+              {currentUserId===c.user_id && !isEditing && (
+                <div style={{display:"flex",gap:2,flexShrink:0,alignSelf:"flex-start"}}>
+                  <button onClick={()=>startEditComment(c)} title="Edit comment"
+                    style={{fontSize:12,color:T.mu,border:"none",background:"transparent",cursor:"pointer",opacity:.5,padding:"0 4px"}}>✎</button>
+                  <button onClick={()=>deleteComment(c.id)} title="Delete comment"
+                    style={{fontSize:12,color:T.mu,border:"none",background:"transparent",cursor:"pointer",opacity:.5,padding:"0 4px"}}>✕</button>
+                </div>
               )}
             </div>
             );
