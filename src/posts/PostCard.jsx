@@ -13,6 +13,7 @@ import MultiImagePreview from '../components/MultiImagePreview';
 import PaperPreview from '../components/PaperPreview';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
+import Linkify from '../components/Linkify';
 import { htmlToPlain } from '../lib/htmlUtils';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
@@ -1163,7 +1164,7 @@ export default function PostCard({
                     </div>
                   </div>
                 ) : (
-                  <div style={{fontSize:13,lineHeight:1.65,color:removed?T.mu:T.text,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{c.content}</div>
+                  <div style={{fontSize:13,lineHeight:1.65,color:removed?T.mu:T.text,wordBreak:"break-word",whiteSpace:"pre-wrap"}}><Linkify text={c.content}/></div>
                 )}
               </div>
               {currentUserId===c.user_id && !isEditing && (
