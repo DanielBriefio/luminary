@@ -113,9 +113,18 @@ export function BusinessCardView({ profile, currentUserId }) {
           <div style={{ display:'flex', alignItems:'flex-start', gap:20, marginBottom: hasContactDetails ? 24 : 0 }}>
             <Av size={72} color={profile.avatar_color || 'me'} name={profile.name} url={profile.avatar_url || ''}/>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontFamily:"'DM Serif Display', serif", fontSize:22, lineHeight:1.2, marginBottom:4, color:'#1a1a2e', overflowWrap:'break-word' }}>
-                {profile.name}
-              </div>
+              {profile.profile_slug ? (
+                <a href={`/p/${profile.profile_slug}`} title="View full profile"
+                  style={{ fontFamily:"'DM Serif Display', serif", fontSize:22, lineHeight:1.2, marginBottom:4, color:'#1a1a2e', overflowWrap:'break-word', textDecoration:'none', display:'block' }}
+                  onMouseEnter={e=>e.currentTarget.style.textDecoration='underline'}
+                  onMouseLeave={e=>e.currentTarget.style.textDecoration='none'}>
+                  {profile.name}
+                </a>
+              ) : (
+                <div style={{ fontFamily:"'DM Serif Display', serif", fontSize:22, lineHeight:1.2, marginBottom:4, color:'#1a1a2e', overflowWrap:'break-word' }}>
+                  {profile.name}
+                </div>
+              )}
               {profile.title && (
                 <div style={{ fontSize:13, fontWeight:600, color:'#6c63ff', marginBottom:3 }}>{profile.title}</div>
               )}
