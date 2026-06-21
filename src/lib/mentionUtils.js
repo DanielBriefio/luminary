@@ -93,6 +93,45 @@ export function MentionAndLinkify({ text }) {
   return <>{out}</>;
 }
 
+// Inserts one 'mention' notification per slug mentioned in `content`.
+// Skips self-mentions. Deduped against existing unread mention notifs
+// for the same post so simple edits don't re-fire. Caller passes
+// their `supabase` client (no module-level dep here — keeps
+// mentionUtils import-cycle-free).
+export async function notifyMentioned(supabase, content, isHtml, actorId, postId) {
+  if (!content || !postId) return;
+  const slugs = parseAllMentionSlugs(content, isHtml);
+  if (!slugs.length) return;
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id, profile_slug')
+    .in('profile_slug', slugs);
+  if (!profs?.length) return;
+  const recipients = profs
+    .map(p => p.id)
+    .filter(id => id && id !== actorId);
+  if (!recipients.length) return;
+  const { data: existing } = await supabase
+    .from('notifications')
+    .select('user_id')
+    .eq('notif_type', 'mention')
+    .eq('target_id', postId)
+    .eq('read', false)
+    .in('user_id', recipients);
+  const skip = new Set((existing || []).map(r => r.user_id));
+  const fresh = recipients.filter(id => !skip.has(id));
+  if (!fresh.length) return;
+  await supabase.from('notifications').insert(
+    fresh.map(uid => ({
+      user_id:    uid,
+      actor_id:   actorId,
+      notif_type: 'mention',
+      target_id:  postId,
+      read:       false,
+    }))
+  );
+}
+
 // Find the @<query> prefix immediately before the caret (if any).
 // Used by MentionAutocomplete to drive the dropdown. Returns
 // `{ start, query }` so the host can replace text[start..caret] on

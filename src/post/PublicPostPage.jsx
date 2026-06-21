@@ -13,6 +13,8 @@ import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import ShareModal from '../components/ShareModal';
 import FollowBtn from '../components/FollowBtn';
 import { timeAgo } from '../lib/utils';
+import MentionAutocomplete from '../components/MentionAutocomplete';
+import { detectActiveMention, MentionAndLinkify, notifyMentioned } from '../lib/mentionUtils';
 
 const READING = {
   maxWidth:    680,
@@ -294,7 +296,29 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
   const [loading,     setLoading]     = useState(true);
   const [text,        setText]        = useState('');
   const [submitting,  setSubmitting]  = useState(false);
+  const [mentionState, setMentionState] = useState(null);
   const inputRef = useRef(null);
+
+  // @-mention plumbing — mirrors PostCard.handleMentionInput.
+  const handleMentionInput = (textareaEl, value) => {
+    const caret = textareaEl?.selectionStart ?? 0;
+    const m = detectActiveMention(value, caret);
+    if (!m) { setMentionState(null); return; }
+    const r = textareaEl.getBoundingClientRect();
+    setMentionState({ query: m.query, start: m.start, caret, top: r.bottom + 4, left: r.left });
+  };
+  const insertMention = (profile) => {
+    if (!mentionState || !profile.profile_slug) return;
+    const slug = profile.profile_slug;
+    const next = text.slice(0, mentionState.start) + '@' + slug + ' ' + text.slice(mentionState.caret);
+    setText(next);
+    const newCaret = mentionState.start + slug.length + 2;
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (el) { el.focus(); el.setSelectionRange(newCaret, newCaret); }
+    }, 0);
+    setMentionState(null);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -314,14 +338,17 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
   const submit = async () => {
     if (!text.trim() || !currentUserId || submitting) return;
     setSubmitting(true);
+    const content = text.trim();
     const { data } = await supabase
       .from('comments')
-      .insert({ post_id: post.id, user_id: currentUserId, content: text.trim() })
+      .insert({ post_id: post.id, user_id: currentUserId, content })
       .select('*, profiles(name, avatar_color, avatar_url, profile_slug, institution)')
       .single();
     if (data) {
       setComments(c => [...c, data]);
       setText('');
+      setMentionState(null);
+      await notifyMentioned(supabase, content, false, currentUserId, post.id);
     }
     setSubmitting(false);
   };
@@ -407,7 +434,7 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
                   color: removed ? T.mu : T.text,
                   whiteSpace:'pre-wrap', wordBreak:'break-word',
                 }}>
-                  {c.content}
+                  <MentionAndLinkify text={c.content}/>
                 </div>
               </div>
             </div>
@@ -421,9 +448,15 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
           <textarea
             ref={inputRef}
             value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
-            placeholder="Add to the discussion…"
+            onChange={e => { setText(e.target.value); handleMentionInput(e.target, e.target.value); }}
+            onSelect={e => handleMentionInput(e.target, e.target.value)}
+            onBlur={() => setTimeout(() => setMentionState(null), 200)}
+            onKeyDown={e => {
+              // Let the mention dropdown handle Enter when active.
+              if (mentionState && e.key === 'Enter') return;
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+            }}
+            placeholder="Add to the discussion… type @ to mention someone"
             rows={2}
             style={{
               flex:1, padding:'10px 14px', borderRadius:10,
@@ -441,6 +474,15 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
           }}>
             {submitting ? '…' : 'Reply'}
           </button>
+          {mentionState && (
+            <MentionAutocomplete
+              query={mentionState.query}
+              top={mentionState.top}
+              left={mentionState.left}
+              onSelect={insertMention}
+              onClose={() => setMentionState(null)}
+            />
+          )}
         </div>
       ) : (
         <div style={{

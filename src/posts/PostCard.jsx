@@ -15,7 +15,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import Linkify from '../components/Linkify';
 import MentionAutocomplete from '../components/MentionAutocomplete';
-import { detectActiveMention, parseAllMentionSlugs, MentionAndLinkify } from '../lib/mentionUtils';
+import { detectActiveMention, MentionAndLinkify, notifyMentioned } from '../lib/mentionUtils';
 import { htmlToPlain } from '../lib/htmlUtils';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
@@ -97,44 +97,6 @@ async function awardLumensForComment(post, commenterId, commenterPrevLumens) {
   } catch {
     // Swallow any sync/async failure so the comment flow always completes.
   }
-}
-
-// Inserts one 'mention' notification per slug mentioned in `content`.
-// Skip self-mentions and the post owner (they get new_comment already).
-// Deduped against existing unread mention notifs for the same target.
-async function notifyMentioned(content, isHtml, actorId, postId) {
-  if (!content || !postId) return;
-  const slugs = parseAllMentionSlugs(content, isHtml);
-  if (!slugs.length) return;
-  const { data: profs } = await supabase
-    .from('profiles')
-    .select('id, profile_slug')
-    .in('profile_slug', slugs);
-  if (!profs?.length) return;
-  const recipients = profs
-    .map(p => p.id)
-    .filter(id => id && id !== actorId);
-  if (!recipients.length) return;
-  // Skip recipients who already have an unread mention notif for this post.
-  const { data: existing } = await supabase
-    .from('notifications')
-    .select('user_id')
-    .eq('notif_type', 'mention')
-    .eq('target_id', postId)
-    .eq('read', false)
-    .in('user_id', recipients);
-  const skip = new Set((existing || []).map(r => r.user_id));
-  const fresh = recipients.filter(id => !skip.has(id));
-  if (!fresh.length) return;
-  await supabase.from('notifications').insert(
-    fresh.map(uid => ({
-      user_id:    uid,
-      actor_id:   actorId,
-      notif_type: 'mention',
-      target_id:  postId,
-      read:       false,
-    }))
-  );
 }
 
 // Inserts a new_comment notification for the post owner, deduped so a flurry
@@ -447,7 +409,7 @@ export default function PostCard({
       capture('comment_posted');
       await awardLumensForComment(post, currentUserId, currentProfile?.lumens_current_period);
       await notifyPostOwnerOfComment(post, currentUserId);
-      await notifyMentioned(content, false, currentUserId, post.id);
+      await notifyMentioned(supabase, content, false, currentUserId, post.id);
     }
     setCommSaving(false);
   };
@@ -533,7 +495,7 @@ export default function PostCard({
       ));
       // Mention any newly-added users — dedup against unread prior mention
       // notifs so simple edits don't re-fire.
-      await notifyMentioned(next, false, currentUserId, post.id);
+      await notifyMentioned(supabase, next, false, currentUserId, post.id);
       cancelEditComment();
     }
     setEditingSaving(false);
@@ -573,7 +535,7 @@ export default function PostCard({
       user_id: currentUserId,
       content: text,
     });
-    await notifyMentioned(text, false, currentUserId, post.id);
+    await notifyMentioned(supabase, text, false, currentUserId, post.id);
     const { data } = await supabase
       .from('comments')
       .select('id, content, created_at, profiles(name, avatar_url, avatar_color)')
