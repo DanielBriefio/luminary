@@ -140,10 +140,15 @@ function MessageThread({
         {messages.map(msg => {
           const isMine        = msg.sender_id === currentUserId;
           const senderRemoved = !isMine && (msg.sender_id === null || !otherUser);
+          // Absolute time as hover tooltip — uses the viewer's locale.
+          const absTime = msg.created_at
+            ? new Date(msg.created_at).toLocaleString()
+            : '';
           return (
             <div key={msg.id} style={{
               display: 'flex',
-              justifyContent: isMine ? 'flex-end' : 'flex-start',
+              flexDirection: 'column',
+              alignItems: isMine ? 'flex-end' : 'flex-start',
               marginBottom: 8,
             }}>
               <div style={{
@@ -161,6 +166,14 @@ function MessageThread({
               }}>
                 {msg.content}
               </div>
+              {msg.created_at && (
+                <div title={absTime} style={{
+                  fontSize: 10.5, color: T.mu, marginTop: 2,
+                  padding: isMine ? '0 6px 0 0' : '0 0 0 6px',
+                }}>
+                  {timeAgo(msg.created_at)}
+                </div>
+              )}
             </div>
           );
         })}
