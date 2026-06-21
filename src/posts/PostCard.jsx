@@ -466,18 +466,15 @@ export default function PostCard({
     const caret = textareaEl?.selectionStart ?? 0;
     const m = detectActiveMention(value, caret);
     if (!m) { setMentionState(null); return; }
-    // Position popup below the textarea. Use the textarea's rect
-    // relative to its scroll container; rough but works in practice.
+    // Viewport-relative — dropdown is position:fixed via portal.
     const r = textareaEl.getBoundingClientRect();
-    const parent = textareaEl.offsetParent || document.body;
-    const pr = parent.getBoundingClientRect();
     setMentionState({
       target,
       query: m.query,
       start: m.start,
       caret,
-      top:  r.bottom - pr.top + 4,
-      left: r.left - pr.left,
+      top:  r.bottom + 4,
+      left: r.left,
     });
   };
   const insertMentionInComment = (profile) => {

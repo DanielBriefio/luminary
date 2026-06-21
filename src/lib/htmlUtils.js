@@ -90,7 +90,11 @@ export function htmlToPlain(html) {
 }
 
 export function isHtml(str) {
-  return /<(b|strong|i|em|u|h1|h2|h3|h4|ul|ol|li|br|p|div|img|iframe|blockquote)[\s\/>]/i.test(str||'');
+  // Anchor + span added so a text post containing only a mention link
+  // (which produces "<a data-mention=...>@Name</a>") is rendered as
+  // HTML — without this, isHtml returned false and the content showed
+  // as literal text.
+  return /<(b|strong|i|em|u|h1|h2|h3|h4|ul|ol|li|br|p|div|img|iframe|blockquote|a|span)[\s\/>]/i.test(str||'');
 }
 
 // Normalise pasted HTML (Word, Google Docs, websites) into clean semantic

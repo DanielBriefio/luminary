@@ -376,14 +376,16 @@ export default function RichTextEditor({
     const before = i > 0 ? text[i - 1] : '';
     if (i > 0 && /[a-zA-Z0-9_]/.test(before)) { setMentionState(null); return; }
     const query = text.slice(i + 1, caret);
-    // Anchor popup to the caret's bounding rect.
+    // Viewport-relative — dropdown is position:fixed via portal.
+    // When the caret is at the very start of a text node, range may
+    // return zero rect; fall back to editor's rect in that case.
     const r = range.getBoundingClientRect();
-    const wrapper = editorRef.current.parentElement;
-    const pr = wrapper.getBoundingClientRect();
+    const editorRect = editorRef.current.getBoundingClientRect();
+    const top  = (r.bottom || editorRect.top) + 4;
+    const left = (r.left   || editorRect.left);
     setMentionState({
       query, atNode: node, atOffset: i, caretOffset: caret,
-      top:  r.bottom - pr.top + 4,
-      left: r.left - pr.left,
+      top, left,
     });
   };
 

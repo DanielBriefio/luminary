@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Av from './Av';
@@ -62,19 +63,23 @@ export default function MentionAutocomplete({ query, top, left, onSelect, onClos
     return () => window.removeEventListener('keydown', handler, true);
   }, [results, active, onSelect, onClose]);
 
-  if (!query) return null;
-
-  return (
+  // Portal to body + position:fixed (viewport coords) so the dropdown
+  // can't be hidden by ancestor overflow / z-index / stacking-context
+  // weirdness. The caller passes viewport-relative top/left.
+  return createPortal(
     <div style={{
-      position:'absolute', top, left, zIndex:1000,
+      position:'fixed', top, left, zIndex:1000,
       background:T.w, border:`1px solid ${T.bdr}`, borderRadius:10,
       boxShadow:'0 4px 16px rgba(0,0,0,.12)', minWidth:240, maxWidth:320,
       overflow:'hidden',
     }}>
-      {loading && results.length === 0 && (
+      {!query && (
+        <div style={{padding:'10px 14px',fontSize:12,color:T.mu}}>Type a name to mention…</div>
+      )}
+      {query && loading && results.length === 0 && (
         <div style={{padding:'10px 14px',fontSize:12,color:T.mu}}>Searching…</div>
       )}
-      {!loading && results.length === 0 && (
+      {query && !loading && results.length === 0 && (
         <div style={{padding:'10px 14px',fontSize:12,color:T.mu}}>No matches</div>
       )}
       {results.map((p, i) => (
@@ -96,6 +101,7 @@ export default function MentionAutocomplete({ query, top, left, onSelect, onClos
           </div>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
