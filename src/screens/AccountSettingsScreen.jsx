@@ -15,6 +15,7 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
   const [emailGroupReq,  setEmailGroupReq]  = useState(profile?.email_notif_group_request     ?? true);
   const [emailComment,   setEmailComment]   = useState(profile?.email_notif_new_comment       ?? true);
   const [emailInvite,    setEmailInvite]    = useState(profile?.email_notif_invite_redeemed   ?? true);
+  const [emailMention,   setEmailMention]   = useState(profile?.email_notif_mention           ?? false);
   const [marketing,      setMarketing]      = useState(profile?.email_marketing ?? false);
   const [analytics,      setAnalytics]      = useState(!!profile?.analytics_consent_at);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
@@ -53,6 +54,7 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
       email_notif_group_request:     emailGroupReq,
       email_notif_new_comment:       emailComment,
       email_notif_invite_redeemed:   emailInvite,
+      email_notif_mention:           emailMention,
       email_marketing:               marketing,
       marketing_consent_at: marketing
         ? (profile?.marketing_consent_at || new Date().toISOString())
@@ -403,6 +405,11 @@ export default function AccountSettingsScreen({ user, profile, setProfile, onClo
                 value={emailComment} onChange={setEmailComment}
                 label="Comments on your posts"
                 sublabel="When someone comments on a post you've published"
+              />
+              <Toggle
+                value={emailMention} onChange={setEmailMention}
+                label="Mentions"
+                sublabel="When someone @-mentions you in a post or comment"
               />
               <Toggle
                 value={emailInvite} onChange={setEmailInvite}
