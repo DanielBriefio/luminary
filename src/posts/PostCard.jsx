@@ -15,7 +15,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import Linkify from '../components/Linkify';
 import MentionAutocomplete from '../components/MentionAutocomplete';
-import { detectActiveMention, MentionAndLinkify, notifyMentioned } from '../lib/mentionUtils';
+import { detectActiveMention, MentionAndLinkify, notifyMentioned, mentionsToPlainText } from '../lib/mentionUtils';
 import { htmlToPlain } from '../lib/htmlUtils';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
@@ -1103,7 +1103,7 @@ export default function PostCard({
                 overflow: 'hidden', display: '-webkit-box',
                 WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
               }}>
-                {htmlToPlain(topComment.content || '')}
+                {mentionsToPlainText(htmlToPlain(topComment.content || ''))}
               </span>
             </div>
             {commCount > 1 && (

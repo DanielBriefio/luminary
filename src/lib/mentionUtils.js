@@ -57,6 +57,16 @@ export function parseAllMentionSlugs(content, isHtml) {
   return parseMentionSlugsFromText(content);
 }
 
+// Strip mention markers down to readable text — "@[Daniel](daniel-r)"
+// becomes "@Daniel". Used in non-clickable previews (the inline top-
+// comment snippet under a feed card, notification bodies, etc.)
+// where rendering links would conflict with the parent's click
+// handler or layout constraints.
+export function mentionsToPlainText(text) {
+  if (!text) return '';
+  return String(text).replace(/@\[([^\]]+)\]\(([a-z0-9][a-z0-9-]{1,50})\)/g, '@$1');
+}
+
 // Render-time helper for plain text: tokenises into React children
 // supporting three patterns in one pass:
 //   1. http(s) URLs                  → external link

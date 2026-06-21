@@ -175,7 +175,10 @@ serve(async (req) => {
         .limit(1)
         .single();
 
-      const raw = (comment?.content || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      const raw = (comment?.content || '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/@\[([^\]]+)\]\(([a-z0-9][a-z0-9-]{1,50})\)/g, '@$1')
+        .replace(/\s+/g, ' ').trim();
       const preview = raw
         ? (raw.length > 240 ? raw.slice(0, 240).trim() + '…' : raw)
         : 'Left a comment on your post';
@@ -198,6 +201,7 @@ serve(async (req) => {
         .single();
       const raw = (post?.paper_title || post?.content || '')
         .replace(/<[^>]+>/g, '')
+        .replace(/@\[([^\]]+)\]\(([a-z0-9][a-z0-9-]{1,50})\)/g, '@$1')
         .replace(/\s+/g, ' ')
         .trim();
       const preview = raw
