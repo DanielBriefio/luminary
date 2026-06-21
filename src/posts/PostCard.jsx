@@ -465,9 +465,12 @@ export default function PostCard({
   const handleMentionInput = (target, textareaEl, value) => {
     const caret = textareaEl?.selectionStart ?? 0;
     const m = detectActiveMention(value, caret);
+    // eslint-disable-next-line no-console
+    console.log('[mention-debug]', { target, value, caret, detected: m });
     if (!m) { setMentionState(null); return; }
-    // Viewport-relative — dropdown is position:fixed via portal.
     const r = textareaEl.getBoundingClientRect();
+    // eslint-disable-next-line no-console
+    console.log('[mention-debug] setting state', { query: m.query, top: r.bottom + 4, left: r.left });
     setMentionState({
       target,
       query: m.query,
@@ -1311,6 +1314,10 @@ export default function PostCard({
                   onClose={()=>setMentionState(null)}
                 />
               )}
+              {/* DEBUG — remove once mention dropdown confirmed working */}
+              <div style={{position:'absolute',right:16,top:4,fontSize:10,color:T.mu,fontFamily:'monospace',pointerEvents:'none'}}>
+                mention: {mentionState ? `target=${mentionState.target} q="${mentionState.query}" top=${Math.round(mentionState.top)} left=${Math.round(mentionState.left)}` : 'null'}
+              </div>
             </div>
           ) : (
             <div style={{padding:"12px 16px",fontSize:12.5,color:T.mu,textAlign:"center",background:T.w}}>Sign in to comment.</div>
