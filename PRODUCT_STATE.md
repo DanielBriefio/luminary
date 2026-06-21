@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-05-07 (rev 26)_
+_Last updated: 2026-06-21 (rev 27)_
 
 ## What exists and works
 
@@ -320,6 +320,57 @@ _Last updated: 2026-05-07 (rev 26)_
 - **`migration_phase15_remap_starter_posts.sql`** (one-shot, optional): retroactively assigns `folder_id` on legacy starter posts (created from templates before Phase 15.1 went live). Idempotent — only touches folder-less posts authored by the project creator within the template's starter count. Safe to run any time; a no-op if no legacy posts remain.
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
 
+## Recently shipped (rev 27 — May 8 – June 21, 2026)
+
+**Paper posts: corresponding author**
+- Paper posts and library items now surface the corresponding author's email when EuropePMC exposes it. New `posts.paper_corresp_email` / `paper_corresp_name` + `library_items.corresp_email` / `corresp_name` columns. Extractor `extractCorrespondingAuthorFromEpmc` in `src/lib/utils.js` walks EuropePMC `authorList.author[].authorAffiliationDetailsList.authorAffiliation[].affiliation` strings (the JSON `core` response nests them; an earlier version of the extractor looked at a flat `affiliation` field that doesn't exist in the JSON, so it returned empty for every paper — fix shipped). Preference: "Electronic address:" tagged emails (PubMed convention for the corresponding author) → explicit `email` field → any email in any affiliation. Captured during PostComposer EPMC search-select, DOI lookup (CrossRef + EPMC fired in parallel since CrossRef doesn't expose author emails), `prefill_paper` sessionStorage handoff from Library/Explore. PaperPreview renders `Corresponding author: J. Smith` with name as a `mailto:` link (subject pre-filled "Re: <paper title>"). Coverage ~40–60 %; falls back silently when EPMC has no email.
+
+**Publications: OpenAlex + CrossRef enrichment, talks, patents**
+- `migration_publications_rls_own_row.sql`: defensive idempotent own-row SELECT/INSERT/UPDATE/DELETE + admin-all RLS policies on `publications`. The original policies were dashboard-defined and the UPDATE one was effectively missing in production, which made every PubRow edit a silent no-op (UPDATE returned 0 rows, the UI showed "saved", reload reverted). Same lesson as PubRow.saveEdit now chaining `.select()` to surface 0-row results as a real error.
+- `migration_publications_event_fields.sql`: adds `publications.event_date` (permissive text — accepts `2024-08-30`, `Aug 2024`, or `2024`) and `event_location`. Edit + Add forms show two extra optional inputs when `pub_type` is `conference` / `poster` / `lecture`. Vancouver export branches to "Presented at: Venue; Date; Location." for events; BibTeX inproceedings emits `address` + `month`; RIS adds `DA` / `CY`.
+- `migration_admin_user_topic_distribution.sql`: extends `get_admin_user_list()` with a `topic_distribution` JSONB column per user — `[{tier1, count}]` sorted desc by post count, excluding null/empty tier1. Admin Users table gets a sortable Topics column (inline top-2 + `+N` overflow) plus a topic-filter dropdown + min-count input that filters AND auto-sorts by that topic's count. Per-user detail panel renders a proportional horizontal-bar breakdown.
+- **One-click citation refresh** on the user's own Publications tab (`↻ Refresh citations`). Hits OpenAlex for citation count + `type` (mapped to `pub_type` — auto-recategorises article→journal, book-chapter→book, proceedings-article→conference, preprint→preprint, only when current value is the import default null/'journal'), and CrossRef for the formal Vancouver-style citation string + PubMed-style author list. Concurrency-capped at 5. Reports e.g. `"12 citations updated · 4 re-categorised · 38 formal citations added · 7 author lists added"`. Same enrichment fires on every in-app insert path (CV import, AI doc import, RIS/BibTeX, manual add, ORCID importer, ProfileScreen CV apply) — fire-and-forget, never blocks publish.
+- **PubRow display polish**: authors truncate to first 6 + "et al." (Vancouver convention); a `📋 Copy` button writes the full Vancouver citation to clipboard with a 1.5s ✓ Copied state. `formatVancouver` extracted from PublicationsTab into `src/lib/pubUtils.js` so PubRow can reuse it.
+- **Patents & Inventions section** (path 1, column overload — no schema change). Adds `'patent'` to `PUB_TYPES` with icon ⚙️. Conditional labels in both Edit + Add forms (Patent title / Inventors / Patent number / Filing date / Jurisdiction or assignee / Patent URL). New SectionGroup between Book Chapters and Other. Vancouver output: `Smith J. Title. US 10,123,456 B2. Filed: 2023-05-15; USPTO. Available at: ...`. BibTeX → `@misc{howpublished = {Patent: ...}}`; RIS → `TY - PAT`. No Refresh enrichment (no clean public patent API). Reuses overloaded columns: title, authors → inventors, journal → patent number, year → filing/grant year, doi → URL, event_date → filing date, event_location → jurisdiction/assignee.
+- Book Chapter edit form now labels the journal field as "Book" (same column).
+- **Empty-state polish**: Citations + h-index stat tiles are dropped (not shown as "—") on both PublicProfilePage and ProfileScreen when both values are zero. Avoids the "this person has no impact" reading for users whose publications haven't been enriched yet.
+- **Stat-tile re-query**: ProfileScreen's `pubStats` is now also re-queried after PublicationsTab edits/refresh (`onPubStatsChanged` callback) so the Citations/h-index tiles surface immediately once an enrichment pass completes.
+
+**Public profile + business card polish**
+- PublicProfilePage stat tiles now show real `Followers` / `Following` counts (previously hardcoded `'—'`).
+- 2-column mobile grid on PublicProfilePage stat tiles whenever there are >2 tiles (mirrors ProfileScreen). Plus `minWidth:0` + nowrap-ellipsis on the value text as a defensive backstop against long citation counts overflowing.
+- Business card (`/c/:slug`): the serif name links to `/p/:slug` (the public profile) with a subtle hover underline. Falls back to plain `<div>` when no profile_slug.
+
+**Admin/Users table polish**
+- User + Topics column headers are sortable. User sort uses `localeCompare`; Topics sort uses the active topic-filter's count (or total tagged posts when no filter). Selecting a topic filter automatically sets `sortBy='topic'` desc so the table immediately ranks by that topic.
+- Layout fix: `minmax(0,1fr)` on the User track so long names/institutions can't expand the grid past its allocation. Long names get a 2-line clamp; institutions stay single-line ellipsis. Title tooltips on both for tail-case readability.
+
+**Comments: edit + mentions + linkify**
+- `migration_comments_edit.sql`: adds `comments.edited_at` timestamptz + BEFORE UPDATE trigger that stamps it only when `content` actually changes (so admin moderation toggling `hidden` doesn't make a comment look edited). Plus idempotent own-row UPDATE RLS policy (same dashboard-policy gap that bit publications).
+- PostCard: small ✎ pencil next to the existing ✕ on own comments. Swap to textarea + Save/Cancel; save chains `.select()` on the UPDATE to surface silent RLS rejections. Timestamp area shows "· edited" with the absolute edit time on hover. No edit window.
+- Comment text now passes through `MentionAndLinkify` (handles both `@<slug>` legacy mentions and http URLs); previously plain text on PublicPostPage didn't even linkify URLs.
+- Messages: small `timeAgo` line under every bubble in muted text, aligned with the bubble side. Absolute local time as hover tooltip.
+
+**@-mentions in posts + comments**
+- `migration_mentions.sql`: adds `profiles.email_notif_mention` (default false — opt-in to avoid surprising legacy users). Notification type `'mention'` is plain text, no enum change.
+- Identifier is `profile_slug` (unique on profiles) so no need to disambiguate multiple "Daniel"s. Storage formats:
+  - **HTML** (deep dives via RichTextEditor): `<a href="/p/<slug>" data-mention="<slug>">@Full Name</a>`. Sanitiser preserves the `data-mention` attribute on internal links.
+  - **Plain text** (comments): markdown-style marker `@[Full Name](<slug>)` — render-time tokenizer in `MentionAndLinkify` shows "@Full Name" linked to /p/slug. Legacy `@<slug>` bare format still parsed as a fallback.
+- Shared `MentionAutocomplete` component (`src/components/MentionAutocomplete.jsx`) — debounced ilike search on `profiles.name`, ↑/↓/Enter/Tab keyboard nav, click select. Portals to `document.body` with `position: fixed` + viewport coords so it can't be hidden by ancestor overflow/stacking-context quirks.
+- Wired into **five** input surfaces:
+  1. RichTextEditor contentEditable (posts + deep dives). Detect `@<query>` in the active text node, insert a real `<a>` element on select, place caret right after.
+  2. PostCard new-comment textarea (`commText`).
+  3. PostCard quick-reply textarea (`replyText`) — this is the one shown when you click Reply without expanding the full thread; it was missed in the first pass and surfaced the textarea-vs-RichTextEditor split.
+  4. PostCard inline-edit textarea (`editingContent`).
+  5. PublicPostPage CommentsSection textarea (`text`) — deep-dive page has its own comment input outside PostCard.
+- Notifications on every insert path. Dedup: skip self-mentions; skip recipients with an existing **unread** mention notif for the same post (so simple edits don't re-fire and a thread mentioning the same user twice doesn't double-notify).
+- Edge function: `send-email-notification` handles the new `'mention'` type — subject "<Name> mentioned you on Luminary ✦" + body with a post preview block. Gated by `email_notif_mention`. Account Settings has a new "Mentions" toggle in the granular email-pref block (default off).
+- Render polish: the inline top-comment snippet under a feed card (collapsed-comments preview) and the new_comment/mention email body builders all pipe through a `mentionsToPlainText` helper that strips `@[Name](slug)` markers down to `@Name` — otherwise the raw marker would leak through into previews. NotifsScreen treats `mention` as a post-clickthrough type, same snippet lookup as new_comment.
+- HTML render fix: `isHtml()` now matches `<a>` and `<span>`. Without this, a text post containing only a mention link (autocomplete-only authoring) returned false from `isHtml`, fell through to the plain-text branch, and showed the raw HTML as literal text.
+
+**Misc**
+- Memory file: new feedback memory `feedback_question_before_building.md` — value-check nice-to-haves before coding, flag cascading costs upfront. Came out of the Copy-citation review.
+
 ## Recently shipped (rev 26 — May 2-7, 2026)
 
 **Multi-image posts + feed-list perf**
@@ -356,7 +407,17 @@ _Last updated: 2026-05-07 (rev 26)_
 
 ## Recently shipped migrations
 
-- **`migration_email_notifications.sql`** (Phase 7A): adds `email_notif_new_follower`, `email_notif_new_message`, `email_notif_group_request`, `welcome_email_sent` to profiles; backfills existing users.
+**Rev 27 (May 8 – June 21, 2026)** — applied:
+- `migration_paper_corresp_author.sql` — `posts.paper_corresp_email` / `paper_corresp_name` + `library_items.corresp_email` / `corresp_name`. DROP+CREATE `posts_with_meta` so the new columns propagate via `select p.*`.
+- `migration_admin_user_topic_distribution.sql` — extends `get_admin_user_list()` with `topic_distribution` JSONB.
+- `migration_publications_rls_own_row.sql` — defensive idempotent own-row SELECT/INSERT/UPDATE/DELETE + admin-all policies on `publications`. Closes the silent-UPDATE-rejection that masked PubRow edits and Refresh-citations writes as no-ops.
+- `migration_publications_event_fields.sql` — `publications.event_date` + `event_location` for conference / poster / lecture entries (permissive text, optional).
+- `migration_comments_edit.sql` — `comments.edited_at` + BEFORE UPDATE trigger that stamps only on content change. Defensive own-row UPDATE RLS policy.
+- `migration_mentions.sql` — `profiles.email_notif_mention` (default false; opt-in). Notif type `'mention'` is plain text, no enum change.
+
+---
+
+
 - **`migration_email_notifications_v2.sql`** (Phase 7B): adds `email_notif_new_comment`, `email_notif_invite_redeemed`; respects master toggle for backfill.
 - **`migration_admin_interventions.sql`**: Creates `admin_config` table + RLS; seeds `luminary_board`, `paper_of_week`, `milestone_post_template` rows; adds `get_admin_config`, `set_admin_config`, `send_admin_post` RPCs; adds `is_admin_post` + `target_user_id` columns to `posts`; DROP+CREATE `posts_with_meta` view to include new columns.
 - **`migration_gamification.sql`** (Phase 8): adds `lumens_current_period`, `lumens_lifetime`, `current_period_started`, `previous_period_lumens`, `is_founding_member` to profiles; creates `lumen_transactions` table + RLS; adds `award_lumens`, `get_lumen_history` RPCs and `compute_tier` helper; seeds `founding_member_cutoff` admin_config; installs `apply_founding_member_status` trigger. Requires `alter publication supabase_realtime add table profiles;` for cross-user sidebar sync.
