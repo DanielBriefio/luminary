@@ -465,12 +465,8 @@ export default function PostCard({
   const handleMentionInput = (target, textareaEl, value) => {
     const caret = textareaEl?.selectionStart ?? 0;
     const m = detectActiveMention(value, caret);
-    // eslint-disable-next-line no-console
-    console.log('[mention-debug]', { target, value, caret, detected: m });
     if (!m) { setMentionState(null); return; }
     const r = textareaEl.getBoundingClientRect();
-    // eslint-disable-next-line no-console
-    console.log('[mention-debug] setting state', { query: m.query, top: r.bottom + 4, left: r.left });
     setMentionState({
       target,
       query: m.query,
@@ -495,6 +491,9 @@ export default function PostCard({
     } else if (mentionState.target === 'edit') {
       const next = editingContent.slice(0, mentionState.start) + '@' + slug + ' ' + editingContent.slice(mentionState.caret);
       setEditingContent(next);
+    } else if (mentionState.target === 'reply') {
+      const next = replyText.slice(0, mentionState.start) + '@' + slug + ' ' + replyText.slice(mentionState.caret);
+      setReplyText(next);
     }
     setMentionState(null);
   };
@@ -568,11 +567,13 @@ export default function PostCard({
     const text = replyText.trim();
     setReplyText('');
     setShowReplyBox(false);
+    setMentionState(null);
     await supabase.from('comments').insert({
       post_id: post.id,
       user_id: currentUserId,
       content: text,
     });
+    await notifyMentioned(text, false, currentUserId, post.id);
     const { data } = await supabase
       .from('comments')
       .select('id, content, created_at, profiles(name, avatar_url, avatar_color)')
@@ -1182,11 +1183,13 @@ export default function PostCard({
           <div style={{marginTop: 8, display: 'flex', gap: 8, alignItems: 'flex-start'}}>
             <Av size={28} color={currentProfile?.avatar_color}
               name={currentProfile?.name} url={currentProfile?.avatar_url || ''}/>
-            <div style={{flex: 1}}>
+            <div style={{flex: 1, position: 'relative'}}>
               <textarea
                 autoFocus
                 value={replyText}
-                onChange={e => setReplyText(e.target.value)}
+                onChange={e => { setReplyText(e.target.value); handleMentionInput('reply', e.target, e.target.value); }}
+                onSelect={e => handleMentionInput('reply', e.target, e.target.value)}
+                onBlur={() => setTimeout(() => setMentionState(null), 200)}
                 placeholder={
                   commCount === 0
                     ? ZERO_COMMENT_PROMPTS[promptIndex % ZERO_COMMENT_PROMPTS.length]
@@ -1201,6 +1204,8 @@ export default function PostCard({
                   background: T.w, boxSizing: 'border-box',
                 }}
                 onKeyDown={e => {
+                  // Don't submit while mention dropdown handles Enter.
+                  if (mentionState && mentionState.target === 'reply' && e.key === 'Enter') return;
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitQuickReply(); }
                   if (e.key === 'Escape') { setShowReplyBox(false); setReplyText(''); }
                 }}
@@ -1209,6 +1214,15 @@ export default function PostCard({
                 <Btn onClick={() => { setShowReplyBox(false); setReplyText(''); }}>Cancel</Btn>
                 <Btn variant="s" onClick={submitQuickReply} disabled={!replyText.trim()}>Reply</Btn>
               </div>
+              {mentionState && mentionState.target === 'reply' && (
+                <MentionAutocomplete
+                  query={mentionState.query}
+                  top={mentionState.top}
+                  left={mentionState.left}
+                  onSelect={insertMentionInComment}
+                  onClose={() => setMentionState(null)}
+                />
+              )}
             </div>
           </div>
         )}
@@ -1314,10 +1328,6 @@ export default function PostCard({
                   onClose={()=>setMentionState(null)}
                 />
               )}
-              {/* DEBUG — remove once mention dropdown confirmed working */}
-              <div style={{position:'absolute',right:16,top:4,fontSize:10,color:T.mu,fontFamily:'monospace',pointerEvents:'none'}}>
-                mention: {mentionState ? `target=${mentionState.target} q="${mentionState.query}" top=${Math.round(mentionState.top)} left=${Math.round(mentionState.left)}` : 'null'}
-              </div>
             </div>
           ) : (
             <div style={{padding:"12px 16px",fontSize:12.5,color:T.mu,textAlign:"center",background:T.w}}>Sign in to comment.</div>
