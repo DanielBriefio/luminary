@@ -1,6 +1,6 @@
 import { T } from '../lib/constants';
 import { sanitiseHtml, isHtml } from '../lib/htmlUtils';
-import Linkify from './Linkify';
+import { MentionAndLinkify } from '../lib/mentionUtils';
 
 export default function SafeHtml({ html, tags, onTagClick }) {
   if (!html) return null;
@@ -22,6 +22,7 @@ export default function SafeHtml({ html, tags, onTagClick }) {
           .rc ol { list-style-type:decimal; padding-left:22px; margin:6px 0; display:block; }
           .rc li { margin:3px 0; display:list-item; }
           .rc a  { color:#6c63ff; text-decoration:underline; overflow-wrap:break-word; word-break:break-all; }
+          .rc a[data-mention] { text-decoration:none; font-weight:600; word-break:normal; }
           .rc strong, .rc b { font-weight:700; }
           .rc em, .rc i { font-style:italic; }
           .rc u  { text-decoration:underline; }
@@ -36,7 +37,7 @@ export default function SafeHtml({ html, tags, onTagClick }) {
   }
   return (
     <div style={{fontSize:13,lineHeight:1.7,marginBottom:10}}>
-      <Linkify text={html}/>
+      <MentionAndLinkify text={html}/>
     </div>
   );
 }

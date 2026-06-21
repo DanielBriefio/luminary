@@ -10,6 +10,7 @@ const NOTIF_CONFIG = {
   new_comment:        { icon: '💬', label: () => `commented on your post` },
   paper_comment:      { icon: '📄', label: (n) => `commented on a paper you follow${n.meta?.paper_title ? ` — ${n.meta.paper_title}` : ''}` },
   new_follower:       { icon: '👤', label: () => `started following you` },
+  mention:            { icon: '@', label: () => `mentioned you in a post` },
   group_post:             { icon: '🔬', label: (n) => `posted in ${n.meta?.group_name ? `"${n.meta.group_name}"` : 'your group'}` },
   group_announcement:     { icon: '📢', label: () => `posted a group announcement` },
   group_member_added:     { icon: '🤝', label: () => `was added to a group` },
@@ -21,7 +22,7 @@ const NOTIF_CONFIG = {
 };
 
 // Types that have a linked post we can show a snippet for
-const POST_NOTIF_TYPES = new Set(['new_post', 'new_comment', 'paper_comment']);
+const POST_NOTIF_TYPES = new Set(['new_post', 'new_comment', 'paper_comment', 'mention']);
 
 function postSnippet(post) {
   if (!post) return '';

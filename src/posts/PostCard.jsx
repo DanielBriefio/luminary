@@ -14,6 +14,8 @@ import PaperPreview from '../components/PaperPreview';
 import RichTextEditor from '../components/RichTextEditor';
 import LinkPreview, { extractFirstUrl } from '../components/LinkPreview';
 import Linkify from '../components/Linkify';
+import MentionAutocomplete from '../components/MentionAutocomplete';
+import { detectActiveMention, parseAllMentionSlugs, MentionAndLinkify } from '../lib/mentionUtils';
 import { htmlToPlain } from '../lib/htmlUtils';
 import ShareModal from '../components/ShareModal';
 import ReportModal from '../components/ReportModal';
@@ -95,6 +97,44 @@ async function awardLumensForComment(post, commenterId, commenterPrevLumens) {
   } catch {
     // Swallow any sync/async failure so the comment flow always completes.
   }
+}
+
+// Inserts one 'mention' notification per slug mentioned in `content`.
+// Skip self-mentions and the post owner (they get new_comment already).
+// Deduped against existing unread mention notifs for the same target.
+async function notifyMentioned(content, isHtml, actorId, postId) {
+  if (!content || !postId) return;
+  const slugs = parseAllMentionSlugs(content, isHtml);
+  if (!slugs.length) return;
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id, profile_slug')
+    .in('profile_slug', slugs);
+  if (!profs?.length) return;
+  const recipients = profs
+    .map(p => p.id)
+    .filter(id => id && id !== actorId);
+  if (!recipients.length) return;
+  // Skip recipients who already have an unread mention notif for this post.
+  const { data: existing } = await supabase
+    .from('notifications')
+    .select('user_id')
+    .eq('notif_type', 'mention')
+    .eq('target_id', postId)
+    .eq('read', false)
+    .in('user_id', recipients);
+  const skip = new Set((existing || []).map(r => r.user_id));
+  const fresh = recipients.filter(id => !skip.has(id));
+  if (!fresh.length) return;
+  await supabase.from('notifications').insert(
+    fresh.map(uid => ({
+      user_id:    uid,
+      actor_id:   actorId,
+      notif_type: 'mention',
+      target_id:  postId,
+      read:       false,
+    }))
+  );
 }
 
 // Inserts a new_comment notification for the post owner, deduped so a flurry
@@ -191,6 +231,9 @@ export default function PostCard({
   const [editingContent,   setEditingContent]   = useState('');
   const [editingSaving,    setEditingSaving]    = useState(false);
   const [editingError,     setEditingError]     = useState('');
+  // @-mention dropdown state — shared across the new-comment input and
+  // the inline edit textarea. Only one can be active at a time.
+  const [mentionState, setMentionState] = useState(null); // { target: 'new'|'edit', query, start, caret, top, left }
   const [commLoaded,setCommLoaded] = useState(false);
   const [commLoading,setCommLoading]=useState(false);
   const [commText,  setCommText]   = useState('');
@@ -391,9 +434,10 @@ export default function PostCard({
   const submitComment = async () => {
     if (!commText.trim() || !currentUserId || commSaving) return;
     setCommSaving(true);
+    const content = commText.trim();
     const { data } = await supabase
       .from('comments')
-      .insert({ post_id: post.id, user_id: currentUserId, content: commText.trim() })
+      .insert({ post_id: post.id, user_id: currentUserId, content })
       .select('*, profiles(name, avatar_color, avatar_url, institution, profile_slug)')
       .single();
     if (data) {
@@ -403,6 +447,7 @@ export default function PostCard({
       capture('comment_posted');
       await awardLumensForComment(post, currentUserId, currentProfile?.lumens_current_period);
       await notifyPostOwnerOfComment(post, currentUserId);
+      await notifyMentioned(content, false, currentUserId, post.id);
     }
     setCommSaving(false);
   };
@@ -411,6 +456,47 @@ export default function PostCard({
     await supabase.from('comments').delete().eq('id', id);
     setComments(c => c.filter(x => x.id !== id));
     setCommCount(n => Math.max(0, n - 1));
+  };
+
+  // Mention input handlers — call from each textarea's onInput/onSelect.
+  // Detects `@<query>` immediately before the caret and parks dropdown
+  // position relative to the textarea. Host's onChange still updates
+  // the underlying text state independently.
+  const handleMentionInput = (target, textareaEl, value) => {
+    const caret = textareaEl?.selectionStart ?? 0;
+    const m = detectActiveMention(value, caret);
+    if (!m) { setMentionState(null); return; }
+    // Position popup below the textarea. Use the textarea's rect
+    // relative to its scroll container; rough but works in practice.
+    const r = textareaEl.getBoundingClientRect();
+    const parent = textareaEl.offsetParent || document.body;
+    const pr = parent.getBoundingClientRect();
+    setMentionState({
+      target,
+      query: m.query,
+      start: m.start,
+      caret,
+      top:  r.bottom - pr.top + 4,
+      left: r.left - pr.left,
+    });
+  };
+  const insertMentionInComment = (profile) => {
+    if (!mentionState) return;
+    const slug = profile.profile_slug;
+    if (!slug) return;
+    if (mentionState.target === 'new') {
+      const next = commText.slice(0, mentionState.start) + '@' + slug + ' ' + commText.slice(mentionState.caret);
+      setCommText(next);
+      const newCaret = mentionState.start + slug.length + 2;
+      setTimeout(() => {
+        const el = commInputRef.current;
+        if (el) { el.focus(); el.setSelectionRange(newCaret, newCaret); }
+      }, 0);
+    } else if (mentionState.target === 'edit') {
+      const next = editingContent.slice(0, mentionState.start) + '@' + slug + ' ' + editingContent.slice(mentionState.caret);
+      setEditingContent(next);
+    }
+    setMentionState(null);
   };
 
   const startEditComment = (c) => {
@@ -446,6 +532,9 @@ export default function PostCard({
       setComments(cs => cs.map(x =>
         x.id === editingCommentId ? { ...x, content: next, edited_at: data[0].edited_at } : x
       ));
+      // Mention any newly-added users — dedup against unread prior mention
+      // notifs so simple edits don't re-fire.
+      await notifyMentioned(next, false, currentUserId, post.id);
       cancelEditComment();
     }
     setEditingSaving(false);
@@ -1145,10 +1234,12 @@ export default function PostCard({
                   </span>
                 </div>
                 {isEditing ? (
-                  <div>
+                  <div style={{position:"relative"}}>
                     <textarea
                       value={editingContent}
-                      onChange={e=>setEditingContent(e.target.value)}
+                      onChange={e=>{setEditingContent(e.target.value); handleMentionInput('edit', e.target, e.target.value);}}
+                      onSelect={e=>handleMentionInput('edit', e.target, editingContent)}
+                      onBlur={()=>setTimeout(()=>setMentionState(null), 200)}
                       autoFocus
                       rows={3}
                       style={{width:"100%",padding:"7px 10px",borderRadius:8,border:`1.5px solid ${T.v}`,background:T.w,fontSize:13,fontFamily:"inherit",color:T.text,outline:"none",resize:"vertical",boxSizing:"border-box",lineHeight:1.5}}
@@ -1162,9 +1253,18 @@ export default function PostCard({
                         {editingSaving?"Saving…":"Save"}
                       </button>
                     </div>
+                    {mentionState && mentionState.target === 'edit' && (
+                      <MentionAutocomplete
+                        query={mentionState.query}
+                        top={mentionState.top}
+                        left={mentionState.left}
+                        onSelect={insertMentionInComment}
+                        onClose={()=>setMentionState(null)}
+                      />
+                    )}
                   </div>
                 ) : (
-                  <div style={{fontSize:13,lineHeight:1.65,color:removed?T.mu:T.text,wordBreak:"break-word",whiteSpace:"pre-wrap"}}><Linkify text={c.content}/></div>
+                  <div style={{fontSize:13,lineHeight:1.65,color:removed?T.mu:T.text,wordBreak:"break-word",whiteSpace:"pre-wrap"}}><MentionAndLinkify text={c.content}/></div>
                 )}
               </div>
               {currentUserId===c.user_id && !isEditing && (
@@ -1183,15 +1283,21 @@ export default function PostCard({
           )}
 
           {currentUserId ? (
-            <div style={{display:"flex",gap:10,padding:"12px 16px",alignItems:"flex-start",background:T.w,borderTop:`1px solid ${T.bdr}`}}>
+            <div style={{position:"relative",display:"flex",gap:10,padding:"12px 16px",alignItems:"flex-start",background:T.w,borderTop:`1px solid ${T.bdr}`}}>
               <Av color={currentProfile?.avatar_color||"me"} size={30} name={currentProfile?.name} url={currentProfile?.avatar_url||""}/>
               <div style={{flex:1,display:"flex",gap:8,alignItems:"flex-end"}}>
                 <textarea
                   ref={commInputRef}
                   value={commText}
-                  onChange={e=>setCommText(e.target.value)}
-                  onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); submitComment(); } }}
-                  placeholder="Write a comment... (Enter to submit, Shift+Enter for new line)"
+                  onChange={e=>{setCommText(e.target.value); handleMentionInput('new', e.target, e.target.value);}}
+                  onSelect={e=>handleMentionInput('new', e.target, commText)}
+                  onBlur={()=>setTimeout(()=>setMentionState(null), 200)}
+                  onKeyDown={e=>{
+                    // Don't submit while mention dropdown handles Enter.
+                    if (mentionState && mentionState.target === 'new' && e.key === 'Enter') return;
+                    if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); submitComment(); }
+                  }}
+                  placeholder="Write a comment... type @ to mention someone"
                   rows={1}
                   style={{flex:1,background:T.s2,border:`1.5px solid ${T.bdr}`,borderRadius:20,padding:"8px 14px",fontSize:13,fontFamily:"inherit",outline:"none",resize:"none",lineHeight:1.5,color:T.text,minHeight:36,maxHeight:120,overflowY:"auto"}}/>
                 <button onClick={submitComment} disabled={commSaving||!commText.trim()}
@@ -1199,6 +1305,15 @@ export default function PostCard({
                   {commSaving?"...":"Reply"}
                 </button>
               </div>
+              {mentionState && mentionState.target === 'new' && (
+                <MentionAutocomplete
+                  query={mentionState.query}
+                  top={mentionState.top}
+                  left={mentionState.left}
+                  onSelect={insertMentionInComment}
+                  onClose={()=>setMentionState(null)}
+                />
+              )}
             </div>
           ) : (
             <div style={{padding:"12px 16px",fontSize:12.5,color:T.mu,textAlign:"center",background:T.w}}>Sign in to comment.</div>

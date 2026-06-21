@@ -5,6 +5,7 @@ import { T } from '../lib/constants';
 import { sanitiseHtml, normalisePastedHtml, toEmbedUrl } from '../lib/htmlUtils';
 import { checkRemainingQuota } from '../lib/storageQuota';
 import Btn from './Btn';
+import MentionAutocomplete from './MentionAutocomplete';
 
 function TBtn({ label, title, onClick, active=false }) {
   return (
@@ -94,6 +95,8 @@ export default function RichTextEditor({
   const [videoUrl,     setVideoUrl]     = useState('');
   const [videoError,   setVideoError]   = useState('');
   const [imgUploading, setImgUploading] = useState(false);
+  // @-mention state — driven by detectMentionInEditor on every input.
+  const [mentionState, setMentionState] = useState(null); // { query, top, left, range }
   const [imgToolbar,   setImgToolbar]   = useState(null);
     // { el, size, top, left } — the currently selected inline image and
     // the position to place the resize toolbar at. Cleared on outside click.
@@ -346,6 +349,77 @@ export default function RichTextEditor({
       window.removeEventListener('scroll', reflow, true);
     };
   }, [imgToolbar?.el]);
+
+  // Look at the selection's anchor text node and walk backward to find
+  // an @<query> immediately before the caret. Shows MentionAutocomplete
+  // anchored to the caret's bounding rect (relative to the wrapper).
+  const detectMentionInEditor = () => {
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) { setMentionState(null); return; }
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed) { setMentionState(null); return; }
+    const node = range.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE) { setMentionState(null); return; }
+    if (!editorRef.current?.contains(node)) { setMentionState(null); return; }
+    const text = node.textContent || '';
+    const caret = range.startOffset;
+    // Walk backwards from caret to find @.
+    let i = caret - 1;
+    while (i >= 0) {
+      const ch = text[i];
+      if (ch === '@') break;
+      if (!/[a-zA-Z0-9-]/.test(ch)) { setMentionState(null); return; }
+      i--;
+    }
+    if (i < 0) { setMentionState(null); return; }
+    // @ must be at start of node or after a non-word char.
+    const before = i > 0 ? text[i - 1] : '';
+    if (i > 0 && /[a-zA-Z0-9_]/.test(before)) { setMentionState(null); return; }
+    const query = text.slice(i + 1, caret);
+    // Anchor popup to the caret's bounding rect.
+    const r = range.getBoundingClientRect();
+    const wrapper = editorRef.current.parentElement;
+    const pr = wrapper.getBoundingClientRect();
+    setMentionState({
+      query, atNode: node, atOffset: i, caretOffset: caret,
+      top:  r.bottom - pr.top + 4,
+      left: r.left - pr.left,
+    });
+  };
+
+  const insertMentionInEditor = (profile) => {
+    if (!mentionState) return;
+    const slug = profile.profile_slug;
+    if (!slug) { setMentionState(null); return; }
+    const { atNode, atOffset, caretOffset } = mentionState;
+    if (!editorRef.current?.contains(atNode)) { setMentionState(null); return; }
+    // Replace text[atOffset..caretOffset] (the "@<query>") with anchor.
+    const text = atNode.textContent || '';
+    const before = text.slice(0, atOffset);
+    const after  = text.slice(caretOffset);
+    const a = document.createElement('a');
+    a.setAttribute('href', `/p/${slug}`);
+    a.setAttribute('data-mention', slug);
+    a.textContent = '@' + (profile.name || slug);
+    const space = document.createTextNode(' ');
+    const beforeNode = document.createTextNode(before);
+    const afterNode  = document.createTextNode(after);
+    const parent = atNode.parentNode;
+    parent.insertBefore(beforeNode, atNode);
+    parent.insertBefore(a, atNode);
+    parent.insertBefore(space, atNode);
+    parent.insertBefore(afterNode, atNode);
+    parent.removeChild(atNode);
+    // Place caret after the inserted space.
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.setStart(space, 1);
+    range.setEnd(space, 1);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    setMentionState(null);
+    syncContent();
+  };
 
   const exec = (cmd, val=null) => {
     editorRef.current?.focus();
@@ -965,7 +1039,7 @@ export default function RichTextEditor({
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
-        onInput={() => { syncCitationsFromBody(); syncContent(); }}
+        onInput={() => { syncCitationsFromBody(); syncContent(); detectMentionInEditor(); }}
         onKeyUp={updateActiveFormats}
         onMouseUp={updateActiveFormats}
         onPaste={handlePaste}
@@ -1130,9 +1204,20 @@ export default function RichTextEditor({
         [data-deep-dive] sup a { color:${T.v}; text-decoration:none; font-weight:700; }
 
         [contenteditable] a  { color:${T.v}; text-decoration:underline; }
+        [contenteditable] a[data-mention] { text-decoration:none; font-weight:600; }
         [data-luminary-refs] p { font-size:14px; color:${T.mu}; line-height:1.6; margin:6px 0; font-family:'DM Sans',sans-serif; }
         [data-luminary-refs] hr { border:none; border-top:1px solid ${T.bdr}; margin:24px 0 12px; }
       `}</style>
+
+      {mentionState && (
+        <MentionAutocomplete
+          query={mentionState.query}
+          top={mentionState.top}
+          left={mentionState.left}
+          onSelect={insertMentionInEditor}
+          onClose={()=>setMentionState(null)}
+        />
+      )}
     </div>
   );
 }

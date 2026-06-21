@@ -17,11 +17,18 @@ export function sanitiseHtml(html) {
       return;
     }
     if (tag === 'a') {
-      const href = el.getAttribute('href') || '';
+      const href      = el.getAttribute('href') || '';
+      const mention   = el.getAttribute('data-mention') || '';
       [...el.attributes].forEach(a => el.removeAttribute(a.name));
       if (/^(https?:|mailto:|\/)/i.test(href)) el.setAttribute('href', href);
-      el.setAttribute('target', '_blank');
-      el.setAttribute('rel', 'noopener noreferrer');
+      // Preserve mention slug so notifyMentioned can find it on save
+      // and rendered posts know to skip target=_blank for internal links.
+      if (mention && /^[a-z0-9][a-z0-9-]{1,50}$/.test(mention)) {
+        el.setAttribute('data-mention', mention);
+      } else {
+        el.setAttribute('target', '_blank');
+        el.setAttribute('rel', 'noopener noreferrer');
+      }
     } else if (tag === 'img') {
       const src      = el.getAttribute('src') || '';
       const alt      = el.getAttribute('alt') || '';

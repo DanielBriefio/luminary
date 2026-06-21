@@ -20,6 +20,7 @@ const EMAIL_TYPES = new Set([
   'group_request_approved',
   'group_member_joined',
   'new_comment',
+  'mention',
   'invite_redeemed',
   'account_deletion_scheduled',
 ]);
@@ -36,6 +37,7 @@ const PREF_COLUMN: Record<string, string> = {
   group_request_approved: 'email_notif_group_request',
   group_member_joined:    'email_notif_group_request',
   new_comment:            'email_notif_new_comment',
+  mention:                'email_notif_mention',
   invite_redeemed:        'email_notif_invite_redeemed',
 };
 
@@ -62,6 +64,7 @@ serve(async (req) => {
         email_notif_new_message,
         email_notif_group_request,
         email_notif_new_comment,
+        email_notif_mention,
         email_notif_invite_redeemed
       `)
       .eq('id', user_id)
@@ -185,6 +188,29 @@ serve(async (req) => {
       };
     }
 
+    if (notif_type === 'mention') {
+      // target_id is the post id; pull a small preview of the
+      // mentioning content so the email has context.
+      const { data: post } = await supabase
+        .from('posts')
+        .select('content, paper_title, post_type')
+        .eq('id', target_id)
+        .single();
+      const raw = (post?.paper_title || post?.content || '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const preview = raw
+        ? (raw.length > 200 ? raw.slice(0, 200).trim() + '…' : raw)
+        : 'Mentioned you in a post';
+      templateVariables = {
+        ...templateVariables,
+        mentioner_name: actor.name || 'Someone',
+        post_preview:   preview,
+        post_url:       `${APP_URL}/s/${target_id}`,
+      };
+    }
+
     if (notif_type === 'invite_redeemed') {
       templateVariables = {
         ...templateVariables,
@@ -253,6 +279,8 @@ function buildSubject(
       return `${actorName} joined ${meta?.group_name || 'your group'} on Luminary ✦`;
     case 'new_comment':
       return `${actorName} commented on your post on Luminary ✦`;
+    case 'mention':
+      return `${actorName} mentioned you on Luminary ✦`;
     case 'invite_redeemed':
       return `${actorName} just joined Luminary using your invite ✦`;
     case 'account_deletion_scheduled':
@@ -365,6 +393,19 @@ function renderHtml(notifType: string, v: Record<string, string>): string {
        <p style="margin:0;">Open the post to read the full thread and reply.</p>`,
       v.post_url,
       'View comment →',
+    );
+  }
+
+  if (notifType === 'mention') {
+    return shell(
+      `<p style="margin:0 0 12px;">Hi ${name},</p>
+       <p style="margin:0 0 12px;"><strong>${escape(v.mentioner_name)}</strong> mentioned you in a post on Luminary:</p>
+       <p style="margin:0 0 12px;padding:12px 14px;background:#f7f8fe;border-left:3px solid #6c63ff;border-radius:0 8px 8px 0;color:#1b1d36;font-style:italic;">
+         ${escape(v.post_preview)}
+       </p>
+       <p style="margin:0;">Open the post to see the full context and join the conversation.</p>`,
+      v.post_url,
+      'View post →',
     );
   }
 

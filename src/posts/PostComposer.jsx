@@ -7,6 +7,7 @@ const AUTO_TAG_URL = 'https://rtblqylhoswckvwwspcp.supabase.co/functions/v1/auto
 import { getFileCategory } from '../lib/fileUtils';
 import { checkRemainingQuota } from '../lib/storageQuota';
 import { getCachedTagsByDoi, buildCitationFromEpmc, buildCitationFromCrossRef, extractCorrespondingAuthorFromEpmc } from '../lib/utils';
+import { parseAllMentionSlugs } from '../lib/mentionUtils';
 import Btn from '../components/Btn';
 import RichTextEditor from '../components/RichTextEditor';
 import CoverRepositioner from '../components/CoverRepositioner';
@@ -183,6 +184,43 @@ function defaultVisibility(context) {
   if (context.kind === 'group') return 'members';
   if (context.kind === 'project') return 'members';
   return 'public';
+}
+
+// Notify users mentioned via @-mention in a post's content.
+// Posts always carry HTML when isDeepDive, otherwise plain text in
+// PostComposer's `content` field. Skip self-mentions.
+async function notifyPostMentions({ content, isHtml, postId, actorId }) {
+  if (!content || !postId) return;
+  const slugs = parseAllMentionSlugs(content, isHtml);
+  if (!slugs.length) return;
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id, profile_slug')
+    .in('profile_slug', slugs);
+  const recipients = (profs || [])
+    .map(p => p.id)
+    .filter(id => id && id !== actorId);
+  if (!recipients.length) return;
+  // Dedup against existing unread mention notifs for this post.
+  const { data: existing } = await supabase
+    .from('notifications')
+    .select('user_id')
+    .eq('notif_type', 'mention')
+    .eq('target_id', postId)
+    .eq('read', false)
+    .in('user_id', recipients);
+  const skip = new Set((existing || []).map(r => r.user_id));
+  const fresh = recipients.filter(id => !skip.has(id));
+  if (!fresh.length) return;
+  await supabase.from('notifications').insert(
+    fresh.map(uid => ({
+      user_id:    uid,
+      actor_id:   actorId,
+      notif_type: 'mention',
+      target_id:  postId,
+      read:       false,
+    }))
+  );
 }
 
 // Notify group members of a new group post
@@ -741,6 +779,18 @@ export default function PostComposer({
         p_source_kind: 'post',
         p_source_id:   newPost.id,
       }).then(() => {}, () => {});
+    }
+
+    // Fire mention notifications — best-effort, never blocks publish.
+    if (newPost?.id) {
+      notifyPostMentions({
+        content,
+        // Deep dives are the only path producing HTML content; regular
+        // posts (including paper commentary) come in as plain text.
+        isHtml: !!isDeepDive,
+        postId: newPost.id,
+        actorId: user.id,
+      }).catch(() => {});
     }
 
     if (newPost?.id && pendingImagesRef.current.length > 0) {
