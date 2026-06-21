@@ -1235,7 +1235,7 @@ export default function PostCard({
                     <textarea
                       value={editingContent}
                       onChange={e=>{setEditingContent(e.target.value); handleMentionInput('edit', e.target, e.target.value);}}
-                      onSelect={e=>handleMentionInput('edit', e.target, editingContent)}
+                      onSelect={e=>handleMentionInput('edit', e.target, e.target.value)}
                       onBlur={()=>setTimeout(()=>setMentionState(null), 200)}
                       autoFocus
                       rows={3}
@@ -1287,7 +1287,7 @@ export default function PostCard({
                   ref={commInputRef}
                   value={commText}
                   onChange={e=>{setCommText(e.target.value); handleMentionInput('new', e.target, e.target.value);}}
-                  onSelect={e=>handleMentionInput('new', e.target, commText)}
+                  onSelect={e=>handleMentionInput('new', e.target, e.target.value)}
                   onBlur={()=>setTimeout(()=>setMentionState(null), 200)}
                   onKeyDown={e=>{
                     // Don't submit while mention dropdown handles Enter.
