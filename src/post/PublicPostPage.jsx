@@ -310,9 +310,13 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
   const insertMention = (profile) => {
     if (!mentionState || !profile.profile_slug) return;
     const slug = profile.profile_slug;
-    const next = text.slice(0, mentionState.start) + '@' + slug + ' ' + text.slice(mentionState.caret);
+    const name = profile.name || slug;
+    // Markdown-style marker — render-time shows the full display name,
+    // matching the post-side mention rendering.
+    const marker = `@[${name}](${slug}) `;
+    const next = text.slice(0, mentionState.start) + marker + text.slice(mentionState.caret);
     setText(next);
-    const newCaret = mentionState.start + slug.length + 2;
+    const newCaret = mentionState.start + marker.length;
     setTimeout(() => {
       const el = inputRef.current;
       if (el) { el.focus(); el.setSelectionRange(newCaret, newCaret); }

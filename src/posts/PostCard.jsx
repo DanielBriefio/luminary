@@ -442,19 +442,24 @@ export default function PostCard({
     if (!mentionState) return;
     const slug = profile.profile_slug;
     if (!slug) return;
+    // Markdown-style marker so render-time shows the full display name
+    // (and so the post + comment surfaces look consistent). Ugly in
+    // the textarea while editing — accepted v1 tradeoff.
+    const name = profile.name || slug;
+    const marker = `@[${name}](${slug}) `;
     if (mentionState.target === 'new') {
-      const next = commText.slice(0, mentionState.start) + '@' + slug + ' ' + commText.slice(mentionState.caret);
+      const next = commText.slice(0, mentionState.start) + marker + commText.slice(mentionState.caret);
       setCommText(next);
-      const newCaret = mentionState.start + slug.length + 2;
+      const newCaret = mentionState.start + marker.length;
       setTimeout(() => {
         const el = commInputRef.current;
         if (el) { el.focus(); el.setSelectionRange(newCaret, newCaret); }
       }, 0);
     } else if (mentionState.target === 'edit') {
-      const next = editingContent.slice(0, mentionState.start) + '@' + slug + ' ' + editingContent.slice(mentionState.caret);
+      const next = editingContent.slice(0, mentionState.start) + marker + editingContent.slice(mentionState.caret);
       setEditingContent(next);
     } else if (mentionState.target === 'reply') {
-      const next = replyText.slice(0, mentionState.start) + '@' + slug + ' ' + replyText.slice(mentionState.caret);
+      const next = replyText.slice(0, mentionState.start) + marker + replyText.slice(mentionState.caret);
       setReplyText(next);
     }
     setMentionState(null);

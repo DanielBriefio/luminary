@@ -15,14 +15,24 @@
 import React from 'react';
 import { T } from './constants';
 
+// Two plain-text storage formats supported, both producing the same
+// notification target:
+//   1. @[Display Name](slug)   — modern (matches Slack/LinkedIn). The
+//      autocomplete writes this format on select so render-time shows
+//      the full name.
+//   2. @<slug>                 — legacy, still parsed for older comments.
 // Slugs accept lowercase alphanumerics + hyphen (matches profile_slug
-// generation). Negative lookbehind to avoid matching email addresses.
-const MENTION_RE_PLAIN = /(^|[^a-zA-Z0-9_])@([a-z0-9][a-z0-9-]{1,50})/g;
+// generation). Negative lookbehind on bare slugs avoids matching email
+// addresses.
+const MENTION_RE_MARKER = /@\[([^\]]+)\]\(([a-z0-9][a-z0-9-]{1,50})\)/g;
+const MENTION_RE_PLAIN  = /(^|[^a-zA-Z0-9_\])])@([a-z0-9][a-z0-9-]{1,50})/g;
 
 export function parseMentionSlugsFromText(text) {
   if (!text) return [];
   const out = new Set();
   let m;
+  MENTION_RE_MARKER.lastIndex = 0;
+  while ((m = MENTION_RE_MARKER.exec(text)) !== null) out.add(m[2]);
   MENTION_RE_PLAIN.lastIndex = 0;
   while ((m = MENTION_RE_PLAIN.exec(text)) !== null) out.add(m[2]);
   return Array.from(out);
@@ -47,14 +57,22 @@ export function parseAllMentionSlugs(content, isHtml) {
   return parseMentionSlugsFromText(content);
 }
 
-// Render-time helper for plain text: split into React children with
-// @<slug> turned into clickable links, http(s) URLs handled by the
-// existing Linkify regex inline so callers don't need both wrappers.
-const URL_RE = /(https?:\/\/[^\s<>"']+)/;
+// Render-time helper for plain text: tokenises into React children
+// supporting three patterns in one pass:
+//   1. http(s) URLs                  → external link
+//   2. @[Name](slug) markdown marker → "@Name" linked to /p/slug
+//   3. @<slug> bare                  → "@<slug>" linked to /p/slug (legacy)
+// Marker pattern is listed before the bare slug so a "@[Name](slug)"
+// substring matches as a single marker rather than re-matching the
+// trailing "(slug)" as a bare mention.
 const COMBINED_RE = new RegExp(
-  `${URL_RE.source}|(?:^|[^a-zA-Z0-9_])@([a-z0-9][a-z0-9-]{1,50})`,
+  '(https?:\\/\\/[^\\s<>"\']+)' +
+  '|@\\[([^\\]]+)\\]\\(([a-z0-9][a-z0-9-]{1,50})\\)' +
+  '|(?:^|[^a-zA-Z0-9_\\])])@([a-z0-9][a-z0-9-]{1,50})',
   'g'
 );
+
+const mentionStyle = { color: T.v, textDecoration: 'none', fontWeight: 600 };
 
 export function MentionAndLinkify({ text }) {
   if (!text) return null;
@@ -73,16 +91,25 @@ export function MentionAndLinkify({ text }) {
         </a>
       );
       last = m.index + m[1].length;
-    } else if (m[2]) {
-      // Mention match — preserve the leading boundary char (could be
-      // whitespace, punctuation, or start-of-string)
-      const slug = m[2];
+    } else if (m[3]) {
+      // Marker mention "@[Name](slug)" — render the name as the link text
+      const name = m[2];
+      const slug = m[3];
+      out.push(
+        <a key={`mk${m.index}`} href={`/p/${slug}`} style={mentionStyle}>
+          @{name}
+        </a>
+      );
+      last = m.index + m[0].length;
+    } else if (m[4]) {
+      // Legacy bare slug mention — preserve the leading boundary char
+      // (could be whitespace, punctuation, or start-of-string)
+      const slug = m[4];
       const matchStart = m.index;
       const atIdx = text.indexOf('@', matchStart);
       if (atIdx > matchStart) out.push(text.slice(matchStart, atIdx));
       out.push(
-        <a key={`m${m.index}`} href={`/p/${slug}`}
-           style={{color:T.v,textDecoration:'none',fontWeight:600}}>
+        <a key={`m${m.index}`} href={`/p/${slug}`} style={mentionStyle}>
           @{slug}
         </a>
       );
