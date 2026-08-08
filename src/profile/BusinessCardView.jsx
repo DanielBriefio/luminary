@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Av from '../components/Av';
 
@@ -28,7 +27,7 @@ export function BusinessCardView({ profile, currentUserId }) {
   const [note,             setNote]             = useState('');
   const [withReminder,     setWithReminder]     = useState(false);
   const [reminderDateLabel,setReminderDateLabel] = useState('');
-  const [myProfile,        setMyProfile]        = useState(null);
+  const [vcfFile,          setVcfFile]          = useState(null);
   const [sharing,          setSharing]          = useState(false);
 
   // Platform detection
@@ -128,7 +127,7 @@ export function BusinessCardView({ profile, currentUserId }) {
     setNote('');
     setWithReminder(false);
     setReminderDateLabel('');
-    setMyProfile(null);
+    setVcfFile(null);
     setModalStep('note');
   };
 
@@ -137,8 +136,11 @@ export function BusinessCardView({ profile, currentUserId }) {
   const handleSave = async (includeReminder) => {
     const safeName = (profile.name || 'contact').replace(/\s+/g, '_');
 
-    // vCard download
-    triggerDownload(buildVCardText(note), `${safeName}.vcf`, 'text/vcard');
+    // vCard — build once, store for share step and trigger download
+    const vcfText = buildVCardText(note);
+    const file    = new File([vcfText], `${safeName}.vcf`, { type: 'text/vcard' });
+    setVcfFile(file);
+    triggerDownload(vcfText, `${safeName}.vcf`, 'text/vcard');
 
     // ICS download (slight delay so browser doesn't block the second download)
     let dateLabel = '';
@@ -154,11 +156,8 @@ export function BusinessCardView({ profile, currentUserId }) {
     setWithReminder(includeReminder);
     setReminderDateLabel(dateLabel);
 
-    // Offer share step on mobile if logged in
-    if (canShare && currentUserId) {
-      const { data } = await supabase
-        .from('profiles').select('profile_slug, name').eq('id', currentUserId).single();
-      setMyProfile(data || null);
+    // Offer share step on any mobile browser — no login required
+    if (canShare) {
       setModalStep('share');
     } else {
       setModalStep('done');
@@ -166,17 +165,16 @@ export function BusinessCardView({ profile, currentUserId }) {
   };
 
   const handleShare = async () => {
-    if (myProfile) {
-      setSharing(true);
-      try {
-        await navigator.share({
-          title: myProfile.name,
-          text: 'Connect with me on Luminary',
-          url: `${window.location.origin}/c/${myProfile.profile_slug}`,
-        });
-      } catch (_) { /* cancelled or not supported — still proceed */ }
-      setSharing(false);
-    }
+    setSharing(true);
+    try {
+      const canShareFile = vcfFile && navigator.canShare && navigator.canShare({ files: [vcfFile] });
+      if (canShareFile) {
+        await navigator.share({ files: [vcfFile], title: profile.name });
+      } else if (profile.profile_slug) {
+        await navigator.share({ title: profile.name, url: `${window.location.origin}/c/${profile.profile_slug}` });
+      }
+    } catch (_) { /* cancelled or not supported — still proceed */ }
+    setSharing(false);
     setModalStep('done');
   };
 
@@ -454,12 +452,12 @@ export function BusinessCardView({ profile, currentUserId }) {
             {modalStep === 'share' && (
               <>
                 <div style={{ textAlign:'center', marginBottom:24 }}>
-                  <div style={{ fontSize:44, marginBottom:14, lineHeight:1 }}>🤝</div>
+                  <div style={{ fontSize:44, marginBottom:14, lineHeight:1 }}>📲</div>
                   <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:20, color:'#1a1a2e', marginBottom:8 }}>
-                    Share your contact
+                    Share {firstName}'s card
                   </div>
                   <div style={{ fontSize:13.5, color:'#888', lineHeight:1.6 }}>
-                    Let {firstName} save your details too
+                    Send the contact card to a nearby device
                   </div>
                 </div>
 
