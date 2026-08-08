@@ -276,7 +276,7 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
     setNewCount(0);
     setPosts(filtered);
     setLoading(false);
-  }, [user, profile, tab, fp, feedMode, modeFilter, applyModeFilter]);
+  }, [user?.id, profile?.topic_interests, profile?.work_mode, tab, fp, feedMode, modeFilter, applyModeFilter]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
