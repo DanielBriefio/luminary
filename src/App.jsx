@@ -182,7 +182,7 @@ export default function App() {
   useEffect(()=>{
     if(!session?.user){setProfile(null);return;}
     supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>setProfile(data));
-  },[session]);
+  },[session?.user?.id]);
 
   // Apply any pending signup intent on first authenticated session.
   // Stashed by AuthScreen before signUp; consumed here once the user

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { T, TIER1_LIST, getTier2, WORK_MODE_MAP } from '../lib/constants';
 import FeedTipCard from '../components/FeedTipCard';
@@ -28,6 +28,9 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   const [showModeTooltip, setShowModeTooltip] = useState(
     () => !localStorage.getItem('luminary_mode_tooltip_seen')
   );
+  const [newCount, setNewCount] = useState(0);
+  const latestSeenAt = useRef(null);
+  const hiddenAtRef  = useRef(null);
 
   useEffect(()=>{ localStorage.setItem('luminary_feed_mode',feedMode); },[feedMode]);
   useEffect(()=>{ localStorage.setItem('luminary_mode_filter',modeFilter); },[modeFilter]);
@@ -267,11 +270,49 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
       ? applyModeFilter(visible, modeFilter, profile?.work_mode || 'researcher')
       : visible;
 
+    const newest = filtered.reduce((max, p) =>
+      (!max || p.created_at > max) ? p.created_at : max, null);
+    if (newest) latestSeenAt.current = newest;
+    setNewCount(0);
     setPosts(filtered);
     setLoading(false);
   }, [user, profile, tab, fp, feedMode, modeFilter, applyModeFilter]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
+
+  const checkForNewPosts = useCallback(async () => {
+    if (!latestSeenAt.current) return;
+    const { data } = await supabase
+      .from('posts_with_meta')
+      .select('id')
+      .eq('context_kind', 'feed')
+      .eq('hidden', false)
+      .gt('created_at', latestSeenAt.current)
+      .limit(20);
+    const count = data?.length ?? 0;
+    if (count > 0) setNewCount(count);
+  }, []);
+
+  // Poll every 2 minutes while the tab is open
+  useEffect(() => {
+    const id = setInterval(checkForNewPosts, 2 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [checkForNewPosts]);
+
+  // Immediate check when returning to the tab after 10+ minutes away
+  useEffect(() => {
+    const onVisChange = () => {
+      if (document.hidden) {
+        hiddenAtRef.current = Date.now();
+      } else {
+        const away = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0;
+        hiddenAtRef.current = null;
+        if (away > 10 * 60 * 1000) checkForNewPosts();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => document.removeEventListener('visibilitychange', onVisChange);
+  }, [checkForNewPosts]);
 
   const handleUnfollow = (userId) => {
     if (fp !== 'fol') return;
@@ -478,6 +519,19 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
         <div style={{padding:"16px 18px",boxSizing:"border-box",width:"100%"}}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 264px",gap:16,alignItems:"start",minWidth:0,width:"100%"}}>
             <div style={{display:"flex",flexDirection:"column",gap:12,minWidth:0}}>
+              {newCount > 0 && (
+                <button onClick={fetchPosts} style={{
+                  width:'100%', padding:'10px 16px',
+                  background:T.v, color:'#fff',
+                  border:'none', borderRadius:10,
+                  cursor:'pointer', fontFamily:'inherit',
+                  fontSize:13, fontWeight:600,
+                  textAlign:'center', userSelect:'none',
+                  transition:'opacity .15s',
+                }}>
+                  ↑ {newCount >= 20 ? '20+' : newCount} new {newCount === 1 ? 'post' : 'posts'} — click to load
+                </button>
+              )}
               {onCompose && (
                 <button onClick={onCompose}
                   style={{
