@@ -60,7 +60,7 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
         .eq('user_id', user.id).eq('post_type', 'milestone');
       if (cancelled) return;
 
-      const readable = (data || []).find(p => p.visibility === 'everyone');
+      const readable = (data || []).find(p => p.visibility === 'public');
       if (readable) return; // already celebrated — skip confetti + post creation
 
       // First time hitting stage 5: fire confetti + show banner
@@ -89,7 +89,7 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
         user_id:        user.id,
         target_user_id: user.id,
         post_type:      'milestone',
-        visibility:     'everyone',
+        visibility:     'public',
         content:        buildMilestoneHtml(heading, message, cta1Label, cta2Label),
       });
     })();
