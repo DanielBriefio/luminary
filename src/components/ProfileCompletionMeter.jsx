@@ -88,6 +88,7 @@ export default function ProfileCompletionMeter({ profile, user, onAction }) {
       await supabase.from('posts').insert({
         user_id:        user.id,
         target_user_id: user.id,
+        context_kind:   'feed',
         post_type:      'milestone',
         visibility:     'public',
         content:        buildMilestoneHtml(heading, message, cta1Label, cta2Label),
