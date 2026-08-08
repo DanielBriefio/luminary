@@ -1755,7 +1755,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
               <div style={{fontSize:12.5,color:T.mu,lineHeight:1.6,marginBottom:16}}>
                 These contact details appear on your virtual business card when someone scans your QR code at a conference or event.
                 {profile?.profile_slug && (
-                  <> Your card is live at <a href={`/p/${profile.profile_slug}`} target="_blank" rel="noopener noreferrer" style={{color:T.v,fontWeight:600,textDecoration:'none'}}>{window.location.hostname}/p/{profile.profile_slug} ↗</a></>
+                  <> Your card is live at <a href={`/c/${profile.profile_slug}`} target="_blank" rel="noopener noreferrer" style={{color:T.v,fontWeight:600,textDecoration:'none'}}>{window.location.hostname}/c/{profile.profile_slug} ↗</a></>
                 )}
               </div>
 

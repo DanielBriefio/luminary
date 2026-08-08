@@ -22,6 +22,7 @@ export default function PublicProfilePage({ slug }) {
 
   useEffect(() => {
     document.title = 'Luminary';
+    // Silently check if the viewer is logged in (for owner nudge)
     supabase.auth.getSession().then(({ data }) => {
       if (data?.session?.user?.id) setCurrentUserId(data.session.user.id);
     });
@@ -37,6 +38,7 @@ export default function PublicProfilePage({ slug }) {
 
       if (cancelled) return;
       if (!p) { setNotFound(true); setLoading(false); return; }
+      // Treat deletion-pending profiles as not found on public surfaces.
       if (p.deletion_scheduled_at) { setNotFound(true); setLoading(false); return; }
 
       setProfile(p);
@@ -45,6 +47,8 @@ export default function PublicProfilePage({ slug }) {
         document.title = `${displayName} — Luminary`;
       }
 
+      // Follower / following counts — same query shape as ProfileScreen.
+      // Public page had hardcoded '—' placeholders before this.
       Promise.all([
         supabase.from('follows').select('id', { count: 'exact', head: true })
           .eq('target_type', 'user').eq('target_id', p.id),
@@ -116,80 +120,12 @@ export default function PublicProfilePage({ slug }) {
   ];
 
   const hasAbout = wh.length || edu.length || vol.length || org.length || lng.length || skl.length || hon.length || pat.length || grt.length;
-  const hasLinkedIn = !!profile.linkedin_url;
-  const hasWhatsApp = !!profile.public_phone;
-  const displayName = [profile.name_prefix, profile.name, profile.name_suffix].filter(Boolean).join(' ') || 'Researcher';
-  const firstName = profile.name?.split(' ')[0] || 'them';
-
-  // Action buttons — Part 2 will wire onClick flows; for now Connect links to join page
-  const ActionButtons = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Tier 1 — primary */}
-      <a
-        href={`/?ref=${profile.profile_slug}`}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-          padding: '14px 20px', borderRadius: 12,
-          background: T.v, color: '#fff',
-          textDecoration: 'none', fontWeight: 700, fontSize: 15, fontFamily: 'inherit',
-          boxShadow: '0 4px 14px rgba(108,99,255,.35)',
-        }}
-      >
-        🔬 Connect on Luminary
-      </a>
-      {/* Tier 2 — secondary */}
-      <button
-        onClick={() => {/* Save to Contacts flow — Part 2 */}}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-          padding: '13px 20px', borderRadius: 12,
-          background: 'transparent', border: `2px solid ${T.v}`, color: T.v,
-          fontWeight: 700, fontSize: 15, fontFamily: 'inherit', cursor: 'pointer',
-        }}
-      >
-        💾 Save to Contacts
-      </button>
-      {/* Tier 3 — tertiary, only if fields populated */}
-      {(hasLinkedIn || hasWhatsApp) && (
-        <div style={{ display: 'flex', gap: 10 }}>
-          {hasLinkedIn && (
-            <a
-              href={profile.linkedin_url}
-              target="_blank" rel="noopener noreferrer"
-              style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                padding: '11px', borderRadius: 12,
-                background: T.s2, border: `1.5px solid ${T.bdr}`,
-                color: T.text, textDecoration: 'none', fontWeight: 600, fontSize: 13.5, fontFamily: 'inherit',
-              }}
-            >
-              💼 LinkedIn
-            </a>
-          )}
-          {hasWhatsApp && (
-            <a
-              href={`https://wa.me/${(profile.public_phone || '').replace(/\D/g, '')}`}
-              target="_blank" rel="noopener noreferrer"
-              style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                padding: '11px', borderRadius: 12,
-                background: T.s2, border: `1.5px solid ${T.bdr}`,
-                color: T.text, textDecoration: 'none', fontWeight: 600, fontSize: 13.5, fontFamily: 'inherit',
-              }}
-            >
-              📱 WhatsApp
-            </a>
-          )}
-        </div>
-      )}
-    </div>
-  );
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.text, paddingBottom: isMobile ? 168 : 0 }}>
-
+    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: T.text }}>
       {/* Top bar */}
       <div style={{ background: T.w, borderBottom: `1px solid ${T.bdr}`, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 12, height: 52, position: 'sticky', top: 0, zIndex: 10 }}>
+        {/* Back / home button — especially useful in PWA standalone mode */}
         <button
           onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.href = '/'; }}
           title="Back"
@@ -207,13 +143,16 @@ export default function PublicProfilePage({ slug }) {
       </div>
 
       <div style={{ maxWidth: 780, margin: '0 auto', padding: '20px 18px 48px' }}>
-
-        {/* ── Banner + centred avatar ───────────────────────────────────── */}
-        <div style={{ position: 'relative', marginBottom: 60 }}>
+        {/* Banner + Avatar */}
+        <div style={{ position: 'relative', marginBottom: 46 }}>
           <div style={{ height: 148, borderRadius: '14px 14px 0 0', overflow: 'hidden' }}>
             {profile.cover_url ? (
               <img src={profile.cover_url} alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: profile.cover_position || '50% 50%', display: 'block' }}/>
+                style={{
+                  width: '100%', height: '100%', objectFit: 'cover',
+                  objectPosition: profile.cover_position || '50% 50%',
+                  display: 'block',
+                }}/>
             ) : (
               <svg width="100%" height="100%" viewBox="0 0 760 148" preserveAspectRatio="xMidYMid slice">
                 <defs><linearGradient id="cov" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#667eea"/><stop offset="45%" stopColor="#764ba2"/><stop offset="100%" stopColor="#f093fb"/></linearGradient></defs>
@@ -223,20 +162,17 @@ export default function PublicProfilePage({ slug }) {
               </svg>
             )}
           </div>
-          {/* Avatar — centred over the banner bottom edge */}
-          <div style={{ position: 'absolute', bottom: -52, left: '50%', transform: 'translateX(-50%)' }}>
-            <div style={{ borderRadius: '50%', border: '4px solid white', boxShadow: '0 6px 24px rgba(108,99,255,.22)', display: 'inline-block' }}>
-              <Av color={profile.avatar_color || 'me'} size={104} name={profile.name} url={profile.avatar_url || ''} />
+          <div style={{ position: 'absolute', bottom: -43, left: 22 }}>
+            <div style={{ borderRadius: '50%', border: '4px solid white', boxShadow: '0 4px 18px rgba(108,99,255,.2)', display: 'inline-block' }}>
+              <Av color={profile.avatar_color || 'me'} size={84} name={profile.name} url={profile.avatar_url || ''} />
             </div>
           </div>
         </div>
 
-        {/* ── Profile card ─────────────────────────────────────────────── */}
-        <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderTop: 'none', borderRadius: '0 0 14px 14px', padding: '0 24px 24px', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
-
-          {/* Centred identity block */}
-          <div style={{ paddingTop: 64, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, lineHeight: 1.2 }}>
+        {/* Profile card */}
+        <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderTop: 'none', borderRadius: '0 0 14px 14px', padding: '0 24px 20px', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
+          <div style={{ paddingTop: 56 }}>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, lineHeight: 1.2, marginBottom: 4 }}>
               {profile.name_prefix && (
                 <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 600, color: T.mu, marginRight: 6 }}>{profile.name_prefix}</span>
               )}
@@ -246,110 +182,109 @@ export default function PublicProfilePage({ slug }) {
               )}
             </div>
             {profile.title && (
-              <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{profile.title}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{profile.title}</div>
             )}
-            {profile.institution && (
-              <div style={{ fontSize: 13, color: T.mu }}>🏛️ {profile.institution}</div>
-            )}
-            {profile.location && (
-              <div style={{ fontSize: 13, color: T.mu }}>📍 {profile.location}</div>
-            )}
-            {profile.orcid && (
-              <div style={{ marginTop: 2 }}>
-                <OrcidBadge orcid={profile.orcid} verified={!!profile.orcid_verified}/>
-              </div>
-            )}
-            {/* Discipline + specialty pills */}
             {(profile.identity_tier1 || profile.identity_tier2) && (
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 6 }}>
-                {profile.identity_tier1 && (
-                  <span style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 11px', borderRadius: 20, background: T.v2, color: T.v, border: '1px solid rgba(108,99,255,.18)' }}>
-                    {profile.identity_tier1}
-                  </span>
-                )}
-                {profile.identity_tier2 && (
-                  <span style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 11px', borderRadius: 20, background: T.s2, color: T.mu, border: `1px solid ${T.bdr}` }}>
-                    {profile.identity_tier2}
-                  </span>
-                )}
+              <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 5 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Discipline</span>
+                {' '}
+                <span>{profile.identity_tier2 ? `${profile.identity_tier2} (${profile.identity_tier1})` : profile.identity_tier1}</span>
               </div>
             )}
-          </div>
-
-          {/* ── Compact bio section ───────────────────────────────────── */}
-          <div style={{ margin: '20px 0 0', paddingTop: 20, borderTop: `1px solid ${T.bdr}` }}>
-            {profile.bio && (
-              <div style={{
-                fontSize: 13.5, color: T.mu, lineHeight: 1.65, marginBottom: 12,
-                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              }}>
-                {profile.bio}
+            {profile.work_mode && WORK_MODE_MAP[profile.work_mode] && (
+              <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Sector</span>
+                {' '}
+                <span>{WORK_MODE_MAP[profile.work_mode].label}</span>
               </div>
             )}
-            {pubStats.pubCount > 0 && (
-              <div style={{ fontSize: 13, color: T.mu, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>📄</span>
-                <span>{pubStats.pubCount} publication{pubStats.pubCount !== 1 ? 's' : ''}</span>
-              </div>
+            {profile.work_mode === 'clinician' && (profile.additional_quals || []).length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Qualifications</div>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {profile.additional_quals.map(q => (
+                    <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>{q}</span>
+                  ))}
+                </div>
+              </>
             )}
-            {(profile.topic_interests || []).length > 0 && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-                {profile.topic_interests.slice(0, 5).map(t => (
-                  <span key={t} style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 11px', borderRadius: 20, background: T.s2, color: T.mu, border: `1px solid ${T.bdr}` }}>
-                    {t}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ── Action buttons — desktop inline ──────────────────────── */}
-          {!isMobile && (
-            <div style={{ marginTop: 20 }}>
-              <ActionButtons />
+            <div style={{ fontSize: 13, color: T.mu, marginBottom: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {profile.institution && <span>🏛️ {profile.institution}</span>}
+              {profile.location    && <span>📍 {profile.location}</span>}
+              {profile.orcid && <OrcidBadge orcid={profile.orcid} verified={!!profile.orcid_verified}/>}
+              {profile.twitter && (
+                <a href={`https://twitter.com/${profile.twitter.replace('@','')}`} target="_blank" rel="noopener noreferrer"
+                  style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{profile.twitter} ↗</a>
+              )}
             </div>
-          )}
-
-          {/* ── Stats grid ───────────────────────────────────────────── */}
-          {(() => {
-            const isClinician = profile.work_mode === 'clinician';
-            const hasImpactData = pubStats.totalCitations > 0 || pubStats.hIndex > 0;
-            const statItems = isClinician ? [
-              [followStats.followers, 'Followers'],
-              [followStats.following, 'Following'],
-              ...(profile.years_in_practice ? [[profile.years_in_practice, 'Yrs Practice']] : []),
-              profile.clinical_highlight_value
-                ? [profile.clinical_highlight_value, profile.clinical_highlight_label || 'Highlight']
-                : [pubStats.pubCount || '—', 'Publications'],
-            ] : [
-              [followStats.followers, 'Followers'],
-              [followStats.following, 'Following'],
-              [pubStats.pubCount || '—', 'Publications'],
-              ...(hasImpactData ? [
-                [pubStats.totalCitations, 'Citations'],
-                [`h${pubStats.hIndex}`, 'h-index'],
-              ] : []),
-            ];
-            return (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: isMobile && statItems.length > 2
-                  ? 'repeat(2, 1fr)'
-                  : `repeat(${statItems.length},1fr)`,
-                gap: 9, margin: '20px 0',
-              }}>
-                {statItems.map(([v, l]) => (
-                  <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center', minWidth: 0 }}>
-                    <div style={{ fontSize: 19, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div>
-                    <div style={{ fontSize: 9.5, color: T.mu, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{l}</div>
-                  </div>
-                ))}
+            {/* Clinical identity block — clinician/clinician_scientist mode */}
+            {profile.work_mode === 'clinician' && profile.years_in_practice && (
+              <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 6 }}>
+                {profile.years_in_practice} years in practice
               </div>
-            );
-          })()}
+            )}
 
-          {/* ── Tabs ─────────────────────────────────────────────────── */}
-          <div style={{ display: 'flex', borderBottom: `1px solid ${T.bdr}`, margin: '4px 0 0' }}>
+            {profile.bio && <div style={{ marginBottom: 14, maxWidth: 620 }}><ExpandableBio text={profile.bio} /></div>}
+
+            {profile.topic_interests?.length > 0 && (
+              <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Interests</span>
+                {' '}
+                <span>{profile.topic_interests.join(', ')}</span>
+              </div>
+            )}
+
+            {/* Stats */}
+            {(() => {
+              const isClinician = profile.work_mode === 'clinician';
+              // Citations + h-index tiles only render when we have real
+              // data — showing "—" for users with un-enriched publications
+              // signals "this person has no impact" which is the wrong
+              // empty-state message. OpenAlex enrichment fills these
+              // automatically on import + via the Refresh button.
+              const hasImpactData = pubStats.totalCitations > 0 || pubStats.hIndex > 0;
+              const statItems = isClinician ? [
+                [followStats.followers, 'Followers'],
+                [followStats.following, 'Following'],
+                ...(profile.years_in_practice ? [[profile.years_in_practice, 'Yrs Practice']] : []),
+                profile.clinical_highlight_value
+                  ? [profile.clinical_highlight_value, profile.clinical_highlight_label || 'Highlight']
+                  : [pubStats.pubCount || '—', 'Publications'],
+              ] : [
+                [followStats.followers, 'Followers'],
+                [followStats.following, 'Following'],
+                [pubStats.pubCount || '—', 'Publications'],
+                ...(hasImpactData ? [
+                  [pubStats.totalCitations, 'Citations'],
+                  [`h${pubStats.hIndex}`, 'h-index'],
+                ] : []),
+              ];
+              return (
+                <div style={{
+                  display: 'grid',
+                  // On phones the 5-tile researcher layout (Followers,
+                  // Following, Publications, Citations, h-index) gives
+                  // each tile ~65 px which truncates the labels and
+                  // overflows the numbers. Wrap to 2 cols whenever
+                  // there are >2 tiles — matches ProfileScreen.
+                  gridTemplateColumns: isMobile && statItems.length > 2
+                    ? 'repeat(2, 1fr)'
+                    : `repeat(${statItems.length},1fr)`,
+                  gap: 9, margin: '14px 0',
+                }}>
+                  {statItems.map(([v, l]) => (
+                    <div key={l} style={{ background: T.s2, borderRadius: 10, padding: '10px 8px', textAlign: 'center', minWidth: 0 }}>
+                      <div style={{ fontSize: 19, fontWeight: 700, fontFamily: "'DM Serif Display',serif", color: T.v, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div>
+                      <div style={{ fontSize: 9.5, color: T.mu, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', borderBottom: `1px solid ${T.bdr}`, margin: '16px 0 0' }}>
             {tabs.map(([k, l]) => (
               <div key={k} onClick={() => setTab(k)}
                 style={{ padding: '8px 16px', fontSize: 12.5, color: tab === k ? T.v : T.mu, cursor: 'pointer', borderBottom: `2.5px solid ${tab === k ? T.v : 'transparent'}`, fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -359,7 +294,7 @@ export default function PublicProfilePage({ slug }) {
           </div>
         </div>
 
-        {/* ── Tab content ──────────────────────────────────────────────── */}
+        {/* Tab content */}
         <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderTop: 'none', borderRadius: '0 0 14px 14px', padding: tab === 'card' ? '0' : '20px 24px', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
 
           {tab === 'card' && (
@@ -368,6 +303,7 @@ export default function PublicProfilePage({ slug }) {
 
           {tab === 'about' && (
             <div>
+              {/* Clinical sections — shown for clinician/both mode */}
               {profile.work_mode === 'clinician' && profile.patient_population && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
@@ -529,30 +465,13 @@ export default function PublicProfilePage({ slug }) {
           )}
         </div>
 
-        {/* ── Footer ───────────────────────────────────────────────────── */}
+        {/* Footer */}
         <div style={{ textAlign: 'center', padding: '28px 0 0', color: T.mu, fontSize: 12 }}>
-          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 17, color: T.text, marginBottom: 4 }}>
-            Lumi<span style={{ color: T.v }}>nary</span>
-          </div>
-          <div>
-            Powered by{' '}
-            <a href="/" style={{ color: T.v, fontWeight: 600, textDecoration: 'none' }}>Luminary</a>
-            {' '}· luminary.to
-          </div>
+          Profile hosted on{' '}
+          <a href="/" style={{ color: T.v, fontWeight: 600, textDecoration: 'none' }}>Luminary</a>
+          {' '}— Research networking for scientists
         </div>
       </div>
-
-      {/* ── Mobile sticky action buttons ─────────────────────────────── */}
-      {isMobile && (
-        <div style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
-          background: T.w, borderTop: `1px solid ${T.bdr}`,
-          padding: '12px 16px 20px',
-          boxShadow: '0 -4px 20px rgba(108,99,255,.10)',
-        }}>
-          <ActionButtons />
-        </div>
-      )}
     </div>
   );
 }
