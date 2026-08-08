@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { supabase } from '../supabase';
 import { T } from '../lib/constants';
 import Av from '../components/Av';
@@ -22,13 +23,24 @@ export function ContactRow({ icon, label, href }) {
 export function BusinessCardView({ profile, currentUserId }) {
   const isOwner = currentUserId && currentUserId === profile.id;
 
+  // Save-to-contacts modal
+  const [modalStep,        setModalStep]        = useState(null); // null | 'note' | 'share' | 'done'
+  const [note,             setNote]             = useState('');
+  const [withReminder,     setWithReminder]     = useState(false);
+  const [reminderDateLabel,setReminderDateLabel] = useState('');
+  const [myProfile,        setMyProfile]        = useState(null);
+  const [sharing,          setSharing]          = useState(false);
+
+  // Platform detection
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isIOS    = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const canShare = isMobile && typeof navigator.share === 'function';
+
   const handleConnectOnLuminary = () => {
     if (currentUserId) {
-      // Already logged in — redirect to app with view_profile param
       sessionStorage.setItem('post_auth_action', 'follow');
       window.location.href = `${window.location.origin}?view_profile=${profile.profile_slug}`;
     } else {
-      // Not logged in — store redirect target and go to auth
       sessionStorage.setItem('post_auth_profile', profile.profile_slug);
       sessionStorage.setItem('post_auth_action', 'follow');
       window.location.href = `${window.location.origin}?connect=${profile.profile_slug}`;
@@ -37,7 +49,6 @@ export function BusinessCardView({ profile, currentUserId }) {
 
   const workAddress = [profile.work_street, profile.work_city, profile.work_postal_code, profile.work_country].filter(Boolean).join(', ') || profile.work_address || '';
 
-  // wa.me requires international digits only — strip everything else.
   const whatsappDigits = (profile.card_whatsapp || '').replace(/\D/g, '');
   const whatsappUrl    = whatsappDigits ? `https://wa.me/${whatsappDigits}` : null;
 
@@ -49,41 +60,129 @@ export function BusinessCardView({ profile, currentUserId }) {
     (profile.card_show_website      && profile.card_website)      ||
     (profile.card_show_orcid        && profile.orcid)             ||
     (profile.card_show_twitter      && profile.twitter)           ||
-    (profile.card_show_mobile_phone   && profile.mobile_phone)        ||
+    (profile.card_show_mobile_phone && profile.mobile_phone)      ||
     (profile.card_show_work_address && workAddress)
   );
 
-  const downloadVCard = () => {
-    const nameParts = (profile.name || '').split(' ');
-    const lastName  = nameParts[nameParts.length - 1];
-    const firstName = nameParts.slice(0, -1).join(' ');
-    const lines = [
-      'BEGIN:VCARD', 'VERSION:3.0',
-      `FN:${profile.name || ''}`,
-      `N:${lastName};${firstName};;;`,
-      profile.title       ? `TITLE:${profile.title}` : '',
-      profile.institution ? `ORG:${profile.institution}` : '',
-      (profile.card_show_email && profile.card_email)
-        ? `EMAIL;TYPE=WORK:${profile.card_email}` : '',
-      (profile.card_show_phone && profile.card_phone)
-        ? `TEL;TYPE=WORK:${profile.card_phone}` : '',
-      (profile.card_show_mobile_phone && profile.mobile_phone)
-        ? `TEL;TYPE=CELL:${profile.mobile_phone}` : '',
-      (profile.card_show_work_address && workAddress)
-        ? `ADR;TYPE=WORK:;;${workAddress};;;;` : '',
-      `URL:${window.location.origin}/p/${profile.profile_slug}`,
-      'NOTE:Connected via Luminary',
-      'END:VCARD',
-    ].filter(Boolean).join('\r\n');
-    const blob = new Blob([lines], { type: 'text/vcard' });
+  // ── File helpers ────────────────────────────────────────────────────────────
+
+  const triggerDownload = (content, filename, mimeType) => {
+    const blob = new Blob([content], { type: mimeType });
     const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), {
-      href: url,
-      download: `${(profile.name || 'contact').replace(/\s+/g, '_')}.vcf`,
-    });
+    const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const buildVCardText = (noteText) => {
+    const nameParts = (profile.name || '').split(' ');
+    const lastName  = nameParts[nameParts.length - 1];
+    const firstName = nameParts.slice(0, -1).join(' ');
+    const noteVal   = noteText
+      ? `${noteText.replace(/[\r\n]+/g, '\\n')} — Connected via Luminary`
+      : 'Connected via Luminary';
+    return [
+      'BEGIN:VCARD', 'VERSION:3.0',
+      `FN:${profile.name || ''}`,
+      `N:${lastName};${firstName};;;`,
+      profile.title       ? `TITLE:${profile.title}`       : '',
+      profile.institution ? `ORG:${profile.institution}`   : '',
+      (profile.card_show_email        && profile.card_email)   ? `EMAIL;TYPE=WORK:${profile.card_email}`  : '',
+      (profile.card_show_phone        && profile.card_phone)   ? `TEL;TYPE=WORK:${profile.card_phone}`    : '',
+      (profile.card_show_mobile_phone && profile.mobile_phone) ? `TEL;TYPE=CELL:${profile.mobile_phone}`  : '',
+      (profile.card_show_work_address && workAddress)          ? `ADR;TYPE=WORK:;;${workAddress};;;;`     : '',
+      `URL:${window.location.origin}/p/${profile.profile_slug}`,
+      `NOTE:${noteVal}`,
+      'END:VCARD',
+    ].filter(Boolean).join('\r\n');
+  };
+
+  const buildICSText = (noteText) => {
+    const d   = new Date();
+    d.setDate(d.getDate() + 3);
+    const d1  = d.toISOString().slice(0, 10).replace(/-/g, '');
+    const d2  = new Date(d.getTime() + 86400000).toISOString().slice(0, 10).replace(/-/g, '');
+    const desc = [
+      noteText ? noteText.replace(/[\r\n]+/g, '\\n') : '',
+      `Luminary profile: ${window.location.origin}/p/${profile.profile_slug}`,
+    ].filter(Boolean).join('\\n');
+    return [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Luminary//EN',
+      'CALSCALE:GREGORIAN',
+      'BEGIN:VEVENT',
+      `UID:luminary-followup-${profile.profile_slug}-${d1}@luminary.to`,
+      `DTSTART;VALUE=DATE:${d1}`,
+      `DTEND;VALUE=DATE:${d2}`,
+      `SUMMARY:Follow up with ${profile.name}`,
+      `DESCRIPTION:${desc}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+  };
+
+  // ── Modal actions ────────────────────────────────────────────────────────────
+
+  const openSaveModal = () => {
+    setNote('');
+    setWithReminder(false);
+    setReminderDateLabel('');
+    setMyProfile(null);
+    setModalStep('note');
+  };
+
+  const closeModal = () => setModalStep(null);
+
+  const handleSave = async (includeReminder) => {
+    const safeName = (profile.name || 'contact').replace(/\s+/g, '_');
+
+    // vCard download
+    triggerDownload(buildVCardText(note), `${safeName}.vcf`, 'text/vcard');
+
+    // ICS download (slight delay so browser doesn't block the second download)
+    let dateLabel = '';
+    if (includeReminder) {
+      setTimeout(() => {
+        triggerDownload(buildICSText(note), `followup_${safeName}.ics`, 'text/calendar');
+      }, 300);
+      const d = new Date();
+      d.setDate(d.getDate() + 3);
+      dateLabel = d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    }
+
+    setWithReminder(includeReminder);
+    setReminderDateLabel(dateLabel);
+
+    // Offer share step on mobile if logged in
+    if (canShare && currentUserId) {
+      const { data } = await supabase
+        .from('profiles').select('profile_slug, name').eq('id', currentUserId).single();
+      setMyProfile(data || null);
+      setModalStep('share');
+    } else {
+      setModalStep('done');
+    }
+  };
+
+  const handleShare = async () => {
+    if (myProfile) {
+      setSharing(true);
+      try {
+        await navigator.share({
+          title: myProfile.name,
+          text: 'Connect with me on Luminary',
+          url: `${window.location.origin}/c/${myProfile.profile_slug}`,
+        });
+      } catch (_) { /* cancelled or not supported — still proceed */ }
+      setSharing(false);
+    }
+    setModalStep('done');
+  };
+
+  const firstName = (profile.name || '').split(' ')[0];
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'32px 20px 40px' }}>
@@ -201,8 +300,8 @@ export function BusinessCardView({ profile, currentUserId }) {
           🔬 Connect on Luminary
         </button>
 
-        {/* 2. Save to Contacts — SECONDARY */}
-        <button onClick={downloadVCard} style={{
+        {/* 2. Save to Contacts — opens modal */}
+        <button onClick={openSaveModal} style={{
           width:'100%', padding:'12px', borderRadius:12,
           border:'1.5px solid #e0e0e0', background:'#f8f8f8',
           color:'#333', fontSize:13, fontWeight:700, fontFamily:'inherit', cursor:'pointer',
@@ -253,7 +352,7 @@ export function BusinessCardView({ profile, currentUserId }) {
           </a>
         )}
 
-        {/* 4. View full profile — text link */}
+        {/* View full profile — text link */}
         <a
           href={`${window.location.origin}/p/${profile.profile_slug}`}
           style={{
@@ -269,6 +368,180 @@ export function BusinessCardView({ profile, currentUserId }) {
       <div style={{ marginTop:12, fontSize:11, color:'#bbb', textAlign:'center' }}>
         Scan QR · Save contact · Connect
       </div>
+
+      {/* ── Save-to-Contacts modal ─────────────────────────────────────────────── */}
+      {modalStep && (
+        <div
+          style={{
+            position:'fixed', inset:0, background:'rgba(0,0,0,.55)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            zIndex:1000, padding:16,
+          }}
+          onClick={() => { if (modalStep === 'note') closeModal(); }}
+        >
+          <div
+            style={{
+              background:'white', borderRadius:24,
+              width:'100%', maxWidth:420,
+              padding:'28px 24px 28px',
+              boxShadow:'0 20px 60px rgba(0,0,0,.22)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+
+            {/* ── Step: note + choice ───────────────────────────────────────── */}
+            {modalStep === 'note' && (
+              <>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:20, color:'#1a1a2e' }}>Save contact</div>
+                  <button onClick={closeModal} style={{ background:'none', border:'none', fontSize:18, color:'#bbb', cursor:'pointer', lineHeight:1, padding:'4px 6px' }}>✕</button>
+                </div>
+                <div style={{ fontSize:12.5, color:'#999', marginBottom:20 }}>{profile.name}</div>
+
+                <textarea
+                  value={note}
+                  onChange={e => setNote(e.target.value)}
+                  placeholder="Add a note… how you met, topics to follow up on (optional)"
+                  rows={4}
+                  style={{
+                    width:'100%', boxSizing:'border-box', resize:'none',
+                    border:'1.5px solid #e8e8e8', borderRadius:12,
+                    padding:'12px 14px', fontSize:13.5, fontFamily:'inherit',
+                    color:'#333', outline:'none', background:'#fafafa', lineHeight:1.6,
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#6c63ff'}
+                  onBlur={e  => e.target.style.borderColor = '#e8e8e8'}
+                />
+                <div style={{ fontSize:11, color:'#ccc', textAlign:'right', marginTop:4, marginBottom:20 }}>
+                  {note.length} / 300
+                </div>
+
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  <button
+                    onClick={() => handleSave(true)}
+                    style={{
+                      width:'100%', padding:'13px', borderRadius:12, border:'none',
+                      background:'linear-gradient(135deg, #6c63ff, #764ba2)',
+                      color:'white', fontSize:13.5, fontWeight:700,
+                      fontFamily:'inherit', cursor:'pointer',
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                    }}
+                  >
+                    <span>📅</span> Save contact + follow-up reminder
+                  </button>
+                  <button
+                    onClick={() => handleSave(false)}
+                    style={{
+                      width:'100%', padding:'12px', borderRadius:12,
+                      border:'1.5px solid #e0e0e0', background:'#f8f8f8',
+                      color:'#444', fontSize:13, fontWeight:600,
+                      fontFamily:'inherit', cursor:'pointer',
+                    }}
+                  >
+                    Save contact only
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── Step: share ───────────────────────────────────────────────── */}
+            {modalStep === 'share' && (
+              <>
+                <div style={{ textAlign:'center', marginBottom:24 }}>
+                  <div style={{ fontSize:44, marginBottom:14, lineHeight:1 }}>🤝</div>
+                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:20, color:'#1a1a2e', marginBottom:8 }}>
+                    Share your contact
+                  </div>
+                  <div style={{ fontSize:13.5, color:'#888', lineHeight:1.6 }}>
+                    Let {firstName} save your details too
+                  </div>
+                </div>
+
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  <button
+                    onClick={handleShare}
+                    disabled={sharing}
+                    style={{
+                      width:'100%', padding:'13px', borderRadius:12, border:'none',
+                      background:'linear-gradient(135deg, #6c63ff, #764ba2)',
+                      color:'white', fontSize:13.5, fontWeight:700,
+                      fontFamily:'inherit', cursor: sharing ? 'default' : 'pointer',
+                      opacity: sharing ? 0.7 : 1,
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                    }}
+                  >
+                    {sharing ? 'Opening…' : (isIOS ? '✈️ Share via AirDrop' : '📡 Share via Nearby Share')}
+                  </button>
+                  <button
+                    onClick={() => setModalStep('done')}
+                    style={{
+                      width:'100%', padding:'11px', borderRadius:12,
+                      border:'none', background:'none',
+                      color:'#bbb', fontSize:13, fontFamily:'inherit', cursor:'pointer',
+                    }}
+                  >
+                    Skip
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── Step: done ────────────────────────────────────────────────── */}
+            {modalStep === 'done' && (
+              <>
+                <div style={{ textAlign:'center', marginBottom:24 }}>
+                  <div style={{
+                    width:56, height:56, borderRadius:'50%',
+                    background:'#ecfdf5', border:'2px solid #10b981',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    margin:'0 auto 16px', fontSize:24, color:'#10b981',
+                  }}>
+                    ✓
+                  </div>
+                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:'#1a1a2e', marginBottom: note || withReminder ? 16 : 0 }}>
+                    Contact saved
+                  </div>
+
+                  {note && (
+                    <div style={{
+                      fontSize:13, color:'#555', background:'#f8f8f8',
+                      borderRadius:12, padding:'12px 14px', textAlign:'left',
+                      lineHeight:1.6, marginBottom: withReminder ? 10 : 0,
+                    }}>
+                      <div style={{ fontSize:10.5, color:'#bbb', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:5 }}>Your note</div>
+                      {note}
+                    </div>
+                  )}
+
+                  {withReminder && (
+                    <div style={{
+                      fontSize:13, color:'#6c63ff', background:'#eeecff',
+                      borderRadius:12, padding:'10px 14px', textAlign:'left',
+                      display:'flex', alignItems:'center', gap:8, marginTop: note ? 0 : 0,
+                    }}>
+                      <span style={{ fontSize:16 }}>📅</span>
+                      <span>Follow-up reminder set for <strong>{reminderDateLabel}</strong></span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={closeModal}
+                  style={{
+                    width:'100%', padding:'13px', borderRadius:12, border:'none',
+                    background:'linear-gradient(135deg, #6c63ff, #764ba2)',
+                    color:'white', fontSize:14, fontWeight:700,
+                    fontFamily:'inherit', cursor:'pointer',
+                  }}
+                >
+                  Done
+                </button>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
