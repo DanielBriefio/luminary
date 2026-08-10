@@ -502,9 +502,47 @@ export function BusinessCardView({ profile, currentUserId }) {
                   }}>
                     ✓
                   </div>
-                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:'#1a1a2e', marginBottom: note || withReminder ? 16 : 0 }}>
+                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:'#1a1a2e', marginBottom:16 }}>
                     Contact saved
                   </div>
+
+                  {/* vCard preview */}
+                  {(() => {
+                    const rows = [
+                      profile.title       && { label: 'Title',    value: profile.title },
+                      profile.institution && { label: 'Org',      value: profile.institution },
+                      (profile.card_show_email && profile.card_email)
+                        && { label: 'Email',  value: profile.card_email },
+                      (profile.card_show_phone && profile.card_phone)
+                        && { label: 'Phone',  value: profile.card_phone },
+                      (profile.card_show_mobile_phone && profile.mobile_phone)
+                        && { label: 'Mobile', value: profile.mobile_phone },
+                      (profile.card_show_work_address && workAddress)
+                        && { label: 'Address', value: workAddress },
+                      { label: 'Profile', value: `luminary.to/p/${profile.profile_slug}` },
+                    ].filter(Boolean);
+                    return (
+                      <div style={{
+                        background:'#f8f8f8', borderRadius:12,
+                        padding:'10px 14px', textAlign:'left', marginBottom:12,
+                      }}>
+                        <div style={{ fontSize:10.5, color:'#bbb', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>
+                          What was saved
+                        </div>
+                        {rows.map(({ label, value }) => (
+                          <div key={label} style={{ display:'flex', gap:8, fontSize:12, marginBottom:5, lineHeight:1.4 }}>
+                            <span style={{ color:'#bbb', fontWeight:600, minWidth:52, flexShrink:0 }}>{label}</span>
+                            <span style={{ color:'#444', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value}</span>
+                          </div>
+                        ))}
+                        {rows.length <= 2 && (
+                          <div style={{ fontSize:11.5, color:'#f59e0b', marginTop:6 }}>
+                            ⚠ Only name and profile URL were included — the contact owner may not have added phone or email to their card yet.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {note && (
                     <div style={{
