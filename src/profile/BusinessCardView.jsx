@@ -62,7 +62,9 @@ export function BusinessCardView({ profile, currentUserId }) {
     const blob = new Blob([content], { type: mimeType });
     const url  = URL.createObjectURL(blob);
     const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -125,7 +127,7 @@ export function BusinessCardView({ profile, currentUserId }) {
 
   const closeModal = () => setModalStep(null);
 
-  const handleSave = async (includeReminder) => {
+  const handleSave = (includeReminder) => {
     const safeName = (profile.name || 'contact').replace(/\s+/g, '_');
 
     triggerDownload(buildVCardText(note), `${safeName}.vcf`, 'text/vcard');
@@ -145,8 +147,6 @@ export function BusinessCardView({ profile, currentUserId }) {
     setReminderDateLabel(dateLabel);
     setModalStep('done');
   };
-
-  const firstName = (profile.name || '').split(' ')[0];
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -464,7 +464,7 @@ export function BusinessCardView({ profile, currentUserId }) {
                     <div style={{
                       fontSize:13, color:'#6c63ff', background:'#eeecff',
                       borderRadius:12, padding:'10px 14px', textAlign:'left',
-                      display:'flex', alignItems:'center', gap:8, marginTop: note ? 0 : 0,
+                      display:'flex', alignItems:'center', gap:8,
                     }}>
                       <span style={{ fontSize:16 }}>📅</span>
                       <span>Follow-up reminder set for <strong>{reminderDateLabel}</strong></span>
