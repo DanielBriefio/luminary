@@ -23,17 +23,10 @@ export function BusinessCardView({ profile, currentUserId }) {
   const isOwner = currentUserId && currentUserId === profile.id;
 
   // Save-to-contacts modal
-  const [modalStep,        setModalStep]        = useState(null); // null | 'note' | 'share' | 'done'
+  const [modalStep,        setModalStep]        = useState(null); // null | 'note' | 'done'
   const [note,             setNote]             = useState('');
   const [withReminder,     setWithReminder]     = useState(false);
   const [reminderDateLabel,setReminderDateLabel] = useState('');
-  const [vcfFile,          setVcfFile]          = useState(null);
-  const [sharing,          setSharing]          = useState(false);
-
-  // Platform detection
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const isIOS    = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const canShare = isMobile && typeof navigator.share === 'function';
 
   const handleConnectOnLuminary = () => {
     if (currentUserId) {
@@ -127,7 +120,6 @@ export function BusinessCardView({ profile, currentUserId }) {
     setNote('');
     setWithReminder(false);
     setReminderDateLabel('');
-    setVcfFile(null);
     setModalStep('note');
   };
 
@@ -136,11 +128,7 @@ export function BusinessCardView({ profile, currentUserId }) {
   const handleSave = async (includeReminder) => {
     const safeName = (profile.name || 'contact').replace(/\s+/g, '_');
 
-    // vCard — build once, store for share step and trigger download
-    const vcfText = buildVCardText(note);
-    const file    = new File([vcfText], `${safeName}.vcf`, { type: 'text/vcard' });
-    setVcfFile(file);
-    triggerDownload(vcfText, `${safeName}.vcf`, 'text/vcard');
+    triggerDownload(buildVCardText(note), `${safeName}.vcf`, 'text/vcard');
 
     // ICS download (slight delay so browser doesn't block the second download)
     let dateLabel = '';
@@ -155,26 +143,6 @@ export function BusinessCardView({ profile, currentUserId }) {
 
     setWithReminder(includeReminder);
     setReminderDateLabel(dateLabel);
-
-    // Offer share step on any mobile browser — no login required
-    if (canShare) {
-      setModalStep('share');
-    } else {
-      setModalStep('done');
-    }
-  };
-
-  const handleShare = async () => {
-    setSharing(true);
-    try {
-      const canShareFile = vcfFile && navigator.canShare && navigator.canShare({ files: [vcfFile] });
-      if (canShareFile) {
-        await navigator.share({ files: [vcfFile], title: profile.name });
-      } else if (profile.profile_slug) {
-        await navigator.share({ title: profile.name, url: `${window.location.origin}/c/${profile.profile_slug}` });
-      }
-    } catch (_) { /* cancelled or not supported — still proceed */ }
-    setSharing(false);
     setModalStep('done');
   };
 
@@ -422,48 +390,6 @@ export function BusinessCardView({ profile, currentUserId }) {
                     }}
                   >
                     Save contact only
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ── Step: share ───────────────────────────────────────────────── */}
-            {modalStep === 'share' && (
-              <>
-                <div style={{ textAlign:'center', marginBottom:24 }}>
-                  <div style={{ fontSize:44, marginBottom:14, lineHeight:1 }}>📲</div>
-                  <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:20, color:'#1a1a2e', marginBottom:8 }}>
-                    Share {firstName}'s card
-                  </div>
-                  <div style={{ fontSize:13.5, color:'#888', lineHeight:1.6 }}>
-                    Send the contact card to a nearby device
-                  </div>
-                </div>
-
-                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                  <button
-                    onClick={handleShare}
-                    disabled={sharing}
-                    style={{
-                      width:'100%', padding:'13px', borderRadius:12, border:'none',
-                      background:'linear-gradient(135deg, #6c63ff, #764ba2)',
-                      color:'white', fontSize:13.5, fontWeight:700,
-                      fontFamily:'inherit', cursor: sharing ? 'default' : 'pointer',
-                      opacity: sharing ? 0.7 : 1,
-                      display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-                    }}
-                  >
-                    {sharing ? 'Opening…' : (isIOS ? '✈️ Share via AirDrop' : '📡 Share via Nearby Share')}
-                  </button>
-                  <button
-                    onClick={() => setModalStep('done')}
-                    style={{
-                      width:'100%', padding:'11px', borderRadius:12,
-                      border:'none', background:'none',
-                      color:'#bbb', fontSize:13, fontFamily:'inherit', cursor:'pointer',
-                    }}
-                  >
-                    Skip
                   </button>
                 </div>
               </>
