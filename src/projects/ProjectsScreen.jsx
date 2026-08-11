@@ -418,7 +418,7 @@ function ProjectBadgeCard({ project, onClick, onTogglePin, onArchive, onDelete, 
 function ArchivedProjectCard({ project, onUnarchive, onClick }) {
   return (
     <div style={{ borderRadius: 14, overflow: 'hidden', border: `1px solid ${T.bdr}`, background: T.s2, cursor: 'pointer' }} onClick={onClick}>
-      <div style={{ height: 4, background: '#ccc' }}/>
+      <div style={{ height: 4, background: T.bdr }}/>
       <div style={{ padding: '12px 14px' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
           <span style={{ fontSize: 20, opacity: 0.5 }}>{project.icon}</span>

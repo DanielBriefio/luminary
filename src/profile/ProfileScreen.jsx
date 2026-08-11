@@ -148,9 +148,6 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
   const [showSharePanel,  setShowSharePanel]  = useState(false);
   const [showAllSkills,      setShowAllSkills]      = useState(false);
   const [showCvExport,       setShowCvExport]       = useState(false);
-  const [editingTopics,      setEditingTopics]      = useState(false);
-  const [topicDraft,         setTopicDraft]         = useState([]);
-  const [savingTopics,       setSavingTopics]       = useState(false);
   const [showClinicalFields, setShowClinicalFields] = useState(false);
   const [editingCard,        setEditingCard]        = useState(false);
   const [cardSaving,         setCardSaving]         = useState(false);
@@ -673,14 +670,6 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
   const grt = profile?.grants          || [];
   const hasExperience = wh.length||edu.length||vol.length||org.length;
   const hasSkills     = hon.length||lng.length||skl.length||pat.length;
-
-  const saveTopics = async (selected) => {
-    setSavingTopics(true);
-    const { data } = await supabase.from('profiles').update({ topic_interests: selected }).eq('id', user.id).select().single();
-    if (data) setProfile(data);
-    setSavingTopics(false);
-    setEditingTopics(false);
-  };
 
   const DATED_FIELDS = {
     work_history:  "start",

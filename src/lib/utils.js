@@ -390,7 +390,6 @@ export async function getCachedTagsByDoi(doi, supabase) {
     .single();
 
   if (post?.tier1) {
-    console.log(`Auto-tag cache hit for DOI: ${cleanDoi}`);
     return { tier1: post.tier1, tier2: post.tier2 || [], tags: post.tags || [] };
   }
 
@@ -404,7 +403,6 @@ export async function getCachedTagsByDoi(doi, supabase) {
     .single();
 
   if (pub?.tier1) {
-    console.log(`Auto-tag cache hit in publications for DOI: ${cleanDoi}`);
     return { tier1: pub.tier1, tier2: pub.tier2 || [], tags: pub.tags || [] };
   }
 

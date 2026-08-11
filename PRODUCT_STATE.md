@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-06-21 (rev 27)_
+_Last updated: 2026-08-10 (rev 28)_
 
 ## What exists and works
 
@@ -53,6 +53,8 @@ _Last updated: 2026-06-21 (rev 27)_
 - Visibility (Everyone / Followers only)
 - Right sidebar: Paper of the Week (config-driven — `most_discussed` total posts, `most_commented` total comments, or admin manual DOI pick; uses `get_paper_stats_public()` RPC; min engagement filter ≥2 posts OR ≥1 comment) + Founding Fellows banner
 - `FeedTipCard` / Luminary Board: shows admin-configured board message (title, message, optional CTA) when `admin_config.luminary_board.enabled = true`; falls back to cycling `FEED_TIPS` from constants.js when board is off or unconfigured
+- **New-posts banner**: when new posts arrive while the user is on the feed, a "N new posts — click to reload" banner appears at the top of the post list. Avoids surprising the user by silently prepending posts mid-scroll.
+- **Feed stability**: `fetchPosts` no longer re-runs on Supabase token refresh (auth state changes filtered for `SIGNED_IN` with a new `user.id`) or on tab-return (dep array now uses primitive IDs, not object refs).
 
 ### Rich-text editor (PostComposer for create + edit, PostCard inline edit, ComposeTab)
 - Shared component `RichTextEditor`. Default mode: bold / italic / underline / lists / Style dropdown (Paragraph / Heading / Subheading) / link
@@ -137,8 +139,17 @@ _Last updated: 2026-06-21 (rev 27)_
 - Publications tab label: "Publications & Presentations (N)" for `clinician` only
 
 ### Business Card (`/c/:slug`)
-- Public card with vCard download; `work_mode`-aware field ordering
-- QR overlay (`CardQROverlay`); card_address fully removed
+- Public card; `work_mode`-aware field ordering; card_address fully removed
+- QR overlay (`CardQROverlay`)
+- **Action buttons**: "Connect on Luminary" (primary gradient, links to in-app profile), "Save to Contacts" (opens multi-step modal), "Message on WhatsApp" (conditional on `card_show_whatsapp` + `card_phone`)
+- **Multi-step Save to Contacts modal** (`modalStep: null | 'note' | 'done'`):
+  - Step 1 "note": 300-char textarea for an optional note (how you met, topics to follow up), then two save buttons — "Save contact only" triggers vCard download; "Save contact + follow-up reminder" triggers vCard download + ICS download (300ms apart to avoid browser blocking)
+  - Step 2 "done": green checkmark, "What was saved" preview grid (Title, Org, Email, Phone, Mobile, Address, Profile URL; amber warning when ≤2 rows meaning contact owner hasn't filled in email/phone), saved note, purple reminder indicator with exact date if reminder was chosen
+- **`buildVCardText(note)`**: VCF VERSION:3.0 gated on `card_show_*` visibility toggles; NOTE field appends " — Connected via Luminary"; includes `URL` pointing to `/p/:slug`
+- **`buildICSText(note)`**: VEVENT all-day event 3 days from save; SUMMARY "Follow up with {name}"; DESCRIPTION note + profile URL
+- **`triggerDownload(content, filename, mimeType)`**: Safari-safe — appends anchor to `document.body`, clicks, removes, revokes blob URL. Standard approach (unattached anchor click) is unreliable in Safari, which is the primary target device for QR-scan card sharing
+- **Brand SVG icons** in Online contact section (inline SVG, no external images): LinkedIn `fill="#0077b5"`, WhatsApp `fill="#25d366"`, ORCID `fill="#a6ce39"`. Same icon set used in action buttons (WhatsApp `fill="#1a8f4a"` darker for contrast)
+- LinkedIn Connect button removed — LinkedIn accessible via Online section; Luminary connection is the preferred CTA
 
 ### Paper Detail (`/paper/:doi`)
 - Metadata, abstract, linked posts; follow paper; compose post (auth only); public + in-app
@@ -319,6 +330,25 @@ _Last updated: 2026-06-21 (rev 27)_
 
 - **`migration_phase15_remap_starter_posts.sql`** (one-shot, optional): retroactively assigns `folder_id` on legacy starter posts (created from templates before Phase 15.1 went live). Idempotent — only touches folder-less posts authored by the project creator within the template's starter count. Safe to run any time; a no-op if no legacy posts remain.
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
+
+## Recently shipped (rev 28 — June 22 – August 10, 2026)
+
+**Business card: multi-step Save to Contacts + brand icons**
+- **Multi-step Save to Contacts modal** replaces the immediate vCard download. Step 1 "note" lets the visitor add an optional note (how you met, follow-up topics; max 300 chars), then choose "Save contact only" or "Save contact + follow-up reminder". Step 2 "done" shows a green checkmark, a "What was saved" preview (which vCard fields are populated), the saved note, and — when reminder was chosen — a purple indicator with the exact follow-up date ("Monday, August 12").
+- **vCard (VCF)** generated by `buildVCardText(note)`: VERSION:3.0, fields gated on `card_show_*` visibility toggles, NOTE appends " — Connected via Luminary". **ICS calendar event** generated by `buildICSText(note)`: all-day VEVENT 3 days out, SUMMARY "Follow up with {name}", DESCRIPTION includes note + profile URL.
+- **`triggerDownload`**: Safari-safe file download helper — appends anchor to `document.body`, clicks, removes, revokes blob URL. Unattached anchor click is unreliable in Safari (critical since QR-scan card sharing is primarily an iPhone use case). Two-file (contact + reminder) downloads staggered 300ms apart.
+- **Brand SVG icons** in Online contact section (inline SVG, no external images): LinkedIn `#0077b5`, WhatsApp `#25d366`, ORCID `#a6ce39`. Replaces generic emoji icons. WhatsApp action button uses `#1a8f4a` (darker green for contrast on light card background).
+- **LinkedIn Connect button removed** — LinkedIn is now accessible via the Online section; Luminary connection is the preferred CTA and making LinkedIn a one-tap action was counterproductive to keeping connections on Luminary.
+- AirDrop/share step was implemented (via `navigator.share({ files: [vcfFile] })`) then removed — circular UX (person A would have been sharing person B's vCard back to person B's device) and premature for Luminary's current user scale.
+
+**Feed reliability fixes**
+- **New-posts banner**: when new posts arrive while the user is reading, a "N new posts — click to reload" pill appears at the top of the post list instead of silently prepending posts mid-scroll.
+- **Token-refresh re-fetch fix**: `fetchPosts` was re-running on every Supabase `onAuthStateChange` event (including `TOKEN_REFRESHED`). Now filtered to `SIGNED_IN` events with a user ID change only.
+- **Tab-return stability fix**: `useEffect` dep arrays that referenced Supabase query objects (non-primitive refs) caused a re-fetch on every tab focus. Deps are now primitive IDs (strings, booleans), eliminating the spurious reload.
+
+**ProfileCompletionMeter bug fixes**
+- **Milestone post insert**: was missing `context_kind: 'feed'` in the post payload, causing the insert to fail silently against the RLS policy (which requires `context_kind` be present). Milestone posts now insert correctly.
+- **Celebration animation loop**: confetti was firing on every profile visit rather than once per milestone unlock. Fixed by ensuring the "already celebrated" flag persists correctly across renders.
 
 ## Recently shipped (rev 27 — May 8 – June 21, 2026)
 

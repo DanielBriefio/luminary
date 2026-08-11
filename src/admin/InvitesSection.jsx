@@ -149,6 +149,9 @@ export default function InvitesSection({ supabase }) {
         </button>
       </div>
 
+      {/* Invite link generator */}
+      <InviteLinkGenerator codes={codes} />
+
       {/* Search + active filter chips */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
         <input
@@ -275,6 +278,186 @@ export default function InvitesSection({ supabase }) {
           onClose={() => setShowCreate(false)}
           onCreated={() => { setShowCreate(false); load(); }}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── InviteLinkGenerator ──────────────────────────────────────────────────────
+
+function InviteLinkGenerator({ codes }) {
+  const [open,         setOpen]         = useState(false);
+  const [code,         setCode]         = useState('');
+  const [customCode,   setCustomCode]   = useState('');
+  const [linkType,     setLinkType]     = useState('general'); // 'general' | 'article'
+  const [articleInput, setArticleInput] = useState('');
+  const [copied,       setCopied]       = useState(false);
+
+  const activeCodes = codes.filter(c => c.status === 'active');
+
+  // Resolve the final code: dropdown selection or manual override
+  const resolvedCode = (customCode.trim() || code).trim();
+
+  // Extract postId from a full URL or use the raw input as-is
+  const postId = articleInput.trim()
+    ? (() => { const m = articleInput.match(/\/s\/([^/?#\s]+)/); return m ? m[1] : articleInput.trim(); })()
+    : '';
+
+  const origin = window.location.origin;
+  const generatedUrl = resolvedCode
+    ? linkType === 'general'
+      ? `${origin}/?code=${resolvedCode}`
+      : postId ? `${origin}/s/${postId}?code=${resolvedCode}` : ''
+    : '';
+
+  const copy = () => {
+    if (!generatedUrl) return;
+    navigator.clipboard.writeText(generatedUrl).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const inputStyle = {
+    padding: '8px 11px', borderRadius: 8, border: `1px solid ${T.bdr}`,
+    background: T.w, fontSize: 13, color: T.text,
+    fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {!open ? (
+        <button onClick={() => setOpen(true)} style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '8px 14px', borderRadius: 9,
+          border: `1px solid ${T.bdr}`, background: T.w,
+          color: T.v, fontWeight: 600, fontSize: 13,
+          cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+          🔗 Generate invite link
+        </button>
+      ) : (
+        <div style={{
+          background: T.v2, border: `1px solid rgba(108,99,255,.25)`,
+          borderRadius: 12, padding: '16px 18px',
+        }}>
+          {/* Header row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: T.v3 }}>🔗 Generate invite link</span>
+            <button onClick={() => setOpen(false)} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: 16, color: T.mu, lineHeight: 1, padding: 2,
+            }}>✕</button>
+          </div>
+
+          {/* Controls row */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+
+            {/* Code picker */}
+            <div style={{ flex: '0 0 200px' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: T.v3, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                Invite code
+              </div>
+              <select
+                value={code}
+                onChange={e => { setCode(e.target.value); setCustomCode(''); }}
+                style={{ ...inputStyle, marginBottom: 6 }}
+              >
+                <option value="">Select existing…</option>
+                {activeCodes.map(c => (
+                  <option key={c.id} value={c.code}>
+                    {c.code}{c.label ? ` — ${c.label}` : ''}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={customCode}
+                onChange={e => { setCustomCode(e.target.value); setCode(''); }}
+                placeholder="…or type a code"
+                style={inputStyle}
+              />
+            </div>
+
+            {/* Link type toggle */}
+            <div style={{ flex: '0 0 auto' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: T.v3, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                Link type
+              </div>
+              <div style={{ display: 'flex', borderRadius: 8, border: `1px solid rgba(108,99,255,.3)`, overflow: 'hidden' }}>
+                {[
+                  { id: 'general', label: 'General signup' },
+                  { id: 'article', label: 'Article deep-link' },
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setLinkType(opt.id)}
+                    style={{
+                      padding: '8px 14px', border: 'none', cursor: 'pointer',
+                      fontSize: 13, fontFamily: 'inherit', fontWeight: linkType === opt.id ? 700 : 400,
+                      background: linkType === opt.id ? T.v : 'transparent',
+                      color: linkType === opt.id ? '#fff' : T.v3,
+                      transition: 'background .12s',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Article URL input */}
+            {linkType === 'article' && (
+              <div style={{ flex: '1 1 220px' }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: T.v3, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                  Article URL or post ID
+                </div>
+                <input
+                  value={articleInput}
+                  onChange={e => setArticleInput(e.target.value)}
+                  placeholder="luminary.to/s/… or paste post ID"
+                  style={inputStyle}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Generated URL */}
+          {generatedUrl ? (
+            <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                readOnly
+                value={generatedUrl}
+                onFocus={e => e.target.select()}
+                style={{
+                  ...inputStyle, flex: 1,
+                  fontFamily: 'monospace', fontSize: 12.5,
+                  background: T.w, color: T.text,
+                }}
+              />
+              <button onClick={copy} style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none',
+                background: copied ? T.gr : T.v, color: '#fff',
+                fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                fontFamily: 'inherit', whiteSpace: 'nowrap',
+                transition: 'background .15s',
+              }}>
+                {copied ? '✓ Copied' : 'Copy link'}
+              </button>
+            </div>
+          ) : resolvedCode ? (
+            linkType === 'article' && (
+              <div style={{ marginTop: 10, fontSize: 12.5, color: T.v3, opacity: 0.8 }}>
+                Paste an article URL or post ID above to generate the link.
+              </div>
+            )
+          ) : null}
+
+          {/* Helper text */}
+          <div style={{ marginTop: 10, fontSize: 12.5, color: T.v3, opacity: 0.8 }}>
+            {linkType === 'general'
+              ? 'Opens signup directly with the invite code pre-filled — no landing page friction.'
+              : 'User reads the article, clicks "Join Luminary →", signs up with the code pre-filled, then lands back on the article.'}
+          </div>
+        </div>
       )}
     </div>
   );

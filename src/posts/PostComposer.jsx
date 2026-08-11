@@ -55,7 +55,7 @@ function mergeTags(userTags, aiTags) {
 async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, paperAbstract, paperJournal, userId }) {
   if (postType !== 'paper') {
     const textContent = (content || '').replace(/<[^>]+>/g, '').trim();
-    if (textContent.length < 100) { console.log('Auto-tag skipped: content too short'); return; }
+    if (textContent.length < 100) { return; }
   }
 
   // Source of truth for the merge — the post's current persisted state.
@@ -90,7 +90,6 @@ async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, p
       if (Object.keys(patch).length > 0) {
         await supabase.from('posts').update(patch).eq('id', postId);
       }
-      console.log('Auto-tag: used cached tags from DOI');
       return;
     }
   }
@@ -102,13 +101,12 @@ async function smartAutoTag({ postId, postType, content, paperDoi, paperTitle, p
     });
     if (!res.ok) { console.warn('Auto-tag HTTP error:', res.status); return; }
     const data = await res.json();
-    if (!data || data.confidence === 'low') { console.log('Auto-tag skipped: low confidence'); return; }
+    if (!data || data.confidence === 'low') { return; }
     if (data.tier1 || data.tags?.length) {
       const patch = buildPatch({ tier1: data.tier1, tier2: data.tier2 || [], tags: data.tags || [] });
       if (Object.keys(patch).length > 0) {
         await supabase.from('posts').update(patch).eq('id', postId);
       }
-      console.log(`Auto-tag saved: confidence=${data.confidence}`);
       // Publications row sync — paper context only. We always mirror the
       // AI's view here because the publication record is generally not
       // user-curated post-import; if a user manually edits their pub

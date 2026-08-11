@@ -151,7 +151,22 @@ export default function App() {
   const [joinToast,          setJoinToast]          = useState('');
   const [showDrawer,         setShowDrawer]         = useState(false);
   const [savedPostIds,       setSavedPostIds]       = useState(new Set());
-  const [showAuthScreen,     setShowAuthScreen]     = useState(false);
+  const [showAuthScreen,     setShowAuthScreen]     = useState(() => {
+    // Skip the landing page and open AuthScreen directly when:
+    // 1. An invite code is in the URL (deliberate invite link — e.g. luminary.to/?code=ESC2026)
+    // 2. A stored code + return URL are both set (article-page → signup redirect flow)
+    const isPublicRoute = !!(
+      getPublicSlug() || getPublicPostId() || getPublicPaperDoi() ||
+      getPublicCardSlug() || getLegalDoc() || getPublicGroupSlug() ||
+      window.location.pathname === '/admin'
+    );
+    if (isPublicRoute) return false;
+    const urlCode    = new URLSearchParams(window.location.search).get('code');
+    if (urlCode) return true;
+    const storedCode = sessionStorage.getItem('prefill_invite_code');
+    const hasReturn  = !!sessionStorage.getItem('signup_return_url');
+    return !!(storedCode && hasReturn);
+  });
 
   const onViewUser  = (userId) => { setViewedUserId(userId);   setScreen('user_profile'); };
   const onViewPaper = (doi)    => { setViewedPaperDoi(doi);    setScreen('paper_detail'); };
@@ -210,8 +225,29 @@ export default function App() {
         // user is still authenticated and will see whatever profile
         // state already exists.
       }
+      // After signup/login, redirect back to the article the user came from
+      // (set by PublicPostPage's "Join Luminary →" / "Sign in" CTAs).
+      const returnUrl = sessionStorage.getItem('signup_return_url');
+      if (returnUrl) {
+        sessionStorage.removeItem('signup_return_url');
+        window.location.href = returnUrl;
+      }
     })();
   }, [session?.user?.id]);
+
+  // ?code=<invite> pre-fills the invite code for AuthScreen and clears the param.
+  // Runs in all contexts (public article pages too) so the code is captured even
+  // before the user navigates to the root to sign up.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return;
+    sessionStorage.setItem('prefill_invite_code', code);
+    params.delete('code');
+    const qs   = params.toString();
+    const hash = window.location.hash || '';
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + hash);
+  }, []); // eslint-disable-line
 
   // ?confirmed=1 deep-link from the email confirmation redirect →
   // pop a quick success toast and strip the param. PRESERVE the hash:
@@ -274,7 +310,7 @@ export default function App() {
     setShowOnboarding(true);
   },[profile]);
 
-  // Unread message badge — fetch on login and poll every 30s
+  // Unread message badge — fetch on login, update via realtime
   useEffect(()=>{
     if(!session?.user) return;
     const fetchUnread = async () => {
@@ -292,8 +328,12 @@ export default function App() {
       setUnreadMessages(count||0);
     };
     fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
-    return ()=>clearInterval(interval);
+    const channel = supabase
+      .channel('unread-messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchUnread)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchUnread)
+      .subscribe();
+    return ()=> supabase.removeChannel(channel);
   },[session]);
 
   // Unread notification badge

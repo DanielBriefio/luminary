@@ -497,11 +497,15 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
           <div style={{ fontSize:14, color:T.text, marginBottom:8 }}>
             Sign in to join the discussion.
           </div>
-          <a href="/" style={{
-            display:'inline-block', background:T.v, color:'#fff',
-            fontWeight:700, fontSize:13, textDecoration:'none',
-            borderRadius:22, padding:'8px 22px',
-          }}>
+          <a
+            href="/"
+            onClick={() => sessionStorage.setItem('signup_return_url', window.location.href)}
+            style={{
+              display:'inline-block', background:T.v, color:'#fff',
+              fontWeight:700, fontSize:13, textDecoration:'none',
+              borderRadius:22, padding:'8px 22px',
+            }}
+          >
             Sign in to Luminary →
           </a>
         </div>
@@ -671,8 +675,12 @@ export default function PublicPostPage({ postId }) {
           This post is in a {isProject ? 'project' : isGroup ? 'group' : 'private space'}.
           Sign in to Luminary to view it{isGroup && post?.group_name ? ` — or request to join ${post.group_name}` : ''}.
         </div>
-        <a href="/" style={{ color:'#fff', background:T.v, fontWeight:700, textDecoration:'none',
-          borderRadius:9, padding:'10px 22px', fontSize:14 }}>
+        <a
+          href="/"
+          onClick={() => sessionStorage.setItem('signup_return_url', window.location.href)}
+          style={{ color:'#fff', background:T.v, fontWeight:700, textDecoration:'none',
+            borderRadius:9, padding:'10px 22px', fontSize:14 }}
+        >
           Sign in to Luminary →
         </a>
       </div>
@@ -698,11 +706,15 @@ export default function PublicPostPage({ postId }) {
           Lumi<span style={{ color:T.v }}>nary</span>
         </a>
         {!currentUserId && (
-          <a href="/" style={{
-            fontSize:12.5, color:T.v, fontWeight:600, textDecoration:'none',
-            background:T.v2, border:`1px solid rgba(108,99,255,.2)`,
-            borderRadius:8, padding:'7px 16px',
-          }}>
+          <a
+            href="/"
+            onClick={() => sessionStorage.setItem('signup_return_url', window.location.href)}
+            style={{
+              fontSize:12.5, color:T.v, fontWeight:600, textDecoration:'none',
+              background:T.v2, border:`1px solid rgba(108,99,255,.2)`,
+              borderRadius:8, padding:'7px 16px',
+            }}
+          >
             Join Luminary →
           </a>
         )}
