@@ -293,7 +293,7 @@ function InviteLinkGenerator({ codes }) {
   const [articleInput, setArticleInput] = useState('');
   const [copied,       setCopied]       = useState(false);
 
-  const activeCodes = codes.filter(c => c.status === 'active' && (c.is_multi_use || c.batch_label));
+  const activeCodes = codes.filter(c => c.status === 'active' && c.is_multi_use);
 
   // Resolve the final code: dropdown selection or manual override
   const resolvedCode = (customCode.trim() || code).trim();
