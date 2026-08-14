@@ -104,41 +104,27 @@ module.exports = async function handler(req, res) {
     return res.redirect(307, canonicalUrl);
   }
 
-  // Replace <title>
-  html = html.replace(
-    /<title>[^<]*<\/title>/,
-    `<title>${esc(title)} — Luminary</title>`
-  );
+  // Inject dynamic tags immediately after <head> so they appear before
+  // the static fallback tags — crawlers use the first occurrence of each tag.
+  const dynamicHead = [
+    `<title>${esc(title)} — Luminary</title>`,
+    `<meta name="description" content="${esc(description)}"/>`,
+    `<meta property="og:type"        content="article"/>`,
+    `<meta property="og:site_name"   content="Luminary"/>`,
+    `<meta property="og:title"       content="${esc(title)}"/>`,
+    `<meta property="og:description" content="${esc(description)}"/>`,
+    `<meta property="og:url"         content="${esc(canonicalUrl)}"/>`,
+    `<meta property="og:image"       content="${esc(image)}"/>`,
+    authorLine ? `<meta property="article:author" content="${esc(authorLine)}"/>` : '',
+    `<meta name="twitter:card"        content="summary_large_image"/>`,
+    `<meta name="twitter:site"        content="@LuminaryScience"/>`,
+    `<meta name="twitter:title"       content="${esc(title)}"/>`,
+    `<meta name="twitter:description" content="${esc(description)}"/>`,
+    `<meta name="twitter:image"       content="${esc(image)}"/>`,
+    `<link rel="canonical"            href="${esc(canonicalUrl)}"/>`,
+  ].filter(Boolean).join('\n  ');
 
-  // Replace <meta name="description">
-  html = html.replace(
-    /<meta name="description"[^>]*\/>/,
-    `<meta name="description" content="${esc(description)}"/>`
-  );
-
-  // Replace the entire Open Graph + Twitter block in one shot.
-  // The block starts with <!-- Open Graph and ends at the last twitter:image tag.
-  const ogBlock = [
-    `<!-- Open Graph -->`,
-    `    <meta property="og:type"        content="article"/>`,
-    `    <meta property="og:site_name"   content="Luminary"/>`,
-    `    <meta property="og:title"       content="${esc(title)}"/>`,
-    `    <meta property="og:description" content="${esc(description)}"/>`,
-    `    <meta property="og:url"         content="${esc(canonicalUrl)}"/>`,
-    `    <meta property="og:image"       content="${esc(image)}"/>`,
-    authorLine ? `    <meta property="article:author" content="${esc(authorLine)}"/>` : '',
-    `    <meta name="twitter:card"        content="summary_large_image"/>`,
-    `    <meta name="twitter:site"        content="@LuminaryScience"/>`,
-    `    <meta name="twitter:title"       content="${esc(title)}"/>`,
-    `    <meta name="twitter:description" content="${esc(description)}"/>`,
-    `    <meta name="twitter:image"       content="${esc(image)}"/>`,
-    `    <link rel="canonical"            href="${esc(canonicalUrl)}"/>`,
-  ].filter(Boolean).join('\n');
-
-  html = html.replace(
-    /<!-- Open Graph[\s\S]*?<meta name="twitter:image"[^>]*\/>/,
-    ogBlock
-  );
+  html = html.replace('<head>', '<head>\n  ' + dynamicHead);
 
   res.setHeader('Content-Type',  'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=3600');
