@@ -291,13 +291,14 @@ function ArticleFooter({ post, author, currentUserId, onShare, onJoinDiscussion 
   );
 }
 
-function CommentsSection({ post, currentUserId, sectionRef }) {
+function CommentsSection({ post, currentUserId, sectionRef, inputRef: externalInputRef }) {
   const [comments,    setComments]    = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [text,        setText]        = useState('');
   const [submitting,  setSubmitting]  = useState(false);
   const [mentionState, setMentionState] = useState(null);
-  const inputRef = useRef(null);
+  const internalInputRef = useRef(null);
+  const inputRef = externalInputRef || internalInputRef;
 
   // @-mention plumbing — mirrors PostCard.handleMentionInput.
   const handleMentionInput = (textareaEl, value) => {
@@ -364,7 +365,7 @@ function CommentsSection({ post, currentUserId, sectionRef }) {
   };
 
   return (
-    <section ref={sectionRef} style={{ marginTop: 48 }}>
+    <section ref={sectionRef} style={{ marginTop: 48, scrollMarginTop: 68 }}>
       <div style={{ height:1, background:T.bdr, marginBottom:24 }}/>
       <h2 style={{
         fontFamily:"'DM Serif Display', serif",
@@ -523,7 +524,8 @@ export default function PublicPostPage({ postId }) {
   const [accessGated,   setAccessGated]   = useState(false);  // members-only and not authorized to view
   const [sharing,       setSharing]       = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const commentsRef = useRef(null);
+  const commentsRef      = useRef(null);
+  const commentsInputRef = useRef(null);
 
   // Auth — public page, but if signed in we enable comment + follow.
   useEffect(() => {
@@ -798,10 +800,13 @@ export default function PublicPostPage({ postId }) {
           author={author}
           currentUserId={currentUserId}
           onShare={() => setSharing(true)}
-          onJoinDiscussion={() => commentsRef.current?.scrollIntoView({ behavior:'smooth', block:'start' })}
+          onJoinDiscussion={() => {
+            commentsRef.current?.scrollIntoView({ behavior:'smooth', block:'start' });
+            setTimeout(() => commentsInputRef.current?.focus(), 400);
+          }}
         />
 
-        <CommentsSection post={post} currentUserId={currentUserId} sectionRef={commentsRef}/>
+        <CommentsSection post={post} currentUserId={currentUserId} sectionRef={commentsRef} inputRef={commentsInputRef}/>
       </article>
 
       <div style={{ height: 80 }}/>
