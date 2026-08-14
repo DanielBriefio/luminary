@@ -16,14 +16,14 @@ export default function FeedScreen({ user, profile, onViewUser, onViewPaper, onG
   const [feedMode,setFeedMode]=useState(()=>{
     const saved=localStorage.getItem('luminary_feed_mode');
     if(saved) return saved;
-    return (profile?.topic_interests?.length>0)?'personalised':'chronological';
+    return 'chronological';
   });
   const [potw, setPotw] = useState(null);
   const [filterTier1,  setFilterTier1]  = useState([]);
   const [filterTier2,  setFilterTier2]  = useState([]);
   const [showFilter,   setShowFilter]   = useState(false);
   const [modeFilter, setModeFilter] = useState(() =>
-    localStorage.getItem('luminary_mode_filter') || 'myfield'
+    localStorage.getItem('luminary_mode_filter') || 'all'
   );
   const [showModeTooltip, setShowModeTooltip] = useState(
     () => !localStorage.getItem('luminary_mode_tooltip_seen')
