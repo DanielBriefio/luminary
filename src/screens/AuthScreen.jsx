@@ -78,8 +78,14 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     if (prefill) {
       sessionStorage.removeItem('prefill_invite_code');
       setMode('signup');
-      setSignupPath('invite');
       setInviteCode(prefill);
+      if (prefill.startsWith('QR-')) {
+        // QR flow: skip the code-entry step entirely, go straight to the signup form
+        setSignupPath('invite-details');
+        setInviteValid(true);
+      } else {
+        setSignupPath('invite');
+      }
     }
   }, []);
 
@@ -321,7 +327,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           analytics_consent_at: consentAnalytics ? nowIso : null,
           terms_accepted_at:    nowIso,
           privacy_accepted_at:  nowIso,
-          invite_code:          (inviteCode || '').trim().toUpperCase(),
+          invite_code:          inviteCode.startsWith('QR-') ? inviteCode.trim() : (inviteCode || '').trim().toUpperCase(),
         },
       });
       if (stashErr) throw stashErr;

@@ -63,32 +63,6 @@ export default function CardPage({ slug }) {
         <div style={{ flex:1 }}/>
       </div>
 
-      {/* Connect CTA for unauthenticated visitors arriving via QR scan */}
-      {!currentUserId && (
-        <div style={{
-          background:T.v, padding:'14px 20px',
-          display:'flex', alignItems:'center', justifyContent:'space-between', gap:12,
-          flexWrap:'wrap',
-        }}>
-          <div style={{ fontSize:13.5, color:'#fff', fontWeight:500 }}>
-            Connect with {profile.name?.split(' ')[0] || 'this researcher'} on Luminary
-          </div>
-          <button
-            onClick={() => {
-              sessionStorage.setItem('qr_ref_slug', slug);
-              window.location.href = `/?code=QR-${slug}`;
-            }}
-            style={{
-              padding:'9px 20px', borderRadius:9, border:'2px solid rgba(255,255,255,.5)',
-              background:'transparent', color:'#fff', fontSize:13.5, fontWeight:700,
-              fontFamily:'inherit', cursor:'pointer', whiteSpace:'nowrap',
-            }}
-          >
-            Join &amp; Connect →
-          </button>
-        </div>
-      )}
-
       {/* Card — full page */}
       <BusinessCardView profile={profile} currentUserId={currentUserId}/>
     </div>
