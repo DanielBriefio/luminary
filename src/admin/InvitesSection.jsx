@@ -64,8 +64,9 @@ export default function InvitesSection({ supabase }) {
     [...new Set(codes.map(c => c.created_by_name).filter(Boolean))].sort()
   , [codes]);
 
-  // Filter + search
+  // Filter + search — QR codes excluded from the main list (one per user = too many to manage here)
   const filtered = useMemo(() => codes.filter(c => {
+    if (c.batch_label === 'qr') return false;
     if (colFilters.type     && codeType(c) !== colFilters.type)        return false;
     if (colFilters.status   && c.status    !== colFilters.status)       return false;
     if (colFilters.createdBy && c.created_by_name !== colFilters.createdBy) return false;
@@ -293,7 +294,7 @@ function InviteLinkGenerator({ codes }) {
   const [articleInput, setArticleInput] = useState('');
   const [copied,       setCopied]       = useState(false);
 
-  const activeCodes = codes.filter(c => c.status === 'active' && c.is_multi_use);
+  const activeCodes = codes.filter(c => c.status === 'active' && c.is_multi_use && c.batch_label !== 'qr');
 
   // Resolve the final code: dropdown selection or manual override
   const resolvedCode = (customCode.trim() || code).trim();

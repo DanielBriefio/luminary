@@ -219,6 +219,28 @@ export default function App() {
           const { data: fresh } = await supabase
             .from('profiles').select('*').eq('id', session.user.id).single();
           if (fresh) setProfile(fresh);
+
+          // QR-scan signup: mutually follow the card owner and notify the new user.
+          // Person A's invite_redeemed notification fires server-side in apply_signup_intent.
+          const qrRefSlug = sessionStorage.getItem('qr_ref_slug');
+          if (qrRefSlug) {
+            sessionStorage.removeItem('qr_ref_slug');
+            (async () => {
+              const { data: personA } = await supabase
+                .from('profiles').select('id').eq('profile_slug', qrRefSlug).maybeSingle();
+              if (!personA || personA.id === session.user.id) return;
+              const newId = session.user.id;
+              const aId   = personA.id;
+              // Mutual follows — fire-and-forget, ignore duplicate errors
+              supabase.from('follows').insert({ follower_id: newId, target_type: 'user', target_id: aId })
+                .then(() => {}, () => {});
+              supabase.from('follows').insert({ follower_id: aId, target_type: 'user', target_id: newId })
+                .then(() => {}, () => {});
+              // Notify the new user that the card owner is now following them
+              supabase.from('notifications').insert({ notif_type: 'new_follower', user_id: newId, actor_id: aId })
+                .then(() => {}, () => {});
+            })();
+          }
         }
       } catch {
         // Best-effort. If the RPC isn't deployed yet, swallow — the
