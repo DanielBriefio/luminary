@@ -35,6 +35,7 @@ export function BusinessCardView({ profile, currentUserId }) {
     } else {
       sessionStorage.setItem('post_auth_profile', profile.profile_slug);
       sessionStorage.setItem('post_auth_action', 'follow');
+      sessionStorage.setItem('qr_ref_slug', profile.profile_slug);
       window.location.href = `${window.location.origin}?connect=${profile.profile_slug}`;
     }
   };

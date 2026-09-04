@@ -161,8 +161,10 @@ export default function App() {
       window.location.pathname === '/admin'
     );
     if (isPublicRoute) return false;
-    const urlCode    = new URLSearchParams(window.location.search).get('code');
+    const params  = new URLSearchParams(window.location.search);
+    const urlCode = params.get('code');
     if (urlCode) return true;
+    if (params.get('connect')) return true;
     const storedCode = sessionStorage.getItem('prefill_invite_code');
     const hasReturn  = !!sessionStorage.getItem('signup_return_url');
     return !!(storedCode && hasReturn);
