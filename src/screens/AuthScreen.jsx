@@ -333,12 +333,19 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       if (stashErr) throw stashErr;
 
       // 2. Create Supabase auth user.
+      // For QR signups, embed the card owner's slug in the redirect URL so
+      // it survives cross-browser email confirmation (localStorage doesn't
+      // cross browser boundaries on the same device).
+      const qrSlug = inviteCode.startsWith('QR-') ? inviteCode.slice(3) : null;
+      const redirectTo = qrSlug
+        ? `${window.location.origin}/?confirmed=1&qr_ref=${qrSlug}`
+        : confirmRedirectTo;
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email:    signupEmail,
         password: signupPassword,
         options:  {
           data: { name: signupName },
-          emailRedirectTo: confirmRedirectTo,
+          emailRedirectTo: redirectTo,
         },
       });
       if (authError) throw authError;

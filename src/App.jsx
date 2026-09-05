@@ -296,7 +296,12 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (!params.has('confirmed')) return;
+    // Rescue QR ref slug from the URL before stripping params — it was
+    // embedded in the emailRedirectTo so it survives cross-browser confirmation.
+    const qrRef = params.get('qr_ref');
+    if (qrRef) localStorage.setItem('qr_ref_slug', qrRef);
     params.delete('confirmed');
+    params.delete('qr_ref');
     const qs   = params.toString();
     const hash = window.location.hash || '';
     window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + hash);
