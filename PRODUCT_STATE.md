@@ -1,5 +1,5 @@
 # Luminary Prototype — Product State
-_Last updated: 2026-08-10 (rev 28)_
+_Last updated: 2026-09-06 (rev 29)_
 
 ## What exists and works
 
@@ -38,7 +38,7 @@ _Last updated: 2026-08-10 (rev 28)_
 - **App-level ErrorBoundary** (`src/components/ErrorBoundary.jsx`) wraps `<App/>` in `src/index.js`. Friendly fallback (reload button, dev-only stack trace, `hi@luminary.to` mailto) so a single uncaught render error doesn't blank the entire app to a white page. `componentDidCatch` is the hook for Sentry / LogRocket if added later.
 
 ### Feed
-- Sort modes (Personalised / Chronological) and mode pills (All / My Field / Researcher) on a single header row alongside the Filter button
+- Sort modes (Personalised / Chronological) and mode pills (All / My Field / Researcher) on a single header row alongside the Filter button. **Default: Chronological + All** — saved per-user in localStorage; adaptive/personalised can still be chosen manually
 - All / Papers content-type tabs live **inside** the Filter panel (not as a separate row) and are tracked separately from tier filters: client-side post filter only fires when tier filters are set, so `Papers` is server-side only
 - Bell icon (with unread badge) sits next to the reload icon at the top of the feed; reload icon enlarged
 - Compose card at top: dashed-border "Share your thoughts…" button that opens PostComposer (`src/posts/PostComposer.jsx`)
@@ -142,6 +142,7 @@ _Last updated: 2026-08-10 (rev 28)_
 - Public card; `work_mode`-aware field ordering; card_address fully removed
 - QR overlay (`CardQROverlay`)
 - **Action buttons**: "Connect on Luminary" (primary gradient, links to in-app profile), "Save to Contacts" (opens multi-step modal), "Message on WhatsApp" (conditional on `card_show_whatsapp` + `card_phone`)
+- **QR signup flow**: every user has a personal QR invite code (`QR-<profile_slug>`, multi-use, `batch_label='qr'`) auto-generated. The QR overlay encodes `luminary.to/c/<slug>?code=QR-<slug>` — App.jsx picks up the `?code=` on landing, stores it in `sessionStorage.prefill_invite_code`. Unauthenticated visitors clicking "Connect on Luminary" also set `localStorage.qr_ref_slug` and `?qr_ref=<slug>` is embedded in the email confirmation URL (survives cross-browser confirmation — iPhone camera → Safari → email app → Chrome). On first authenticated session after signup, App.jsx's `apply_signup_intent` block: (1) skips onboarding (`onboarding_completed = true` before the fresh profile fetch), (2) inserts mutual follows with the card owner, (3) sends `new_follower` notif to the new user and `invite_redeemed` notif to the card owner, (4) navigates the new user to the card owner's profile. QR codes are excluded from the admin Invites list and link-generator dropdown to avoid clutter.
 - **Multi-step Save to Contacts modal** (`modalStep: null | 'note' | 'done'`):
   - Step 1 "note": 300-char textarea for an optional note (how you met, topics to follow up), then two save buttons — "Save contact only" triggers vCard download; "Save contact + follow-up reminder" triggers vCard download + ICS download (300ms apart to avoid browser blocking)
   - Step 2 "done": green checkmark, "What was saved" preview grid (Title, Org, Email, Phone, Mobile, Address, Profile URL; amber warning when ≤2 rows meaning contact owner hasn't filled in email/phone), saved note, purple reminder indicator with exact date if reminder was chosen
@@ -154,11 +155,14 @@ _Last updated: 2026-08-10 (rev 28)_
 ### Paper Detail (`/paper/:doi`)
 - Metadata, abstract, linked posts; follow paper; compose post (auth only); public + in-app
 
+### OG previews (`api/og.js`)
+- Vercel serverless function at `/api/og?id=<postId>`. Fetches the post from `posts_with_meta` + author profile via the public Supabase REST API, builds dynamic meta tags, then fetches `index.html` and injects them immediately after `<head>` (crawlers use first occurrence — no regex replace, no bot detection). Image priority: `deep_dive_cover_url` → `image_urls[0]` → `image_url` (when `file_type === 'image'`) → `/brand/og.png` fallback. Title/description adapts to post type: deep dive uses `deep_dive_title` + stripped content; paper post uses `paper_title` + byline + abstract; text post uses first line + full plain text. Served with `Cache-Control: public, s-maxage=60, stale-while-revalidate=3600`. `vercel.json` rewrites `/s/:path*` to `/api/og?id=:path*`.
+
 ### Public Post (`/s/:postId`)
 - Substack-style article reading view: 680px column on `T.bg`, fixed scroll progress bar, conditional "← Back" link, top bar (Lumi/nary + "Join Luminary →" hidden when signed in)
 - `ArticleHeader`: optional cover image at the top (full-width, natural height, 8px radius) for deep dives with `deep_dive_cover_url` set; 40px author avatar (with tier ring); author name + title + institution + formatted date + read time; large serif title — prefers `deep_dive_title`, falls back to first-line extraction (< 120 chars) for older deep dives
 - `ArticleBody`: 20px / 1.7 reading typography. **Source Serif 4** for deep dives (regular + bold cuts so emphasis is visible — DM Serif Display only ships at weight 400), DM Sans for regular posts. Scoped CSS for h1 / h2 / h3 / h4 / blockquote / lists / images / iframes. Sanitised HTML is rendered directly (not via `<SafeHtml>`, whose outer wrapper would inject a 13px font-size). The first content line is only stripped from the body when the title was implicit — explicit-title deep dives keep their full body intact.
-- `ArticleFooter`: divider + author bio card (avatar + bio + Follow) + Share + 💬 Join the discussion (smooth-scrolls to comments)
+- `ArticleFooter`: divider + author bio card (avatar + bio + Follow) + Share + 💬 Join the discussion (smooth-scrolls to comments section AND focuses the textarea after 400ms; uses `scrollMarginTop: 68` to clear the sticky header)
 - `CommentsSection`: real comments table (joined to profiles), readable by everyone, signed-in users get a textarea (Enter to submit, own-comment delete). Unauth visitors see a violet "Sign in to join the discussion" CTA
 - Auth detected inside the page via `getSession` + `onAuthStateChange`
 
@@ -330,6 +334,28 @@ _Last updated: 2026-08-10 (rev 28)_
 
 - **`migration_phase15_remap_starter_posts.sql`** (one-shot, optional): retroactively assigns `folder_id` on legacy starter posts (created from templates before Phase 15.1 went live). Idempotent — only touches folder-less posts authored by the project creator within the template's starter count. Safe to run any time; a no-op if no legacy posts remain.
 - **`migration_profile_v2.sql` (partial)**: Additive parts applied — new split address columns (`work_street`, `work_city`, `work_postal_code`, `work_country`, `location_city`, `location_country`) and `work_mode = 'both'` → `'clinician_scientist'` rename are live. DROP of `card_address` / `card_show_address` deferred; columns still exist on profiles.
+
+## Recently shipped (rev 29 — August 10 – September 6, 2026)
+
+**QR signup flow — invite-free onboarding via business card scan**
+- Every user gets a personal QR invite code (`QR-<profile_slug>`) auto-generated in the DB (`is_multi_use=true`, `batch_label='qr'`). SQL to backfill all existing users run in Supabase dashboard.
+- `CardQROverlay` encodes `luminary.to/c/<slug>?code=QR-<slug>` — the invite code is silently pre-loaded by App.jsx's existing `?code=` handler, no URL shown to scanners.
+- Unauthenticated visitors on the card page click "Connect on Luminary" → BusinessCardView sets `localStorage.qr_ref_slug` + navigates to `/?connect=<slug>`. App.jsx now treats `?connect=` as a trigger to show AuthScreen directly (was only `?code=`).
+- AuthScreen detects `QR-` prefix in the pre-filled code: skips the code-entry step entirely (`signupPath='invite-details'`, `inviteValid=true`); preserves mixed-case when stashing (`QR-daniel`, not `QR-DANIEL`).
+- Email confirmation URL includes `?qr_ref=<slug>` (embedded in `emailRedirectTo`) so the slug survives cross-browser confirmation (iPhone camera → Safari → email link → Chrome). App.jsx's `?confirmed=1` handler rescues it from the URL into localStorage before stripping params.
+- On first authenticated session, `apply_signup_intent` block: (1) marks `onboarding_completed = true` so onboarding is skipped, (2) sets `post_auth_profile` so the post-auth effect routes to the card owner's profile, (3) inserts mutual follows, (4) sends `new_follower` notif to new user + `invite_redeemed` notif to card owner.
+- Redundant "Join & Connect" banner removed from `CardPage` — "Connect on Luminary" in BusinessCardView is the single CTA.
+- Admin Invites section: QR codes filtered from the main code list and the link-generator dropdown.
+- `NotifsScreen` `invite_redeemed` type: icon 📲, label "scanned your QR code and joined Luminary".
+
+**OG / social media previews**
+- New `api/og.js` Vercel serverless function. Bot detection dropped entirely — always serves enriched `index.html` to any requester. Injects dynamic `<title>` + `<meta og:* >` + `<meta twitter:*>` + `<link canonical>` immediately after `<head>` (first-occurrence wins with crawlers; no regex replacing of the static fallback block). Image priority: `deep_dive_cover_url` → `image_urls[0]` → `image_url` (image file type only) → `/brand/og.png`. Cached `s-maxage=60, stale-while-revalidate=3600`.
+
+**Feed defaults**
+- feedMode defaults to `'chronological'` (was adaptive). modeFilter defaults to `'all'` (was `'myfield'`). Both still saved per-user in localStorage, so existing users keep their saved preference.
+
+**PublicPostPage — "Join the discussion" fix**
+- The button now scrolls to the comments section (with `scrollMarginTop: 68` to clear the sticky header) AND focuses the comment textarea after a 400ms delay. Previously it did nothing.
 
 ## Recently shipped (rev 28 — June 22 – August 10, 2026)
 
