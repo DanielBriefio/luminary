@@ -157,69 +157,17 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
 
           {/* Profile card */}
           <div style={{ background: T.w, border: `1px solid ${T.bdr}`, borderTop: 'none', borderRadius: '0 0 14px 14px', padding: '0 22px 18px', boxShadow: '0 2px 12px rgba(108,99,255,.07)' }}>
-            <div style={{ paddingTop: 48, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, lineHeight: 1.2, marginBottom: 3 }}>
-                  {p.name_prefix && (
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: T.mu, marginRight: 5 }}>{p.name_prefix}</span>
-                  )}
-                  {p.name || 'Researcher'}
-                  {p.name_suffix && (
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: T.mu, marginLeft: 5 }}>, {p.name_suffix}</span>
-                  )}
-                </div>
-                {p.title && <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, marginBottom: 3 }}>{p.title}</div>}
-                {(p.identity_tier1 || p.identity_tier2) && (
-                  <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 5 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Discipline</span>
-                    {' '}
-                    <span>{p.identity_tier2 ? `${p.identity_tier2} (${p.identity_tier1})` : p.identity_tier1}</span>
-                  </div>
+            {/* Name row — only name and action buttons share this flex row so
+                buttons never squeeze the bio/details below */}
+            <div style={{ paddingTop: 48, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, lineHeight: 1.2, flex: 1, minWidth: 0 }}>
+                {p.name_prefix && (
+                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: T.mu, marginRight: 5 }}>{p.name_prefix}</span>
                 )}
-                {p.work_mode && WORK_MODE_MAP[p.work_mode] && (
-                  <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Sector</span>
-                    {' '}
-                    <span>{WORK_MODE_MAP[p.work_mode].label}</span>
-                  </div>
+                {p.name || 'Researcher'}
+                {p.name_suffix && (
+                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: T.mu, marginLeft: 5 }}>, {p.name_suffix}</span>
                 )}
-                {(p.topic_interests || []).length > 0 && (
-                  <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Interests</span>
-                    {' '}
-                    <span>{p.topic_interests.join(', ')}</span>
-                  </div>
-                )}
-                {p.work_mode === 'clinician' && (p.additional_quals || []).length > 0 && (
-                  <>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Qualifications</div>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
-                      {p.additional_quals.map(q => (
-                        <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
-                          {q}
-                        </span>
-                      ))}
-                    </div>
-                  </>
-                )}
-                <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {p.institution && <span>🏛️ {p.institution}</span>}
-                  {p.location    && <span>📍 {p.location}</span>}
-                  {p.orcid && <OrcidBadge orcid={p.orcid} verified={!!p.orcid_verified}/>}
-                  {p.twitter && (
-                    <a href={`https://twitter.com/${p.twitter.replace('@','')}`} target="_blank" rel="noopener noreferrer"
-                      style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{p.twitter} ↗</a>
-                  )}
-                </div>
-
-                {/* Clinical identity block — years in practice only */}
-                {p.work_mode === 'clinician' && p.years_in_practice && (
-                  <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 6 }}>
-                    {p.years_in_practice} years in practice
-                  </div>
-                )}
-
-                {p.bio && <div style={{ marginBottom: 12, maxWidth: 560 }}><ExpandableBio text={p.bio} /></div>}
               </div>
               {!isOwnProfile && (
                 <div style={{ flexShrink: 0, marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -232,6 +180,7 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                         borderRadius: 22, padding: '6px 14px',
                         cursor: 'pointer', fontFamily: 'inherit',
                         display: 'flex', alignItems: 'center', gap: 5,
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       💬 Message
@@ -240,6 +189,59 @@ export default function UserProfileScreen({ userId, currentUserId, currentProfil
                   <FollowBtn targetType="user" targetId={userId} currentUserId={currentUserId} />
                 </div>
               )}
+            </div>
+
+            {/* Details — full width, never competing with buttons */}
+            <div>
+              {p.title && <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, marginBottom: 3 }}>{p.title}</div>}
+              {(p.identity_tier1 || p.identity_tier2) && (
+                <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 5 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Discipline</span>
+                  {' '}
+                  <span>{p.identity_tier2 ? `${p.identity_tier2} (${p.identity_tier1})` : p.identity_tier1}</span>
+                </div>
+              )}
+              {p.work_mode && WORK_MODE_MAP[p.work_mode] && (
+                <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Sector</span>
+                  {' '}
+                  <span>{WORK_MODE_MAP[p.work_mode].label}</span>
+                </div>
+              )}
+              {(p.topic_interests || []).length > 0 && (
+                <div style={{ fontSize: 11.5, color: T.mu, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Interests</span>
+                  {' '}
+                  <span>{p.topic_interests.join(', ')}</span>
+                </div>
+              )}
+              {p.work_mode === 'clinician' && (p.additional_quals || []).length > 0 && (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: T.mu, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Qualifications</div>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                    {p.additional_quals.map(q => (
+                      <span key={q} style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.s2, color: T.text, border: `1px solid ${T.bdr}` }}>
+                        {q}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {p.institution && <span>🏛️ {p.institution}</span>}
+                {p.location    && <span>📍 {p.location}</span>}
+                {p.orcid && <OrcidBadge orcid={p.orcid} verified={!!p.orcid_verified}/>}
+                {p.twitter && (
+                  <a href={`https://twitter.com/${p.twitter.replace('@','')}`} target="_blank" rel="noopener noreferrer"
+                    style={{ color: T.bl, textDecoration: 'none', fontWeight: 600 }}>{p.twitter} ↗</a>
+                )}
+              </div>
+              {p.work_mode === 'clinician' && p.years_in_practice && (
+                <div style={{ fontSize: 12.5, color: T.mu, marginBottom: 6 }}>
+                  {p.years_in_practice} years in practice
+                </div>
+              )}
+              {p.bio && <div style={{ marginBottom: 12, maxWidth: 560 }}><ExpandableBio text={p.bio} /></div>}
             </div>
 
             {/* Stats */}
