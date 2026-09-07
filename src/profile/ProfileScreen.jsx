@@ -118,7 +118,7 @@ function VisibilityToggle({ label, value, onChange }) {
   );
 }
 
-export default function ProfileScreen({ user, profile, setProfile, setScreen }) {
+export default function ProfileScreen({ user, profile, setProfile, setScreen, onStartOnboarding }) {
   const { isMobile } = useWindowSize();
   const [editing,setEditing]     = useState(false);
   const [form,setForm]           = useState({name_prefix:'',first_name:'',middle_name:'',last_name:'',name_suffix:'',title:'',institution:'',location:'',bio:'',orcid:'',twitter:''});
@@ -1004,6 +1004,36 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
         />
       )}
       <div style={{padding:'16px 18px'}}>
+
+        {/* Onboarding nudge — shown to QR signups who skipped onboarding on
+            first session. Disappears once onboarding_completed flips true. */}
+        {!profile?.onboarding_completed && onStartOnboarding && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, background: T.v2, border: `1.5px solid rgba(108,99,255,.25)`,
+            borderRadius: 12, padding: '12px 16px', marginBottom: 16,
+          }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.v3, marginBottom: 2 }}>
+                Complete your profile
+              </div>
+              <div style={{ fontSize: 12, color: T.mu, lineHeight: 1.5 }}>
+                Add a photo, bio and research area so people can find and connect with you.
+              </div>
+            </div>
+            <button
+              onClick={onStartOnboarding}
+              style={{
+                flexShrink: 0, fontSize: 12, fontWeight: 700,
+                background: T.v, color: '#fff', border: 'none',
+                borderRadius: 20, padding: '7px 16px', cursor: 'pointer',
+                fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}
+            >
+              Finish setup →
+            </button>
+          </div>
+        )}
 
         <div style={{position:'relative',marginBottom: isMobile ? 38 : 46}}>
           {(() => {

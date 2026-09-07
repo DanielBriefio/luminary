@@ -240,9 +240,9 @@ export default function App() {
           }
 
           if (qrSlug) {
-            // Skip onboarding for QR signups — update DB first so the
-            // fresh profile comes back with onboarding_completed=true.
-            await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', session.user.id);
+            // Suppress onboarding for this session only — sessionStorage clears
+            // when the browser closes, so they'll see onboarding on next login.
+            sessionStorage.setItem('qr_onboarding_suppressed', '1');
             sessionStorage.setItem('post_auth_profile', qrSlug);
           }
 
@@ -251,8 +251,7 @@ export default function App() {
             .from('profiles').select('*').eq('id', session.user.id).single();
           if (fresh) setProfile(fresh);
           // Clear pendingQrRef AFTER setProfile so the onboarding effect sees
-          // the updated profile (onboarding_completed=true) before it runs
-          // with pendingQrRef=null. Prevents the brief onboarding flash.
+          // the fresh profile before it runs with pendingQrRef=null.
           if (pendingQrRef) setPendingQrRef(null);
 
           if (qrSlug) {
@@ -364,10 +363,12 @@ export default function App() {
   useEffect(()=>{
     if (!profile) return;
     if (profile.onboarding_completed) return;
-    // Suppress while apply_signup_intent is in flight — QR signups skip
-    // onboarding, but we don't know that until the RPC returns.
+    // Suppress while apply_signup_intent is in flight.
     if (applyingSignup) return;
     if (pendingQrRef) return;
+    // QR signups: suppress for this browser session only. sessionStorage clears
+    // on browser close so they see onboarding on next login.
+    if (sessionStorage.getItem('qr_onboarding_suppressed')) return;
     setShowOnboarding(true);
   },[profile, applyingSignup, pendingQrRef]);
 
@@ -860,7 +861,7 @@ export default function App() {
       ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>{setActiveGroupId(null);setInitialProjectId(null);setInitialTab(null);}} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={handleEditPost} onOpenCompose={handleOpenCompose} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)} initialTab={initialTab} onInitialTabConsumed={()=>setInitialTab(null)}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     projects: <ProjectsScreen user={user} onEditPost={handleEditPost} onOpenCompose={handleOpenCompose} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)}/>,
-    profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,
+    profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen} onStartOnboarding={() => setShowOnboarding(true)}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     post:         <PostComposer
                     context={composePrefill?.context || { kind: 'feed' }}
