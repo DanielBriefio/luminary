@@ -160,6 +160,9 @@ export default function App() {
     if (fromUrl || fromStorage) localStorage.removeItem('qr_ref_slug');
     return fromUrl || fromStorage || null;
   });
+  // True while apply_signup_intent is in flight — prevents the onboarding
+  // effect from firing before we know whether this is a QR new-user signup.
+  const [applyingSignup, setApplyingSignup] = useState(false);
   const [savedPostIds,       setSavedPostIds]       = useState(new Set());
   const [showAuthScreen,     setShowAuthScreen]     = useState(() => {
     // Skip the landing page and open AuthScreen directly when:
@@ -223,28 +226,39 @@ export default function App() {
     if (appliedSignupForRef.current === session.user.id) return;
     appliedSignupForRef.current = session.user.id;
     (async () => {
+      setApplyingSignup(true);
       try {
         const { data } = await supabase.rpc('apply_signup_intent');
         if (data?.status === 'applied') {
-          if (pendingQrRef) {
-            setPendingQrRef(null);
-            // Skip onboarding — set flag before the fresh-profile fetch so it
-            // comes back true and the onboarding screen never mounts.
+          // Resolve the QR slug. pendingQrRef works for same-browser flows;
+          // get_applied_signup_qr_ref is the server-side fallback for
+          // cross-browser email confirmation (e.g. iPhone Safari → Chrome).
+          let qrSlug = pendingQrRef;
+          if (!qrSlug) {
+            const { data: ref } = await supabase.rpc('get_applied_signup_qr_ref');
+            qrSlug = ref || null;
+          }
+
+          if (qrSlug) {
+            // Skip onboarding for QR signups — update DB first so the
+            // fresh profile comes back with onboarding_completed=true.
             await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', session.user.id);
-            // Post-auth effect will navigate to this profile after setProfile(fresh).
-            sessionStorage.setItem('post_auth_profile', pendingQrRef);
+            sessionStorage.setItem('post_auth_profile', qrSlug);
           }
 
           // Pull the updated profile so new name / consents surface immediately.
           const { data: fresh } = await supabase
             .from('profiles').select('*').eq('id', session.user.id).single();
           if (fresh) setProfile(fresh);
+          // Clear pendingQrRef AFTER setProfile so the onboarding effect sees
+          // the updated profile (onboarding_completed=true) before it runs
+          // with pendingQrRef=null. Prevents the brief onboarding flash.
+          if (pendingQrRef) setPendingQrRef(null);
 
-          if (pendingQrRef) {
-            (async () => {
-              const { data: personA } = await supabase
-                .from('profiles').select('id').eq('profile_slug', pendingQrRef).maybeSingle();
-              if (!personA || personA.id === session.user.id) return;
+          if (qrSlug) {
+            const { data: personA } = await supabase
+              .from('profiles').select('id').eq('profile_slug', qrSlug).maybeSingle();
+            if (personA && personA.id !== session.user.id) {
               const newId = session.user.id;
               const aId   = personA.id;
               supabase.from('follows').insert({ follower_id: newId, target_type: 'user', target_id: aId })
@@ -255,13 +269,15 @@ export default function App() {
                 .then(() => {}, () => {});
               supabase.from('notifications').insert({ notif_type: 'invite_redeemed', user_id: aId, actor_id: newId })
                 .then(() => {}, () => {});
-            })();
+            }
           }
         }
       } catch {
         // Best-effort. If the RPC isn't deployed yet, swallow — the
         // user is still authenticated and will see whatever profile
         // state already exists.
+      } finally {
+        setApplyingSignup(false);
       }
       // After signup/login, redirect back to the article the user came from
       // (set by PublicPostPage's "Join Luminary →" / "Sign in" CTAs).
@@ -348,11 +364,12 @@ export default function App() {
   useEffect(()=>{
     if (!profile) return;
     if (profile.onboarding_completed) return;
-    // QR signup: apply_signup_intent will set onboarding_completed=true.
-    // Suppress until it completes so the user never sees the onboarding flash.
+    // Suppress while apply_signup_intent is in flight — QR signups skip
+    // onboarding, but we don't know that until the RPC returns.
+    if (applyingSignup) return;
     if (pendingQrRef) return;
     setShowOnboarding(true);
-  },[profile, pendingQrRef]);
+  },[profile, applyingSignup, pendingQrRef]);
 
   // Unread message badge — fetch on login, update via realtime
   useEffect(()=>{
