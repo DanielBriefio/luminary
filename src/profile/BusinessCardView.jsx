@@ -33,10 +33,11 @@ export function BusinessCardView({ profile, currentUserId }) {
       sessionStorage.setItem('post_auth_action', 'follow');
       window.location.href = `${window.location.origin}?view_profile=${profile.profile_slug}`;
     } else {
-      sessionStorage.setItem('post_auth_profile', profile.profile_slug);
-      sessionStorage.setItem('post_auth_action', 'follow');
       localStorage.setItem('qr_ref_slug', profile.profile_slug);
-      window.location.href = `${window.location.origin}?connect=${profile.profile_slug}`;
+      // Include the QR code in the URL so App.jsx stores it in sessionStorage
+      // on the page where AuthScreen actually loads (sessionStorage doesn't
+      // survive window.location.href navigation across pages).
+      window.location.href = `${window.location.origin}?connect=${profile.profile_slug}&code=QR-${profile.profile_slug}`;
     }
   };
 

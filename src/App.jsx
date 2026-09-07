@@ -348,6 +348,10 @@ export default function App() {
   useEffect(()=>{
     if (!profile) return;
     if (profile.onboarding_completed) return;
+    // QR signup: apply_signup_intent will set onboarding_completed=true once it
+    // completes. Suppress onboarding until then to avoid a flash / the user
+    // accidentally completing it before apply finishes.
+    if (localStorage.getItem('qr_ref_slug')) return;
     setShowOnboarding(true);
   },[profile]);
 
