@@ -73,11 +73,17 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [waitlistReferral,    setWaitlistReferral]    = useState('');
   const [waitlistSubmitted,   setWaitlistSubmitted]   = useState(false);
 
-  // Pre-fill invite code handoff from LandingScreen
+  // Pre-fill invite code from URL param or sessionStorage handoff.
+  // IMPORTANT: read ?code= directly from the URL because this effect runs
+  // as a child-component effect, which React executes BEFORE App.jsx's
+  // parent effects — so App.jsx's ?code= handler hasn't stored the code
+  // in sessionStorage yet when this runs.
   useEffect(() => {
-    const prefill = sessionStorage.getItem('prefill_invite_code');
+    const urlCode = new URLSearchParams(window.location.search).get('code');
+    const stored  = sessionStorage.getItem('prefill_invite_code');
+    const prefill = urlCode || stored;
     if (prefill) {
-      sessionStorage.removeItem('prefill_invite_code');
+      if (stored) sessionStorage.removeItem('prefill_invite_code');
       setMode('signup');
       setInviteCode(prefill);
       if (prefill.startsWith('QR-')) {

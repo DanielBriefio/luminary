@@ -150,6 +150,16 @@ export default function App() {
   const [groupInviteToken,   setGroupInviteToken]   = useState('');
   const [joinToast,          setJoinToast]          = useState('');
   const [showDrawer,         setShowDrawer]         = useState(false);
+  // QR signup: slug of the card owner whose QR was scanned. Captured
+  // synchronously from ?qr_ref= (email confirmation link) or localStorage
+  // (same-browser flow). useState initializer runs before any effects so
+  // apply_signup_intent can read it without effect-ordering races.
+  const [pendingQrRef, setPendingQrRef] = useState(() => {
+    const fromUrl     = new URLSearchParams(window.location.search).get('qr_ref');
+    const fromStorage = localStorage.getItem('qr_ref_slug');
+    if (fromUrl || fromStorage) localStorage.removeItem('qr_ref_slug');
+    return fromUrl || fromStorage || null;
+  });
   const [savedPostIds,       setSavedPostIds]       = useState(new Set());
   const [showAuthScreen,     setShowAuthScreen]     = useState(() => {
     // Skip the landing page and open AuthScreen directly when:
@@ -216,41 +226,33 @@ export default function App() {
       try {
         const { data } = await supabase.rpc('apply_signup_intent');
         if (data?.status === 'applied') {
-          // QR-scan signup: skip onboarding (they just want to connect) and
-          // set up mutual follows. qr_ref_slug lives in localStorage so it
-          // survives the email-confirmation tab switch that clears sessionStorage.
-          const qrRefSlug = localStorage.getItem('qr_ref_slug');
-          if (qrRefSlug) {
-            localStorage.removeItem('qr_ref_slug');
+          if (pendingQrRef) {
+            setPendingQrRef(null);
             // Skip onboarding — set flag before the fresh-profile fetch so it
             // comes back true and the onboarding screen never mounts.
             await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', session.user.id);
-            // After profile loads the post-auth effect will navigate here.
-            sessionStorage.setItem('post_auth_profile', qrRefSlug);
+            // Post-auth effect will navigate to this profile after setProfile(fresh).
+            sessionStorage.setItem('post_auth_profile', pendingQrRef);
           }
 
-          // Pull the updated profile so the new name / consents /
-          // ORCID fields surface in the UI immediately.
+          // Pull the updated profile so new name / consents surface immediately.
           const { data: fresh } = await supabase
             .from('profiles').select('*').eq('id', session.user.id).single();
           if (fresh) setProfile(fresh);
 
-          if (qrRefSlug) {
+          if (pendingQrRef) {
             (async () => {
               const { data: personA } = await supabase
-                .from('profiles').select('id').eq('profile_slug', qrRefSlug).maybeSingle();
+                .from('profiles').select('id').eq('profile_slug', pendingQrRef).maybeSingle();
               if (!personA || personA.id === session.user.id) return;
               const newId = session.user.id;
               const aId   = personA.id;
-              // Mutual follows — fire-and-forget, ignore duplicate errors
               supabase.from('follows').insert({ follower_id: newId, target_type: 'user', target_id: aId })
                 .then(() => {}, () => {});
               supabase.from('follows').insert({ follower_id: aId, target_type: 'user', target_id: newId })
                 .then(() => {}, () => {});
-              // Notify new user that card owner is now following them
               supabase.from('notifications').insert({ notif_type: 'new_follower', user_id: newId, actor_id: aId })
                 .then(() => {}, () => {});
-              // Notify person A that their QR was scanned
               supabase.from('notifications').insert({ notif_type: 'invite_redeemed', user_id: aId, actor_id: newId })
                 .then(() => {}, () => {});
             })();
@@ -296,10 +298,8 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (!params.has('confirmed')) return;
-    // Rescue QR ref slug from the URL before stripping params — it was
-    // embedded in the emailRedirectTo so it survives cross-browser confirmation.
-    const qrRef = params.get('qr_ref');
-    if (qrRef) localStorage.setItem('qr_ref_slug', qrRef);
+    // ?qr_ref= is already captured in pendingQrRef state (useState initializer
+    // runs synchronously before effects). Just strip both params from the URL.
     params.delete('confirmed');
     params.delete('qr_ref');
     const qs   = params.toString();
@@ -348,12 +348,11 @@ export default function App() {
   useEffect(()=>{
     if (!profile) return;
     if (profile.onboarding_completed) return;
-    // QR signup: apply_signup_intent will set onboarding_completed=true once it
-    // completes. Suppress onboarding until then to avoid a flash / the user
-    // accidentally completing it before apply finishes.
-    if (localStorage.getItem('qr_ref_slug')) return;
+    // QR signup: apply_signup_intent will set onboarding_completed=true.
+    // Suppress until it completes so the user never sees the onboarding flash.
+    if (pendingQrRef) return;
     setShowOnboarding(true);
-  },[profile]);
+  },[profile, pendingQrRef]);
 
   // Unread message badge — fetch on login, update via realtime
   useEffect(()=>{
