@@ -46,7 +46,8 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   // The post-signup writes were stashed server-side in signup_pending;
   // App.jsx applies them on the first authenticated session after
   // the user clicks the confirmation link.
-  const [awaitingConfirmEmail, setAwaitingConfirmEmail] = useState('');
+  const [awaitingConfirmEmail,    setAwaitingConfirmEmail]    = useState('');
+  const [awaitingConfirmRedirect, setAwaitingConfirmRedirect] = useState('');
   const [resendingConfirm,     setResendingConfirm]     = useState(false);
   const [resendNotice,         setResendNotice]         = useState('');
 
@@ -112,7 +113,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       const { error: rerr } = await supabase.auth.resend({
         type:    'signup',
         email:   awaitingConfirmEmail,
-        options: { emailRedirectTo: confirmRedirectTo },
+        options: { emailRedirectTo: awaitingConfirmRedirect || confirmRedirectTo },
       });
       if (rerr) throw rerr;
       setResendNotice('Sent. Check your inbox (and spam folder).');
@@ -359,7 +360,10 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         onAuth();
       } else {
         // Confirmation on — render the "check your email" panel.
+        // Store the redirect URL so the resend button uses the same one
+        // (preserving ?qr_ref= for QR signups).
         setAwaitingConfirmEmail(signupEmail);
+        setAwaitingConfirmRedirect(redirectTo);
       }
     } catch (e) {
       setSignupError(e.message || 'Sign-up failed. Please try again.');
