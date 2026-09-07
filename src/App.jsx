@@ -261,12 +261,12 @@ export default function App() {
             if (personA && personA.id !== session.user.id) {
               const newId = session.user.id;
               const aId   = personA.id;
+              // New user follows card owner (one-way). Mutual follow was removed:
+              // RLS blocks inserting a follow on behalf of a different user, and
+              // the card owner can choose to follow back from their Followers list.
               supabase.from('follows').insert({ follower_id: newId, target_type: 'user', target_id: aId })
                 .then(() => {}, () => {});
-              supabase.from('follows').insert({ follower_id: aId, target_type: 'user', target_id: newId })
-                .then(() => {}, () => {});
-              supabase.from('notifications').insert({ notif_type: 'new_follower', user_id: newId, actor_id: aId })
-                .then(() => {}, () => {});
+              // Notify card owner that someone scanned their QR and joined.
               supabase.from('notifications').insert({ notif_type: 'invite_redeemed', user_id: aId, actor_id: newId })
                 .then(() => {}, () => {});
             }
