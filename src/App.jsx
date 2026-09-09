@@ -1168,6 +1168,7 @@ export default function App() {
               </div>
               <div style={{flex:1, overflowY:'auto', padding:'12px 0'}}>
                 {[
+                  {id:'groups',        label:'Groups',     icon:'👥', count:groupUnreadCount},
                   {id:'network',       label:'My Network', icon:'🌐'},
                   {id:'library',       label:'Library',    icon:'📚'},
                   {id:'messages',      label:'Messages',   icon:'💬', count:unreadMessages},
@@ -1178,6 +1179,7 @@ export default function App() {
                   <button key={item.id}
                     onClick={()=>{
                       if(item.disabled) return;
+                      if(item.id==='groups') setActiveGroupId(null);
                       setScreen(item.id);
                       setShowDrawer(false);
                     }}
@@ -1226,7 +1228,7 @@ export default function App() {
 
         {/* Bottom nav — mobile only */}
         {isMobile && (
-          <BottomNav screen={screen} setScreen={(s)=>{ if(s==='groups') setActiveGroupId(null); setScreen(s); }} groupUnreadCount={groupUnreadCount}/>
+          <BottomNav screen={screen} setScreen={setScreen}/>
         )}
       </div>
     </>
