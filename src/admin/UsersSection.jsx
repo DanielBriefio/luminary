@@ -47,6 +47,32 @@ const STAGES = ['identified', 'credible', 'connected', 'active', 'visible'];
 const GHOSTS = ['stuck', 'almost'];
 const MODES  = ['researcher', 'clinician', 'industry', 'clinician_scientist'];
 
+// Optional columns. Checkbox, User and the ✉ action are always shown;
+// these can be toggled from the "Columns" menu. Choice is a per-browser
+// convenience in localStorage. Work mode lives inside the User cell and
+// Stage + Ghost share the Status cell to keep the default table narrow.
+const OPTIONAL_COLUMNS = [
+  { id: 'joined',      label: 'Joined',      width: '80px',  sort: 'created_at' },
+  { id: 'last_active', label: 'Last active', width: '90px',  sort: 'last_active' },
+  { id: 'posts',       label: 'Posts',       width: '55px',  sort: 'posts_count' },
+  { id: 'groups',      label: 'Groups',      width: '60px',  sort: 'groups_count' },
+  { id: 'codes',       label: 'Codes',       width: '60px',  sort: 'invite_codes_remaining' },
+  { id: 'lumens',      label: 'Lumens',      width: '80px',  sort: 'lumens_current_period' },
+  { id: 'topics',      label: 'Topics',      width: '170px', sort: 'topic' },
+  { id: 'status',      label: 'Status',      width: '110px', sort: null },
+];
+const DEFAULT_VISIBLE = ['joined', 'last_active', 'posts', 'status'];
+const COLS_STORAGE_KEY = 'admin_users_columns';
+
+function loadVisibleCols() {
+  try {
+    const raw = localStorage.getItem(COLS_STORAGE_KEY);
+    const arr = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(arr)) return arr.filter(id => OPTIONAL_COLUMNS.some(c => c.id === id));
+  } catch { /* private mode etc. — fall back to defaults */ }
+  return DEFAULT_VISIBLE;
+}
+
 export default function UsersSection({ supabase, user: adminUser, initialParams = {} }) {
   const [users, setUsers]             = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -61,6 +87,16 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
   const [showNudge, setShowNudge]     = useState(false);
   const [sortBy, setSortBy]           = useState('created_at');
   const [sortDir, setSortDir]         = useState('desc');
+  const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
+  const [showColMenu, setShowColMenu] = useState(false);
+
+  const toggleCol = (id) => {
+    setVisibleCols(prev => {
+      const next = prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id];
+      try { localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   const toggleSort = (col) => {
     if (sortBy === col) {
@@ -148,6 +184,12 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
     }
     return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
   });
+
+  // A topic filter only makes sense with the Topics column visible.
+  const activeCols = OPTIONAL_COLUMNS.filter(c =>
+    visibleCols.includes(c.id) || (c.id === 'topics' && topicFilter)
+  );
+  const gridCols = ['32px', 'minmax(0,1fr)', ...activeCols.map(c => c.width), '44px'].join(' ');
 
   const allSelected  = sorted.length > 0 && sorted.every(u => selected.has(u.id));
   const someSelected = selected.size > 0;
@@ -265,6 +307,44 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
             Clear
           </button>
         )}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowColMenu(v => !v)}
+            style={{
+              padding: '8px 12px', borderRadius: 9,
+              border: `1px solid ${T.bdr}`, background: showColMenu ? T.v2 : T.w,
+              color: showColMenu ? T.v : T.text, fontSize: 13, cursor: 'pointer',
+              fontFamily: 'inherit', fontWeight: 600,
+            }}
+          >
+            Columns ▾
+          </button>
+          {showColMenu && (
+            <>
+              <div onClick={() => setShowColMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+              <div style={{
+                position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 41,
+                background: T.w, border: `1px solid ${T.bdr}`, borderRadius: 10,
+                boxShadow: '0 8px 24px rgba(27,29,54,.12)', padding: 8, minWidth: 170,
+              }}>
+                {OPTIONAL_COLUMNS.map(c => (
+                  <label key={c.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+                    fontSize: 13, color: T.text, cursor: 'pointer', borderRadius: 6,
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={visibleCols.includes(c.id)}
+                      onChange={() => toggleCol(c.id)}
+                      style={{ accentColor: T.v }}
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -278,7 +358,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
           {/* Column headers */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: GRID_COLS,
+            gridTemplateColumns: gridCols,
             padding: '10px 14px',
             borderBottom: `1px solid ${T.bdr}`,
             fontSize: 11, fontWeight: 600, color: T.mu,
@@ -291,23 +371,17 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
               onChange={toggleAll}
               style={{ cursor: 'pointer' }}
             />
-            <SortableHeader label="User"        col="name"                   sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-            <div>Work mode</div>
-            <SortableHeader label="Joined"      col="created_at"             sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-            <SortableHeader label="Last active" col="last_active"            sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-            <SortableHeader label="Posts"       col="posts_count"            sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-            <SortableHeader label="Groups"      col="groups_count"           sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-            <SortableHeader label="Codes"       col="invite_codes_remaining" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-            <SortableHeader label="Lumens"      col="lumens_current_period"  sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-            <SortableHeader
-              label={topicFilter ? `Topics (${topicFilter})` : 'Topics'}
-              col="topic"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSort={toggleSort}
-            />
-            <div>Stage</div>
-            <div>Ghost</div>
+            <SortableHeader label="User" col="name" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+            {activeCols.map(c => c.sort ? (
+              <SortableHeader
+                key={c.id}
+                label={c.id === 'topics' && topicFilter ? `Topics (${topicFilter})` : c.label}
+                col={c.sort}
+                sortBy={sortBy} sortDir={sortDir} onSort={toggleSort}
+              />
+            ) : (
+              <div key={c.id}>{c.label}</div>
+            ))}
             <div></div>
           </div>
 
@@ -326,6 +400,8 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
                 isLast={i === sorted.length - 1}
                 selected={selected.has(u.id)}
                 topicFilter={topicFilter}
+                cols={activeCols}
+                gridCols={gridCols}
                 onToggle={() => toggleOne(u.id)}
                 onOpen={() => setDetailUser(u)}
                 onDirectMessage={() => handleDirectMessage(u.id)}
@@ -418,7 +494,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
   );
 }
 
-function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDirectMessage }) {
+function UserRow({ user, isLast, selected, topicFilter, cols, gridCols, onToggle, onOpen, onDirectMessage }) {
   const stage = STAGE_STYLES[user.activation_stage] || STAGE_STYLES.identified;
   const ghost = user.ghost_segment ? GHOST_STYLES[user.ghost_segment] : null;
   const codes = user.invite_codes_remaining ?? 0;
@@ -426,16 +502,68 @@ function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDire
   const lumens = user.lumens_current_period ?? 0;
   const tier   = getTierFromLumens(lumens);
   const tierCfg = TIER_CONFIG[tier];
+  const subline = [WORK_MODE_LABELS[user.work_mode] || user.work_mode, user.institution].filter(Boolean).join(' · ');
+
+  const cell = (id) => {
+    switch (id) {
+      case 'joined':
+        return (
+          <div style={{ fontSize: 12, color: T.mu }}>
+            {user.created_at
+              ? new Date(user.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+              : '—'}
+          </div>
+        );
+      case 'last_active':
+        return <div style={{ fontSize: 12, color: T.mu }}>{user.last_active ? timeAgo(user.last_active) : 'Never'}</div>;
+      case 'posts':
+        return <div style={{ fontSize: 13, color: T.text, textAlign: 'center' }}>{user.posts_count ?? 0}</div>;
+      case 'groups':
+        return <div style={{ fontSize: 13, color: T.text, textAlign: 'center' }}>{user.groups_count ?? 0}</div>;
+      case 'codes':
+        return <div style={{ fontSize: 13, fontWeight: 600, color: codesColor, textAlign: 'center' }}>{codes}</div>;
+      case 'lumens':
+        return (
+          <div style={{ fontSize: 12, lineHeight: 1.2 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{lumens.toLocaleString()}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: tierCfg.color, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+              {tierCfg.name}
+            </div>
+          </div>
+        );
+      case 'topics':
+        return <TopicsCell topics={user.topic_distribution} highlight={topicFilter} />;
+      case 'status':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: stage.bg, color: stage.color }}>
+              {stage.label}
+            </span>
+            {ghost && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: ghost.bg, color: ghost.color }}>
+                {ghost.label}
+              </span>
+            )}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: GRID_COLS,
-      padding: '11px 14px',
-      borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`,
-      alignItems: 'center',
-      background: selected ? T.v2 : 'transparent',
-    }}>
+    <div
+      onClick={onOpen}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: gridCols,
+        padding: '10px 14px',
+        borderBottom: isLast ? 'none' : `1px solid ${T.bdr}`,
+        alignItems: 'center',
+        background: selected ? T.v2 : 'transparent',
+        cursor: 'pointer',
+      }}
+    >
       <input
         type="checkbox"
         checked={selected}
@@ -444,33 +572,20 @@ function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDire
         style={{ cursor: 'pointer' }}
       />
 
-      <div
-        onClick={onOpen}
-        style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', minWidth: 0 }}
-      >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
         <Av size={30} name={user.name} color={user.avatar_color} url={user.avatar_url || ''} />
         <div style={{ minWidth: 0, overflow: 'hidden' }}>
-          <div
-            title={user.name || ''}
-            style={{
-              fontSize: 13.5, fontWeight: 600, color: T.text,
-              lineHeight: 1.25, wordBreak: 'break-word',
-              // Two-line clamp: full name visible for the vast majority
-              // of users, ellipsis + tooltip for extreme outliers.
-              display: '-webkit-box', WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical', overflow: 'hidden',
-            }}
-          >
+          <div title={user.name || ''} style={{
+            fontSize: 13.5, fontWeight: 600, color: T.text, lineHeight: 1.25,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
             {user.name || '—'}
           </div>
           {user.email && (
-            <div
-              title={user.email}
-              style={{
-                fontSize: 11.5, color: T.text, marginTop: 1,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}
-            >
+            <div title={user.email} style={{
+              fontSize: 11.5, color: T.text, marginTop: 1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
               {user.email}
               {!user.email_confirmed_at && (
                 <span style={{
@@ -482,96 +597,20 @@ function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDire
               )}
             </div>
           )}
-          {user.institution && (
-            <div
-              title={user.institution}
-              style={{
-                fontSize: 11.5, color: T.mu, marginTop: 1,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}
-            >
-              {user.institution}
+          {subline && (
+            <div title={subline} style={{
+              fontSize: 11.5, color: T.mu, marginTop: 1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {subline}
             </div>
           )}
         </div>
       </div>
 
-      <div style={{ fontSize: 12, color: T.mu }}>
-        {WORK_MODE_LABELS[user.work_mode] || user.work_mode || '—'}
-      </div>
-
-      <div style={{ fontSize: 12, color: T.mu }}>
-        {user.created_at
-          ? new Date(user.created_at).toLocaleDateString('en-GB', {
-              day: 'numeric', month: 'short',
-            })
-          : '—'}
-      </div>
-
-      <div style={{ fontSize: 12, color: T.mu }}>
-        {user.last_active ? timeAgo(user.last_active) : 'Never'}
-      </div>
-
-      <div style={{ fontSize: 13, color: T.text, textAlign: 'center' }}>
-        {user.posts_count ?? 0}
-      </div>
-
-      <div style={{ fontSize: 13, color: T.text, textAlign: 'center' }}>
-        {user.groups_count ?? 0}
-      </div>
-
-      <div style={{
-        fontSize: 13, fontWeight: 600, color: codesColor, textAlign: 'center',
-      }}>
-        {codes}
-      </div>
-
-      <div style={{ fontSize: 12, lineHeight: 1.2, textAlign: 'left' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>
-          {lumens.toLocaleString()}
-        </div>
-        <div style={{
-          fontSize: 10, fontWeight: 700, color: tierCfg.color,
-          textTransform: 'uppercase', letterSpacing: 0.3,
-        }}>
-          {tierCfg.name}
-        </div>
-      </div>
-
-      <TopicsCell topics={user.topic_distribution} highlight={topicFilter} />
+      {cols.map(c => <React.Fragment key={c.id}>{cell(c.id)}</React.Fragment>)}
 
       <div>
-        <span style={{
-          fontSize: 11, fontWeight: 700, padding: '2px 8px',
-          borderRadius: 20, background: stage.bg, color: stage.color,
-        }}>
-          {stage.label}
-        </span>
-      </div>
-
-      <div>
-        {ghost && (
-          <span style={{
-            fontSize: 11, fontWeight: 700, padding: '2px 8px',
-            borderRadius: 20, background: ghost.bg, color: ghost.color,
-          }}>
-            {ghost.label}
-          </span>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', gap: 5 }}>
-        <button
-          onClick={onOpen}
-          style={{
-            padding: '5px 11px', borderRadius: 7,
-            border: `1px solid ${T.bdr}`, background: T.w,
-            color: T.mu, fontSize: 12, cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          View
-        </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDirectMessage(); }}
           title="Send nudge"
@@ -588,12 +627,6 @@ function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDire
     </div>
   );
 }
-
-// columns: chk / User / Mode / Joined / LastActive / Posts / Groups / Codes / Lumens / Topics / Stage / Ghost / actions
-// `minmax(0,1fr)` on User keeps long names+institutions from pushing
-// later columns out of alignment (CSS Grid's default min-content track
-// size lets cells expand beyond their slot when content is wide).
-const GRID_COLS = 'minmax(32px,32px) minmax(0,1fr) 110px 90px 90px 50px 50px 60px 80px 170px 100px 80px 100px';
 
 function TopicsCell({ topics, highlight }) {
   const list = topics || [];
