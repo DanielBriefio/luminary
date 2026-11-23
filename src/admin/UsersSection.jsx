@@ -73,8 +73,17 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.rpc('get_admin_user_list');
-    setUsers(data || []);
+    // Login emails come from a separate admin RPC (auth.users isn't
+    // client-readable). Best-effort: if it fails, the list still renders.
+    const [{ data }, { data: emails }] = await Promise.all([
+      supabase.rpc('get_admin_user_list'),
+      supabase.rpc('get_admin_user_emails').then(r => r, () => ({ data: null })),
+    ]);
+    const emailMap = new Map((emails || []).map(e => [e.id, e]));
+    setUsers((data || []).map(u => {
+      const e = emailMap.get(u.id);
+      return e ? { ...u, email: e.email, email_confirmed_at: e.email_confirmed_at } : u;
+    }));
     setLoading(false);
   }, [supabase]);
 
@@ -100,6 +109,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
       const q = search.toLowerCase();
       return (
         u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
         u.institution?.toLowerCase().includes(q) ||
         u.title?.toLowerCase().includes(q)
       );
@@ -189,7 +199,7 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
       {/* Filters row */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input
-          placeholder="Search name, institution, title…"
+          placeholder="Search name, email, institution, title…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{
@@ -453,6 +463,25 @@ function UserRow({ user, isLast, selected, topicFilter, onToggle, onOpen, onDire
           >
             {user.name || '—'}
           </div>
+          {user.email && (
+            <div
+              title={user.email}
+              style={{
+                fontSize: 11.5, color: T.text, marginTop: 1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
+              {user.email}
+              {!user.email_confirmed_at && (
+                <span style={{
+                  marginLeft: 6, fontSize: 10, fontWeight: 700, color: T.am,
+                  background: T.am2, borderRadius: 10, padding: '1px 6px',
+                }}>
+                  unconfirmed
+                </span>
+              )}
+            </div>
+          )}
           {user.institution && (
             <div
               title={user.institution}

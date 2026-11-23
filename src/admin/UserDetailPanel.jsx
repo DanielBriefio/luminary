@@ -160,6 +160,11 @@ export default function UserDetailPanel({
             }}>
               {[user.title, user.institution].filter(Boolean).join(' · ')}
             </div>
+            {user.email && (
+              <a href={`mailto:${user.email}`} style={{ fontSize: 12, color: T.v, textDecoration: 'none', wordBreak: 'break-all' }}>
+                {user.email}{!user.email_confirmed_at && ' · unconfirmed'}
+              </a>
+            )}
           </div>
           <button onClick={onClose} style={{
             background: 'transparent', border: 'none',
