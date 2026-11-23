@@ -379,6 +379,11 @@ export default function UsersSection({ supabase, user: adminUser, initialParams 
               u.id === detailUser.id ? { ...u, admin_notes: notes } : u
             ));
           }}
+          onDeleted={(id) => {
+            setUsers(prev => prev.filter(u => u.id !== id));
+            setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
+            setDetailUser(null);
+          }}
           onUserUpdated={(patch) => {
             setUsers(prev => prev.map(u =>
               u.id === detailUser.id ? { ...u, ...patch } : u

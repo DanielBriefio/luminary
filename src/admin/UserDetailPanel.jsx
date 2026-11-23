@@ -18,7 +18,7 @@ const GHOST_STYLES = {
 };
 
 export default function UserDetailPanel({
-  user, supabase, onClose, onNudge, onNotesUpdated, onUserUpdated,
+  user, supabase, onClose, onNudge, onNotesUpdated, onUserUpdated, onDeleted,
 }) {
   const [posts, setPosts]             = useState([]);
   const [groups, setGroups]           = useState([]);
@@ -28,6 +28,31 @@ export default function UserDetailPanel({
   const [codesRemaining, setCodesRemaining] = useState(user.invite_codes_remaining ?? 0);
   const [topUpCount, setTopUpCount]   = useState(1);
   const [toppingUp, setToppingUp]     = useState(false);
+  const [showDelete, setShowDelete]   = useState(false);
+  const [deleteText, setDeleteText]   = useState('');
+  const [deleting, setDeleting]       = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  // Hard delete via admin_delete_user (no grace period). The RPC returns
+  // the user's tracked storage blobs; sweep them per bucket afterwards,
+  // best-effort — the account is already gone at that point.
+  const handleDelete = async () => {
+    if (deleting || deleteText !== 'DELETE') return;
+    setDeleting(true); setDeleteError('');
+    const { data: blobs, error } = await supabase.rpc('admin_delete_user', { p_user_id: user.id });
+    if (error) {
+      setDeleteError(error.message || 'Delete failed');
+      setDeleting(false);
+      return;
+    }
+    const byBucket = {};
+    (blobs || []).forEach(b => { (byBucket[b.bucket] = byBucket[b.bucket] || []).push(b.path); });
+    await Promise.all(Object.entries(byBucket).map(([bucket, paths]) =>
+      supabase.storage.from(bucket).remove(paths).then(() => {}, () => {})
+    ));
+    setDeleting(false);
+    onDeleted?.(user.id);
+  };
 
   useEffect(() => {
     setCodesRemaining(user.invite_codes_remaining ?? 0);
@@ -325,6 +350,73 @@ export default function UserDetailPanel({
               <div style={{ fontSize: 11, color: T.mu, marginTop: 4 }}>Saving…</div>
             )}
           </Section>
+        </div>
+
+        {/* Danger zone — hard delete */}
+        <div style={{ padding: '0 20px 16px' }}>
+          {!showDelete ? (
+            <button
+              onClick={() => setShowDelete(true)}
+              disabled={user.is_admin}
+              title={user.is_admin ? 'Admins cannot be deleted here' : undefined}
+              style={{
+                width: '100%', padding: '8px 0', borderRadius: 9,
+                border: `1px solid ${T.ro}`, background: T.w,
+                color: T.ro, fontSize: 12.5, fontWeight: 600,
+                cursor: user.is_admin ? 'not-allowed' : 'pointer',
+                opacity: user.is_admin ? 0.5 : 1, fontFamily: 'inherit',
+              }}
+            >
+              Delete user…
+            </button>
+          ) : (
+            <div style={{ background: T.ro2, border: `1px solid ${T.ro}`, borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 12.5, color: T.text, lineHeight: 1.55, marginBottom: 8 }}>
+                Permanently deletes <strong>{user.name || 'this user'}</strong> right now — login,
+                profile, posts, likes, library, files and invite codes. No grace period, cannot
+                be undone. Type <strong>DELETE</strong> to confirm.
+              </div>
+              <input
+                value={deleteText}
+                onChange={e => setDeleteText(e.target.value)}
+                placeholder="DELETE"
+                autoFocus
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '7px 10px',
+                  borderRadius: 8, border: `1px solid ${T.bdr}`, background: T.w,
+                  fontSize: 13, fontFamily: 'inherit', color: T.text, outline: 'none',
+                  marginBottom: 8,
+                }}
+              />
+              {deleteError && (
+                <div style={{ fontSize: 12, color: T.ro, marginBottom: 8 }}>{deleteError}</div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => { setShowDelete(false); setDeleteText(''); setDeleteError(''); }}
+                  style={{
+                    flex: 1, padding: '7px 0', borderRadius: 8, border: `1px solid ${T.bdr}`,
+                    background: T.w, color: T.text, fontSize: 12.5, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting || deleteText !== 'DELETE'}
+                  style={{
+                    flex: 1, padding: '7px 0', borderRadius: 8, border: 'none',
+                    background: T.ro, color: '#fff', fontSize: 12.5, fontWeight: 600,
+                    cursor: deleting || deleteText !== 'DELETE' ? 'not-allowed' : 'pointer',
+                    opacity: deleting || deleteText !== 'DELETE' ? 0.5 : 1, fontFamily: 'inherit',
+                  }}
+                >
+                  {deleting ? 'Deleting…' : 'Delete permanently'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer actions */}
