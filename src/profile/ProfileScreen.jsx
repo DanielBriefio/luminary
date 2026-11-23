@@ -407,17 +407,41 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen }) 
       work_postal_code: form.work_postal_code, work_country: form.work_country,
       location_city: form.location_city, location_country: form.location_country,
     };
-    // Try 1: full save including new columns
-    const { data, error } = await supabase.from('profiles').update({...coreUpdates,...cardUpdates,...workModeUpdates,...newColUpdates}).eq('id',user.id).select().single();
-    if (!error) { if(data) setProfile(data); setEditing(false); setSaving(false); return; }
-    // Try 2: without new columns (all clinical/work fields still included)
-    const { data:d2, error:e2 } = await supabase.from('profiles').update({...coreUpdates,...cardUpdates,...workModeUpdates}).eq('id',user.id).select().single();
-    if (!e2) { if(d2) setProfile(d2); setEditing(false); setSaving(false); return; }
-    // Try 3: core only
-    const { data:d3, error:e3 } = await supabase.from('profiles').update(coreUpdates).eq('id',user.id).select().single();
-    if(e3){ alert('Save failed: '+e3.message); setSaving(false); return; }
-    if(d3) setProfile(d3);
-    setEditing(false); setSaving(false);
+    // Progressive fallback for DBs missing newer columns. Only a
+    // missing-column error (PGRST204 / 42703) moves on to the next, smaller
+    // payload — any other error is surfaced as-is so it isn't masked by a
+    // later attempt. No .single(): an UPDATE that RLS silently blocks
+    // returns zero rows, which .single() reports as the cryptic
+    // "Cannot coerce the result to a single JSON object".
+    const attempts = [
+      {...coreUpdates,...cardUpdates,...workModeUpdates,...newColUpdates},
+      {...coreUpdates,...cardUpdates,...workModeUpdates},
+      coreUpdates,
+    ];
+    const { data: { session: liveSession } } = await supabase.auth.getSession();
+    if (!liveSession || liveSession.user.id !== user.id) {
+      alert('Save failed: your session has expired. Please sign in again (your edits are still in the form).');
+      setSaving(false); return;
+    }
+    let lastError = null;
+    for (const payload of attempts) {
+      const { data, error } = await supabase.from('profiles').update(payload).eq('id', user.id).select();
+      if (error) {
+        lastError = error;
+        if (error.code === 'PGRST204' || error.code === '42703') continue;
+        break;
+      }
+      if (!data?.length) {
+        lastError = { message: 'the update was blocked (0 rows changed — likely a row-level security policy on profiles)' };
+        console.error('[ProfileScreen.save] update matched 0 rows', { userId: user.id });
+        break;
+      }
+      setProfile(data[0]); setEditing(false); setSaving(false);
+      return;
+    }
+    console.error('[ProfileScreen.save] failed', lastError);
+    alert('Save failed: ' + (lastError?.message || 'unknown error') + (lastError?.code ? ` (${lastError.code})` : ''));
+    setSaving(false);
   };
 
   // Save card details + everything else in `form`. We persist the full

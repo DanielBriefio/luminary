@@ -230,11 +230,14 @@ export default function App() {
           // work_mode is chosen on the signup form and carried in
           // user_metadata (signup_pending has no column for it). Copy it
           // onto the profile before the refetch below.
+          // Also stamp onboarding_completed: the wizard is gone, and the
+          // trg_apply_founding_member trigger only grants founding-member
+          // status on the false → true transition of this flag.
           const wm = session.user.user_metadata?.work_mode;
-          if (wm) {
-            await supabase.from('profiles').update({ work_mode: wm }).eq('id', session.user.id)
-              .then(() => {}, () => {});
-          }
+          await supabase.from('profiles')
+            .update({ onboarding_completed: true, ...(wm ? { work_mode: wm } : {}) })
+            .eq('id', session.user.id)
+            .then(() => {}, () => {});
 
           // Resolve the QR slug. pendingQrRef works for same-browser flows;
           // get_applied_signup_qr_ref is the server-side fallback for
