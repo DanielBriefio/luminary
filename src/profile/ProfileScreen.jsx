@@ -118,7 +118,7 @@ function VisibilityToggle({ label, value, onChange }) {
   );
 }
 
-export default function ProfileScreen({ user, profile, setProfile, setScreen, onStartOnboarding }) {
+export default function ProfileScreen({ user, profile, setProfile, setScreen }) {
   const { isMobile } = useWindowSize();
   const [editing,setEditing]     = useState(false);
   const [form,setForm]           = useState({name_prefix:'',first_name:'',middle_name:'',last_name:'',name_suffix:'',title:'',institution:'',location:'',bio:'',orcid:'',twitter:''});
@@ -670,6 +670,11 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen, on
   const grt = profile?.grants          || [];
   const hasExperience = wh.length||edu.length||vol.length||org.length;
   const hasSkills     = hon.length||lng.length||skl.length||pat.length;
+  const profileNeedsDetails = !!profile && (
+    (profile.topic_interests || []).length < 3 ||
+    !profile.title?.trim() ||
+    !profile.institution?.trim()
+  );
 
   const DATED_FIELDS = {
     work_history:  "start",
@@ -1005,24 +1010,29 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen, on
       )}
       <div style={{padding:'16px 18px'}}>
 
-        {/* Onboarding nudge — shown to QR signups who skipped onboarding on
-            first session. Disappears once onboarding_completed flips true. */}
-        {!profile?.onboarding_completed && onStartOnboarding && (
+        {/* Profile-completion nudge. Replaces the old onboarding wizard:
+            new signups land here, and the banner stays until the fields
+            that shape the feed (topics, field) and help people recognise
+            you (title, institution) are filled in. */}
+        {!editing && profileNeedsDetails && (
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between',
+            flexDirection: isMobile ? 'column' : 'row',
             gap: 12, background: T.v2, border: `1.5px solid rgba(108,99,255,.25)`,
             borderRadius: 12, padding: '12px 16px', marginBottom: 16,
           }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.v3, marginBottom: 2 }}>
-                Complete your profile
+                {profile?.name ? `Welcome, ${profile.name.split(' ')[0]} — tell us a bit more about you` : 'Tell us a bit more about you'}
               </div>
               <div style={{ fontSize: 12, color: T.mu, lineHeight: 1.5 }}>
-                Add a photo, bio and research area so people can find and connect with you.
+                The more details you add, the better Luminary works for you: your research
+                topics and field decide which posts show up in your feed, and a title and
+                institution help colleagues find and recognise you.
               </div>
             </div>
             <button
-              onClick={onStartOnboarding}
+              onClick={() => setEditing(true)}
               style={{
                 flexShrink: 0, fontSize: 12, fontWeight: 700,
                 background: T.v, color: '#fff', border: 'none',
@@ -1030,7 +1040,7 @@ export default function ProfileScreen({ user, profile, setProfile, setScreen, on
                 fontFamily: 'inherit', whiteSpace: 'nowrap',
               }}
             >
-              Finish setup →
+              Complete profile →
             </button>
           </div>
         )}

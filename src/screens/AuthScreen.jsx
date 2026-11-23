@@ -1,29 +1,45 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { capture } from '../lib/analytics';
-import { T } from '../lib/constants';
+import { T, WORK_MODES } from '../lib/constants';
 import { startOrcidOAuth } from '../lib/orcidAuth';
 import Inp from '../components/Inp';
 import Btn from '../components/Btn';
 import Footer from '../components/Footer';
 import OrcidIcon from '../components/OrcidIcon';
 
-const inputStyle = {
-  width: '100%', background: T.s2, border: `1.5px solid ${T.bdr}`,
-  borderRadius: 10, padding: '9px 14px', fontSize: 13,
-  fontFamily: 'inherit', outline: 'none', color: T.text,
-  boxSizing: 'border-box',
-};
+// Work-mode picker shown on both signup paths (email + ORCID completion).
+// Required: work_mode drives the "My Field" feed filter and profile layout.
+function WorkModePicker({ value, onChange }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>
+        I mainly work in<span style={{ color: T.ro }}> *</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {WORK_MODES.map(m => {
+          const active = value === m.id;
+          return (
+            <button key={m.id} type="button" onClick={() => onChange(m.id)} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 10px', borderRadius: 10, cursor: 'pointer',
+              border: `1.5px solid ${active ? T.v : T.bdr}`,
+              background: active ? T.v2 : T.w,
+              color: active ? T.v3 : T.text,
+              fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, textAlign: 'left',
+            }}>
+              <span style={{ fontSize: 16 }}>{m.icon}</span>
+              <span>{m.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-const backBtn = {
-  fontSize: 12, color: T.v, fontWeight: 600,
-  border: 'none', background: 'transparent',
-  cursor: 'pointer', fontFamily: 'inherit',
-  padding: '0 0 14px 0', display: 'block',
-};
-
-export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName, showOrcidEmailForm, orcidAuthError }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
+export default function AuthScreen({ onAuth, initialMode = 'login', orcidPendingToken, orcidPendingName, showOrcidEmailForm, orcidAuthError }) {
+  const [mode, setMode] = useState(initialMode); // 'login' | 'signup' | 'forgot'
 
   // Sign-in / forgot
   const [email,    setEmail]    = useState('');
@@ -32,12 +48,11 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [error,    setError]    = useState('');
   const [success,  setSuccess]  = useState('');
 
-  // Sign-up shared
-  // signupPath: null | 'invite' | 'invite-details'
-  const [signupPath,     setSignupPath]     = useState(null);
+  // Sign-up shared (signup is open — no invite gate)
   const [signupEmail,    setSignupEmail]    = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupName,     setSignupName]     = useState('');
+  const [signupWorkMode, setSignupWorkMode] = useState('');
   const [signupError,    setSignupError]    = useState('');
   const [signupLoading,  setSignupLoading]  = useState(false);
 
@@ -51,13 +66,12 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [resendingConfirm,     setResendingConfirm]     = useState(false);
   const [resendNotice,         setResendNotice]         = useState('');
 
-  // Invite path
-  const [inviteCode,        setInviteCode]        = useState('');
-  const [inviteValid,       setInviteValid]       = useState(null); // null | true | false
-  const [inviteChecking,    setInviteChecking]    = useState(false);
-  const [inviteError,       setInviteError]       = useState('');
-  const [inviteRateLimited, setInviteRateLimited] = useState(false);
-  const codeRowRef = useRef(null);
+  // Referral tracking. Invite codes no longer gate signup, but a code
+  // arriving via ?code= (event links, QR business cards, personal invite
+  // links) is still attached to the signup so apply_signup_intent records
+  // the use + notifies the inviter. Invalid / exhausted codes are dropped
+  // silently — they must never block someone from joining.
+  const [referralCode, setReferralCode] = useState('');
 
   // Consent (both signup paths)
   const [consentTerms,         setConsentTerms]         = useState(false);
@@ -65,15 +79,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   const [consentMarketing,     setConsentMarketing]     = useState(false);
   const [consentAnalytics,     setConsentAnalytics]     = useState(false);
 
-  // Waitlist path
-  const [waitlistName,        setWaitlistName]        = useState('');
-  const [waitlistEmail,       setWaitlistEmail]       = useState('');
-  const [waitlistInstitution, setWaitlistInstitution] = useState('');
-  const [waitlistRole,        setWaitlistRole]        = useState('');
-  const [waitlistReferral,    setWaitlistReferral]    = useState('');
-  const [waitlistSubmitted,   setWaitlistSubmitted]   = useState(false);
-
-  // Pre-fill invite code from URL param or sessionStorage handoff.
+  // Pick up a referral code from the URL param or sessionStorage handoff.
   // IMPORTANT: read ?code= directly from the URL because this effect runs
   // as a child-component effect, which React executes BEFORE App.jsx's
   // parent effects — so App.jsx's ?code= handler hasn't stored the code
@@ -81,29 +87,28 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
   useEffect(() => {
     const urlCode = new URLSearchParams(window.location.search).get('code');
     const stored  = sessionStorage.getItem('prefill_invite_code');
-    const prefill = urlCode || stored;
-    if (prefill) {
-      if (stored) sessionStorage.removeItem('prefill_invite_code');
-      setMode('signup');
-      setInviteCode(prefill);
-      if (prefill.startsWith('QR-')) {
-        // QR flow: skip the code-entry step entirely, go straight to the signup form
-        setSignupPath('invite-details');
-        setInviteValid(true);
-      } else {
-        setSignupPath('invite');
-      }
-    }
+    const raw     = (urlCode || stored || '').trim();
+    if (!raw) return;
+    if (stored) sessionStorage.removeItem('prefill_invite_code');
+    setMode('signup');
+    // QR codes keep their case (QR-<slug>); all other codes are uppercase.
+    const code = raw.startsWith('QR-') ? raw : raw.toUpperCase();
+    if (code.startsWith('QR-')) { setReferralCode(code); return; }
+    supabase.from('invite_codes')
+      .select('code, is_multi_use, max_uses, uses_count, expires_at, locked_at, claimed_by')
+      .eq('code', code).maybeSingle()
+      .then(({ data: row }) => {
+        if (!row || row.locked_at) return;
+        if (row.expires_at && new Date(row.expires_at) < new Date()) return;
+        if (row.is_multi_use ? (row.max_uses != null && row.uses_count >= row.max_uses) : row.claimed_by) return;
+        setReferralCode(row.code);
+      }, () => {});
   }, []);
 
   const goToMode = (m) => {
     setMode(m); setError(''); setSuccess('');
-    setSignupPath(null);
-    setInviteCode(''); setInviteValid(null); setInviteError(''); setInviteRateLimited(false);
     setConsentTerms(false); setConsentNotifications(true); setConsentMarketing(false); setConsentAnalytics(false);
-    setSignupEmail(''); setSignupPassword(''); setSignupName(''); setSignupError('');
-    setWaitlistName(''); setWaitlistEmail(''); setWaitlistInstitution('');
-    setWaitlistRole(''); setWaitlistReferral(''); setWaitlistSubmitted(false);
+    setSignupEmail(''); setSignupPassword(''); setSignupName(''); setSignupWorkMode(''); setSignupError('');
     setAwaitingConfirmEmail(''); setResendNotice('');
   };
 
@@ -129,11 +134,6 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     setResendingConfirm(false);
   };
 
-  const isAcademicEmail = email => {
-    const domain = (email.split('@')[1] || '').toLowerCase();
-    return /\.(edu|ac\.[a-z]{2,}|edu\.[a-z]{2,})$/.test(domain);
-  };
-
   // ── Sign-in / forgot ──────────────────────────────────────────────────────
   const submitLogin = async e => {
     e.preventDefault();
@@ -150,82 +150,6 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       }
     } catch (err) { setError(err.message); }
     setLoading(false);
-  };
-
-  // ── Invite code validation ────────────────────────────────────────────────
-  const validateInviteCode = async () => {
-    if (inviteRateLimited) return;
-    setInviteChecking(true);
-    setInviteError('');
-
-    try {
-      const { data: codeRow, error: codeError } = await supabase
-        .from('invite_codes')
-        .select('id, code, is_multi_use, max_uses, uses_count, expires_at, locked_at, claimed_by, created_by')
-        .eq('code', inviteCode.trim().toUpperCase())
-        .single();
-
-      if (codeError || !codeRow) {
-        setInviteValid(false);
-        setInviteError('Code not found or already used.');
-        return;
-      }
-
-      if (codeRow.locked_at) {
-        setInviteValid(false);
-        setInviteError('locked');
-        setInviteRateLimited(true);
-        return;
-      }
-
-      if (codeRow.expires_at && new Date(codeRow.expires_at) < new Date()) {
-        setInviteValid(false);
-        setInviteError('This invite code has expired.');
-        return;
-      }
-
-      if (codeRow.is_multi_use) {
-        if (codeRow.max_uses != null && codeRow.uses_count >= codeRow.max_uses) {
-          setInviteValid(false);
-          setInviteError('This invite code is no longer available.');
-          return;
-        }
-      } else if (codeRow.claimed_by) {
-        setInviteValid(false);
-        setInviteError('This invite code has already been used.');
-        return;
-      }
-
-      codeRowRef.current = codeRow;
-      setInviteValid(true);
-      setSignupPath('invite-details');
-    } catch (e) {
-      setInviteValid(false);
-      setInviteError('Validation failed. Please try again.');
-    } finally {
-      setInviteChecking(false);
-    }
-  };
-
-  // ── Waitlist submission ───────────────────────────────────────────────────
-  const handleWaitlistSubmit = async () => {
-    setSignupLoading(true); setSignupError('');
-    try {
-      const hasOptional = !!(waitlistInstitution.trim() || waitlistRole.trim() || waitlistReferral.trim());
-      const { error } = await supabase.from('waitlist').insert({
-        full_name:       waitlistName.trim(),
-        email:           waitlistEmail.trim().toLowerCase(),
-        institution:     waitlistInstitution.trim() || null,
-        role_title:      waitlistRole.trim()        || null,
-        referral_source: waitlistReferral.trim()    || null,
-        is_priority:     hasOptional || isAcademicEmail(waitlistEmail),
-      });
-      if (error) throw error;
-      setWaitlistSubmitted(true);
-    } catch (e) {
-      setSignupError(e.message || 'Something went wrong. Please try again.');
-    }
-    setSignupLoading(false);
   };
 
   // ── ORCID OAuth redirect ──────────────────────────────────────────────────
@@ -264,6 +188,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         analytics_consent_at: consentAnalytics ? nowIso : null,
         terms_accepted_at:    nowIso,
         privacy_accepted_at:  nowIso,
+        invite_code:          referralCode || null,
         orcid_data: {
           orcid_id:     pending.orcid_id,
           bio:          pending.bio,
@@ -287,7 +212,9 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email:    signupEmail,
         password: signupPassword,
-        options:  { emailRedirectTo: confirmRedirectTo },
+        // work_mode rides on user_metadata (signup_pending has no column
+        // for it); App.jsx copies it onto profiles after apply_signup_intent.
+        options:  { data: { name: pending.name, work_mode: signupWorkMode }, emailRedirectTo: confirmRedirectTo },
       });
       if (authError) throw authError;
 
@@ -295,11 +222,12 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       await supabase.from('orcid_pending').delete().eq('token', orcidPendingToken);
 
       capture('signed_up', { method: 'orcid' });
+      if (referralCode) capture('invite_code_used', { code_type: referralCode.startsWith('QR-') ? 'qr' : 'referral' });
 
       if (authData.session) {
-        // Confirmation off — apply now and continue into the app.
-        await supabase.rpc('apply_signup_intent');
-        onAuth();
+        // Confirmation off — App.jsx's apply effect picks up the new
+        // session, applies the stash and lands the user on their profile.
+        onAuth('profile');
       } else {
         // Confirmation on — render the "check your email" panel.
         setAwaitingConfirmEmail(signupEmail);
@@ -310,22 +238,23 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
     setSignupLoading(false);
   };
 
-  // ── Invite-code sign-up ───────────────────────────────────────────────────
-  // Stash → signUp → branch on session. The invite code claim, profile
-  // fields, and inviter-notification all happen server-side via
-  // apply_signup_intent on first authenticated session — see
-  // migration_signup_confirmation.sql.
-  const handleInviteSignup = async () => {
+  // ── Email sign-up ─────────────────────────────────────────────────────────
+  // Stash → signUp → branch on session. Profile fields, the optional
+  // referral-code use and the inviter notification all happen server-side
+  // via apply_signup_intent on first authenticated session — see
+  // migration_signup_confirmation.sql. signup_method stays 'invite' for
+  // email signups because signup_pending's CHECK only allows
+  // 'invite' | 'orcid' (read it as "email").
+  const handleEmailSignup = async () => {
     setSignupLoading(true); setSignupError('');
     try {
-      const codeRow = codeRowRef.current;
-      const nowIso  = new Date().toISOString();
+      const nowIso = new Date().toISOString();
 
       // 1. Stash intent (anon-callable RPC).
       const { error: stashErr } = await supabase.rpc('stash_signup_intent', {
         p_email: signupEmail,
         p_data: {
-          name:                 signupName,
+          name:                 signupName.trim(),
           signup_method:        'invite',
           card_email:           signupEmail,
           email_notifications:  consentNotifications,
@@ -334,7 +263,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           analytics_consent_at: consentAnalytics ? nowIso : null,
           terms_accepted_at:    nowIso,
           privacy_accepted_at:  nowIso,
-          invite_code:          inviteCode.startsWith('QR-') ? inviteCode.trim() : (inviteCode || '').trim().toUpperCase(),
+          invite_code:          referralCode || null,
         },
       });
       if (stashErr) throw stashErr;
@@ -343,7 +272,7 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
       // For QR signups, embed the card owner's slug in the redirect URL so
       // it survives cross-browser email confirmation (localStorage doesn't
       // cross browser boundaries on the same device).
-      const qrSlug = inviteCode.startsWith('QR-') ? inviteCode.slice(3) : null;
+      const qrSlug = referralCode.startsWith('QR-') ? referralCode.slice(3) : null;
       const redirectTo = qrSlug
         ? `${window.location.origin}/?confirmed=1&qr_ref=${qrSlug}`
         : confirmRedirectTo;
@@ -351,19 +280,18 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         email:    signupEmail,
         password: signupPassword,
         options:  {
-          data: { name: signupName },
+          data: { name: signupName.trim(), work_mode: signupWorkMode },
           emailRedirectTo: redirectTo,
         },
       });
       if (authError) throw authError;
 
       capture('signed_up', { method: 'email' });
-      capture('invite_code_used', { code_type: codeRow?.is_multi_use ? 'event' : 'personal' });
+      if (referralCode) capture('invite_code_used', { code_type: qrSlug ? 'qr' : 'referral' });
 
       if (authData.session) {
-        // Confirmation off — apply now and continue.
-        await supabase.rpc('apply_signup_intent');
-        onAuth();
+        // Confirmation off — App.jsx applies the stash and opens the profile.
+        onAuth('profile');
       } else {
         // Confirmation on — render the "check your email" panel.
         // Store the redirect URL so the resend button uses the same one
@@ -394,8 +322,8 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         <div style={{ fontSize: 14, color: T.mu, lineHeight: 1.65, marginBottom: 22 }}>
           We sent a confirmation link to{' '}
           <strong style={{ color: T.text }}>{awaitingConfirmEmail}</strong>.
-          Click the link to finish setting up your account — your invite
-          and profile data are saved and will apply automatically.
+          Click the link to finish setting up your account — you'll land
+          straight on your new profile.
         </div>
 
         <Btn variant="s" onClick={resendConfirmationEmail} disabled={resendingConfirm}
@@ -456,6 +384,8 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           onChange={setSignupPassword}
           placeholder="At least 8 characters"/>
 
+        <WorkModePicker value={signupWorkMode} onChange={setSignupWorkMode}/>
+
         {signupError && (
           <div style={{ color: T.ro, fontSize: 12.5, marginTop: 8 }}>{signupError}</div>
         )}
@@ -468,82 +398,21 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
         />
 
         <Btn variant="s" onClick={handleOrcidSignupComplete}
-          disabled={signupLoading || !signupEmail || !signupPassword || !consentTerms}
+          disabled={signupLoading || !signupEmail || !signupPassword || !signupWorkMode || !consentTerms}
           style={{ width: '100%', marginTop: 12, background: T.gr, borderColor: T.gr }}>
           {signupLoading ? 'Creating account...' : 'Create account →'}
         </Btn>
       </div>
     );
 
-    if (signupPath === 'waitlist') {
-      const hasOptional = !!(waitlistInstitution || waitlistRole || waitlistReferral);
-      const academic    = waitlistEmail.includes('@') && isAcademicEmail(waitlistEmail);
-
-      if (waitlistSubmitted) return (
-        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          <div style={{ fontSize: 44, marginBottom: 16 }}>🎉</div>
-          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>You're on the list!</div>
-          <div style={{ fontSize: 14, color: T.mu, lineHeight: 1.65 }}>
-            We'll be in touch at <strong style={{ color: T.text }}>{waitlistEmail}</strong> when your spot opens up.
-            {academic && <>{' '}Academic email detected — you'll get priority access.</>}
-          </div>
-          <Btn variant="s" onClick={() => goToMode('login')} style={{ width: '100%', marginTop: 28 }}>
-            Back to Sign In →
-          </Btn>
-        </div>
-      );
-
-      return (
-        <div>
-          <button onClick={() => setSignupPath(null)} style={backBtn}>← Back</button>
-          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Join the Luminary waitlist</div>
-          <div style={{ fontSize: 13, color: T.mu, marginBottom: 20, lineHeight: 1.6 }}>
-            We're growing carefully. Drop your details and we'll let you know when your spot opens.
-          </div>
-
-          <Inp label="Full name" value={waitlistName} onChange={setWaitlistName} placeholder="Dr. Jane Smith" />
-
-          <Inp label="Email address" type="email" value={waitlistEmail} onChange={setWaitlistEmail} placeholder="you@university.edu" />
-          {academic && (
-            <div style={{ fontSize: 11.5, color: T.gr, fontWeight: 700, marginTop: -12, marginBottom: 12 }}>
-              ✓ Academic email — priority access
-            </div>
-          )}
-
-          <div style={{
-            margin: '20px 0 16px', padding: '12px 14px',
-            background: T.v2, borderRadius: 10, borderLeft: `3px solid ${T.v}`,
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: T.v }}>
-              Tell us a little bit about you to get priority access.
-            </div>
-          </div>
-
-          <Inp label="Institution (optional)" value={waitlistInstitution} onChange={setWaitlistInstitution} placeholder="University of…" />
-          <Inp label="Role / Title (optional)" value={waitlistRole} onChange={setWaitlistRole} placeholder="Research Fellow, MD, PhD student…" />
-          <Inp label="Where did you hear about us? (optional)" value={waitlistReferral} onChange={setWaitlistReferral} placeholder="Colleague, conference, Twitter…" />
-
-          {signupError && (
-            <div style={{ color: T.ro, fontSize: 12.5, marginTop: 8 }}>{signupError}</div>
-          )}
-
-          <Btn variant="s" onClick={handleWaitlistSubmit}
-            disabled={signupLoading || !waitlistName.trim() || !waitlistEmail.trim()}
-            style={{ width: '100%', marginTop: 16 }}>
-            {signupLoading ? 'Submitting…' : hasOptional ? 'Request priority access →' : 'Join the waiting list →'}
-          </Btn>
-        </div>
-      );
-    }
-
-    if (!signupPath) return (
+    // Open sign-up: ORCID shortcut on top, email form below.
+    return (
       <div>
-        <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, textAlign: 'center', marginBottom: 8 }}>
+        <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, textAlign: 'center', marginBottom: 6 }}>
           Join Luminary
         </div>
-        <div style={{ fontSize: 13, color: T.mu, textAlign: 'center', marginBottom: 28, lineHeight: 1.6 }}>
-          Luminary is invite-only. Join with an invite code from a colleague,
-          or verify you're a researcher with your ORCID iD.
+        <div style={{ fontSize: 13, color: T.mu, textAlign: 'center', marginBottom: 20, lineHeight: 1.6 }}>
+          Free for researchers, clinicians and industry scientists.
         </div>
 
         {orcidAuthError && (
@@ -555,114 +424,30 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           </div>
         )}
 
-        <button onClick={() => setSignupPath('invite')} style={{
-          width: '100%', padding: '16px', borderRadius: 14, marginBottom: 12,
-          border: `2px solid ${T.bdr}`, background: T.w, cursor: 'pointer',
-          textAlign: 'left', fontFamily: 'inherit',
-          display: 'flex', alignItems: 'center', gap: 14,
-        }}>
-          <span style={{ fontSize: 28 }}>🎟️</span>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>I have an invite code</div>
-            <div style={{ fontSize: 12, color: T.mu }}>A colleague shared a code with you</div>
-          </div>
-          <span style={{ marginLeft: 'auto', color: T.mu }}>→</span>
-        </button>
-
         <button onClick={handleOrcidOAuth} style={{
-          width: '100%', padding: '16px', borderRadius: 14, marginBottom: 12,
+          width: '100%', padding: '14px 16px', borderRadius: 14,
           border: `2px solid ${T.bdr}`, background: T.w, cursor: 'pointer',
           textAlign: 'left', fontFamily: 'inherit',
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
-          <OrcidIcon size={28}/>
+          <OrcidIcon size={26}/>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
-              Sign up with ORCID
-            </div>
-            <div style={{ fontSize: 12, color: T.mu }}>
-              Verified researcher identity — auto-fills your profile
-            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Sign up with ORCID</div>
+            <div style={{ fontSize: 12, color: T.mu }}>Verified iD badge + imports your publications</div>
           </div>
           <span style={{ marginLeft: 'auto', color: T.mu }}>→</span>
         </button>
 
-        <button onClick={() => setSignupPath('waitlist')} style={{
-          width: '100%', padding: '16px', borderRadius: 14,
-          border: `2px dashed ${T.bdr}`, background: T.s2, cursor: 'pointer',
-          textAlign: 'left', fontFamily: 'inherit',
-          display: 'flex', alignItems: 'center', gap: 14,
-        }}>
-          <span style={{ fontSize: 28 }}>📋</span>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Join the waiting list</div>
-            <div style={{ fontSize: 12, color: T.mu }}>No invite yet? We'll notify you when a spot opens</div>
-          </div>
-          <span style={{ marginLeft: 'auto', color: T.mu }}>→</span>
-        </button>
-
-        <div style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: T.mu }}>
-          Already have an account?{' '}
-          <button onClick={() => goToMode('login')} style={{
-            color: T.v, fontWeight: 700, border: 'none',
-            background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
-          }}>Sign in →</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 14px' }}>
+          <div style={{ flex: 1, height: 1, background: T.bdr }} />
+          <span style={{ fontSize: 11.5, color: T.mu, whiteSpace: 'nowrap' }}>or sign up with email</span>
+          <div style={{ flex: 1, height: 1, background: T.bdr }} />
         </div>
-      </div>
-    );
-
-    // A1 — Enter invite code
-    if (signupPath === 'invite') return (
-      <div>
-        <button onClick={() => setSignupPath(null)} style={backBtn}>← Back</button>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Enter invite code</div>
-        <div style={{ fontSize: 13, color: T.mu, marginBottom: 20 }}>
-          Codes look like <span style={{ fontFamily: 'monospace' }}>LM-XXXXXXXX</span> or <span style={{ fontFamily: 'monospace' }}>CONF-XXXXXX</span>
-        </div>
-
-        <input
-          value={inviteCode}
-          onChange={e => { if (inviteRateLimited) return; setInviteCode(e.target.value.toUpperCase().trim()); setInviteValid(null); setInviteError(''); }}
-          onKeyDown={e => { if (e.key === 'Enter' && inviteCode.length >= 6) validateInviteCode(); }}
-          placeholder="LM-XXXXXXXX"
-          disabled={inviteRateLimited}
-          style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 16, letterSpacing: '.1em', textAlign: 'center', opacity: inviteRateLimited ? 0.5 : 1 }}
-        />
-        {inviteError && (
-          <div style={{ color: T.ro, fontSize: 12.5, marginTop: 6 }}>
-            {inviteError === 'locked'
-              ? '🔒 This code has been locked after too many attempts. Contact the person who shared it with you.'
-              : inviteError}
-          </div>
-        )}
-        {inviteValid === true && (
-          <div style={{ color: T.gr, fontSize: 12.5, fontWeight: 600, marginTop: 6 }}>✓ Valid invite code</div>
-        )}
-        <Btn variant="s" onClick={validateInviteCode}
-          disabled={inviteCode.length < 6 || inviteChecking || inviteRateLimited}
-          style={{ width: '100%', marginTop: 12 }}>
-          {inviteChecking ? 'Checking…' : 'Verify code →'}
-        </Btn>
-      </div>
-    );
-
-    // A2 — Account details
-    if (signupPath === 'invite-details') return (
-      <div>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Create your account</div>
-        <div style={{
-          fontSize: 12, color: T.gr, fontWeight: 600,
-          background: T.gr2, borderRadius: 8, padding: '6px 12px',
-          marginBottom: 20, display: 'inline-block',
-        }}>✓ Invite code accepted</div>
 
         <Inp label="Full name" value={signupName} onChange={setSignupName} placeholder="Dr. Jane Smith" required />
         <Inp label="Email" type="email" value={signupEmail} onChange={setSignupEmail} placeholder="jane@university.edu" required />
         <Inp label="Password" type="password" value={signupPassword} onChange={setSignupPassword} placeholder="At least 8 characters" required />
-
-        <div style={{ fontSize: 12, color: T.mu, marginBottom: 16, lineHeight: 1.6, padding: '10px 12px', background: T.v2, borderRadius: 10 }}>
-          🔬 Once signed in, you can import your full ORCID profile — including work history and publications — from <strong>My Profile → Import → ORCID</strong>.
-        </div>
+        <WorkModePicker value={signupWorkMode} onChange={setSignupWorkMode}/>
 
         <ConsentBlock
           consentTerms={consentTerms} setConsentTerms={setConsentTerms}
@@ -671,18 +456,25 @@ export default function AuthScreen({ onAuth, orcidPendingToken, orcidPendingName
           consentAnalytics={consentAnalytics} setConsentAnalytics={setConsentAnalytics}
         />
 
-        {signupError && <div style={{ color: T.ro, fontSize: 12.5, marginTop: 4, marginBottom: 8 }}>{signupError}</div>}
+        {signupError && <div style={{ color: T.ro, fontSize: 12.5, marginTop: 10 }}>{signupError}</div>}
 
-        <Btn variant="s" onClick={handleInviteSignup}
-          disabled={signupLoading || !signupEmail || !signupPassword || !signupName || !consentTerms}
-          style={{ width: '100%' }}>
+        <Btn variant="s" onClick={handleEmailSignup}
+          disabled={signupLoading || !signupEmail || !signupPassword || !signupName.trim() || !signupWorkMode || !consentTerms}
+          style={{ width: '100%', marginTop: 14 }}>
           {signupLoading ? 'Creating account…' : 'Create account →'}
         </Btn>
+
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: T.mu }}>
+          Already have an account?{' '}
+          <button onClick={() => goToMode('login')} style={{
+            color: T.v, fontWeight: 700, border: 'none',
+            background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+          }}>Sign in →</button>
+        </div>
       </div>
     );
-
-    return null;
   };
+
 
   // ── Shared consent block (used in both signup paths) ─────────────────────
   const ConsentBlock = ({ consentTerms, setConsentTerms, consentNotifications, setConsentNotifications, consentMarketing, setConsentMarketing, consentAnalytics, setConsentAnalytics }) => (

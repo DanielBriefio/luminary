@@ -22,7 +22,6 @@ import UserProfileScreen from './profile/UserProfileScreen';
 import NetworkScreen from './screens/NetworkScreen';
 import MessagesScreen, { startConversation } from './screens/MessagesScreen';
 import PaperDetailPage from './paper/PaperDetailPage';
-import OnboardingScreen from './screens/OnboardingScreen';
 import CardQROverlay from './components/CardQROverlay';
 import PostContentStyles from './components/PostContentStyles';
 import CardPage from './profile/CardPage';
@@ -118,7 +117,6 @@ export default function App() {
   const [viewedUserId,  setViewedUserId]  = useState(null);
   const [viewedPaperDoi,setViewedPaperDoi]= useState(null);
   const [authChecked,setAuthChecked]=useState(false);
-  const [showOnboarding,setShowOnboarding]=useState(false);
   const [exploreQuery,setExploreQuery]=useState('');
   const [unreadMessages,setUnreadMessages]=useState(0);
   const [unreadNotifs,setUnreadNotifs]=useState(0);
@@ -160,10 +158,8 @@ export default function App() {
     if (fromUrl || fromStorage) localStorage.removeItem('qr_ref_slug');
     return fromUrl || fromStorage || null;
   });
-  // True while apply_signup_intent is in flight — prevents the onboarding
-  // effect from firing before we know whether this is a QR new-user signup.
-  const [applyingSignup, setApplyingSignup] = useState(false);
   const [savedPostIds,       setSavedPostIds]       = useState(new Set());
+  const [authInitialMode,    setAuthInitialMode]    = useState('login');
   const [showAuthScreen,     setShowAuthScreen]     = useState(() => {
     // Skip the landing page and open AuthScreen directly when:
     // 1. An invite code is in the URL (deliberate invite link — e.g. luminary.to/?code=ESC2026)
@@ -226,10 +222,20 @@ export default function App() {
     if (appliedSignupForRef.current === session.user.id) return;
     appliedSignupForRef.current = session.user.id;
     (async () => {
-      setApplyingSignup(true);
+      let justSignedUp = false;
       try {
         const { data } = await supabase.rpc('apply_signup_intent');
         if (data?.status === 'applied') {
+          justSignedUp = true;
+          // work_mode is chosen on the signup form and carried in
+          // user_metadata (signup_pending has no column for it). Copy it
+          // onto the profile before the refetch below.
+          const wm = session.user.user_metadata?.work_mode;
+          if (wm) {
+            await supabase.from('profiles').update({ work_mode: wm }).eq('id', session.user.id)
+              .then(() => {}, () => {});
+          }
+
           // Resolve the QR slug. pendingQrRef works for same-browser flows;
           // get_applied_signup_qr_ref is the server-side fallback for
           // cross-browser email confirmation (e.g. iPhone Safari → Chrome).
@@ -239,24 +245,20 @@ export default function App() {
             qrSlug = ref || null;
           }
 
-          if (qrSlug) {
-            // Suppress onboarding for this session only — sessionStorage clears
-            // when the browser closes, so they'll see onboarding on next login.
-            sessionStorage.setItem('qr_onboarding_suppressed', '1');
-            sessionStorage.setItem('post_auth_profile', qrSlug);
-          }
+          // New signups land on their own profile (see below), so drop any
+          // stale business-card redirect left in this tab's sessionStorage.
+          sessionStorage.removeItem('post_auth_profile');
+          sessionStorage.removeItem('post_auth_action');
 
           // Pull the updated profile so new name / consents surface immediately.
           const { data: fresh } = await supabase
             .from('profiles').select('*').eq('id', session.user.id).single();
           if (fresh) setProfile(fresh);
-          // Clear pendingQrRef AFTER setProfile so the onboarding effect sees
-          // the fresh profile before it runs with pendingQrRef=null.
           if (pendingQrRef) setPendingQrRef(null);
 
           if (qrSlug) {
             const { data: personA } = await supabase
-              .from('profiles').select('id').eq('profile_slug', qrSlug).maybeSingle();
+              .from('profiles').select('id, name').eq('profile_slug', qrSlug).maybeSingle();
             if (personA && personA.id !== session.user.id) {
               const newId = session.user.id;
               const aId   = personA.id;
@@ -268,6 +270,10 @@ export default function App() {
               // Notify card owner that someone scanned their QR and joined.
               supabase.from('notifications').insert({ notif_type: 'invite_redeemed', user_id: aId, actor_id: newId })
                 .then(() => {}, () => {});
+              if (personA.name) {
+                setJoinToast(`✓ You are now following ${personA.name}`);
+                setTimeout(() => setJoinToast(''), 3500);
+              }
             }
           }
         }
@@ -275,8 +281,6 @@ export default function App() {
         // Best-effort. If the RPC isn't deployed yet, swallow — the
         // user is still authenticated and will see whatever profile
         // state already exists.
-      } finally {
-        setApplyingSignup(false);
       }
       // After signup/login, redirect back to the article the user came from
       // (set by PublicPostPage's "Join Luminary →" / "Sign in" CTAs).
@@ -284,7 +288,11 @@ export default function App() {
       if (returnUrl) {
         sessionStorage.removeItem('signup_return_url');
         window.location.href = returnUrl;
+        return;
       }
+      // No onboarding wizard: brand-new accounts land on their own profile,
+      // where the completion banner prompts them to fill in details.
+      if (justSignedUp) setScreen('profile');
     })();
   }, [session?.user?.id]);
 
@@ -354,23 +362,6 @@ export default function App() {
       optOutAndReset();
     }
   },[session?.user?.id, profile?.analytics_consent_at]); // eslint-disable-line
-
-  // Show the onboarding flow whenever onboarding_completed is false.
-  // Earlier, this also bailed out if the user already had follows or
-  // publications ("not a genuinely new user") — but ORCID OAuth signup
-  // auto-imports publications via apply_signup_intent, so brand-new
-  // ORCID users were silently skipping onboarding. Trust the flag.
-  useEffect(()=>{
-    if (!profile) return;
-    if (profile.onboarding_completed) return;
-    // Suppress while apply_signup_intent is in flight.
-    if (applyingSignup) return;
-    if (pendingQrRef) return;
-    // QR signups: suppress for this browser session only. sessionStorage clears
-    // on browser close so they see onboarding on next login.
-    if (sessionStorage.getItem('qr_onboarding_suppressed')) return;
-    setShowOnboarding(true);
-  },[profile, applyingSignup, pendingQrRef]);
 
   // Unread message badge — fetch on login, update via realtime
   useEffect(()=>{
@@ -571,7 +562,6 @@ export default function App() {
     if(!profile) return;
     if(!profile.orcid || !profile.orcid_verified) return;
     if(profile.orcid_imported_at) return;
-    if(!profile.onboarding_completed) return; // wait until onboarding finishes
     if(profile.orcid_import_dismissed_at) return;
     setShowOrcidImport(true);
   },[profile]);
@@ -723,9 +713,10 @@ export default function App() {
   if(!session) {
     const showLanding = !showAuthScreen && !isAdminRoute && !showOrcidEmailForm && !orcidAuthError;
     if (showLanding) {
-      return <>{fonts}{globalStyles}<LandingScreen supabase={supabase} onShowAuth={()=>setShowAuthScreen(true)}/></>;
+      return <>{fonts}{globalStyles}<LandingScreen onShowAuth={(m)=>{ setAuthInitialMode(m==='signup'?'signup':'login'); setShowAuthScreen(true); }}/></>;
     }
-    return <>{fonts}{globalStyles}<AuthScreen onAuth={()=>setScreen('feed')}
+    return <>{fonts}{globalStyles}<AuthScreen onAuth={(target)=>setScreen(target||'feed')}
+      initialMode={authInitialMode}
       orcidPendingToken={orcidPendingToken}
       orcidPendingName={orcidPendingName}
       showOrcidEmailForm={showOrcidEmailForm}
@@ -861,7 +852,7 @@ export default function App() {
       ? <GroupScreen groupId={activeGroupId} user={user} profile={profile} setProfile={setProfile} onBack={()=>{setActiveGroupId(null);setInitialProjectId(null);setInitialTab(null);}} onViewPaper={onViewPaper} onViewGroup={id=>{setActiveGroupId(id);}} onMarkRead={fetchGroupUnreadCount} savedPostIds={savedPostIds} onSaveToggled={fetchSavedIds} onNavigateToPost={()=>setScreen('post')} onEditPost={handleEditPost} onOpenCompose={handleOpenCompose} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)} initialTab={initialTab} onInitialTabConsumed={()=>setInitialTab(null)}/>
       : <GroupsScreen user={user} profile={profile} onGroupSelect={id=>{setActiveGroupId(id);}}/>,
     projects: <ProjectsScreen user={user} onEditPost={handleEditPost} onOpenCompose={handleOpenCompose} initialProjectId={initialProjectId} onInitialProjectIdConsumed={()=>setInitialProjectId(null)}/>,
-    profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen} onStartOnboarding={() => setShowOnboarding(true)}/>,
+    profile:      <ProfileScreen user={user} profile={profile} setProfile={setProfile} setScreen={setScreen}/>,
     notifs:       <NotifsScreen user={user} onViewGroup={id=>{setActiveGroupId(id);setScreen('groups');}}/>,
     post:         <PostComposer
                     context={composePrefill?.context || { kind: 'feed' }}
@@ -928,8 +919,9 @@ export default function App() {
           <div onClick={e=>e.stopPropagation()} style={{background:T.w,borderRadius:18,padding:28,maxWidth:480,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'85vh',overflowY:'auto'}}>
             <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,marginBottom:4}}>Your invite codes</div>
             <div style={{fontSize:13,color:T.mu,marginBottom:20,lineHeight:1.6}}>
-              Share these with colleagues you'd like to invite to Luminary.
-              Each code can only be used once.
+              Anyone can join Luminary, but signing up through your personal
+              link lets us tell you when a colleague you invited arrives.
+              Each link can be used once.
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               {inviteCodes.length===0&&<div style={{fontSize:13,color:T.mu,textAlign:'center',padding:'20px 0'}}>No invite codes yet.</div>}
@@ -950,7 +942,9 @@ export default function App() {
                     </div>
                   ):(
                     <button onClick={()=>{
-                      navigator.clipboard.writeText(code.code);
+                      // Signup is open, so there's no code field to type into —
+                      // share a link; App.jsx's ?code= handler attaches it.
+                      navigator.clipboard.writeText(`${window.location.origin}/?code=${encodeURIComponent(code.code)}`);
                       setCopiedCode(code.id);
                       setTimeout(()=>setCopiedCode(null),1500);
                     }} style={{
@@ -959,14 +953,14 @@ export default function App() {
                       borderRadius:8,padding:'4px 10px',cursor:'pointer',fontFamily:'inherit',
                       transition:'all .15s',
                     }}>
-                      {copiedCode===code.id?'Copied!':'Copy'}
+                      {copiedCode===code.id?'Copied!':'Copy link'}
                     </button>
                   )}
                 </div>
               ))}
             </div>
             <div style={{marginTop:16,padding:'10px 14px',background:T.s2,borderRadius:10,fontSize:12,color:T.mu,lineHeight:1.6}}>
-              💡 Codes work like conference badges — whoever you give them to joins your Luminary network automatically as a connection.
+              💡 You'll get a notification when someone joins through one of your links.
             </div>
             <button onClick={()=>setShowInvites(false)} style={{width:'100%',marginTop:16,padding:'10px',borderRadius:10,border:`1.5px solid ${T.bdr}`,background:T.w,cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:600,color:T.text}}>
               Close
@@ -975,16 +969,6 @@ export default function App() {
         </div>
       )}
       <div style={{display:"flex",height:"100vh",fontFamily:"'DM Sans',sans-serif",fontSize:13,color:T.text,background:T.bg,overflow:"hidden"}}>
-        {/* Onboarding overlay */}
-        {showOnboarding && (
-          <OnboardingScreen
-            user={user}
-            profile={profile}
-            setProfile={setProfile}
-            onComplete={() => { setShowOnboarding(false); setScreen('feed'); }}
-            onGoToProfile={() => { setShowOnboarding(false); setScreen('profile'); }}
-          />
-        )}
         {/* Sidebar — desktop only */}
         {!isMobile && (
           <div style={{width:200,flexShrink:0,background:T.w,borderRight:`1px solid ${T.bdr}`,display:"flex",flexDirection:"column"}}>

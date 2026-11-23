@@ -125,22 +125,10 @@ const USE_CASES = [
 
 // ─── LandingScreen ────────────────────────────────────────────────────────────
 
-export default function LandingScreen({ supabase, onShowAuth }) {
-  const [showInviteForm, setShowInviteForm] = useState(false);
-  const inviteRef   = useRef(null);
-  const waitlistRef = useRef(null);
+export default function LandingScreen({ onShowAuth }) {
   const { isMobile } = useWindowSize();
-
-  const scrollToWaitlist = () => {
-    waitlistRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleInviteClick = () => {
-    setShowInviteForm(true);
-    setTimeout(() => {
-      inviteRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 50);
-  };
+  const showSignup = () => onShowAuth('signup');
+  const showLogin  = () => onShowAuth('login');
 
   // Matches AuthScreen.handleOrcidOAuth — generates a single-use state
   // and stores it in sessionStorage; App.jsx verifies on the way back.
@@ -174,19 +162,6 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8 }}>
-          {!isMobile && (
-            <button
-              onClick={handleInviteClick}
-              style={{
-                padding: '7px 14px', borderRadius: 8,
-                border: `1px solid ${T.bdr}`, background: 'transparent',
-                color: T.mu, fontSize: 13, cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              Have an invite code?
-            </button>
-          )}
           <button
             onClick={handleOrcid}
             title="Join with ORCID"
@@ -199,18 +174,29 @@ export default function LandingScreen({ supabase, onShowAuth }) {
             }}
           >
             <OrcidIcon size={isMobile ? 14 : 16}/>
-            {isMobile ? 'ORCID' : 'Join with ORCID'}
+            {!isMobile && 'Join with ORCID'}
           </button>
           <button
-            onClick={onShowAuth}
+            onClick={showLogin}
             style={{
-              padding: isMobile ? '7px 14px' : '7px 16px', borderRadius: 8,
+              padding: isMobile ? '7px 10px' : '7px 14px', borderRadius: 8,
+              border: `1px solid ${T.bdr}`, background: 'transparent',
+              color: T.text, fontSize: isMobile ? 12 : 13, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Log in
+          </button>
+          <button
+            onClick={showSignup}
+            style={{
+              padding: isMobile ? '7px 12px' : '7px 16px', borderRadius: 8,
               border: 'none', background: T.v,
               color: '#fff', fontSize: isMobile ? 12 : 13, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            Log in
+            Sign up
           </button>
         </div>
       </header>
@@ -228,7 +214,7 @@ export default function LandingScreen({ supabase, onShowAuth }) {
           background: T.v2, padding: '4px 14px', borderRadius: 20,
           marginBottom: isMobile ? 18 : 24,
         }}>
-          Early access — by invitation only
+          Now open — free to join
         </div>
 
         <h1 style={{
@@ -267,10 +253,9 @@ export default function LandingScreen({ supabase, onShowAuth }) {
           justifyContent: 'center',
           alignItems: 'stretch',
           flexWrap: 'wrap',
-          marginBottom: showInviteForm ? (isMobile ? 24 : 32) : 0,
         }}>
           <button
-            onClick={handleInviteClick}
+            onClick={showSignup}
             style={{
               padding: isMobile ? '12px 24px' : '13px 28px', borderRadius: 10, border: 'none',
               background: T.v, color: '#fff',
@@ -279,56 +264,23 @@ export default function LandingScreen({ supabase, onShowAuth }) {
               width: isMobile ? '100%' : 'auto',
             }}
           >
-            I have an invite code →
+            Create your free account →
           </button>
           <button
-            onClick={scrollToWaitlist}
+            onClick={handleOrcid}
             style={{
               padding: isMobile ? '12px 24px' : '13px 28px', borderRadius: 10,
               border: `1.5px solid ${T.bdr}`, background: T.w,
               color: T.text, fontSize: isMobile ? 14 : 15, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'inherit',
               width: isMobile ? '100%' : 'auto',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}
           >
-            Request early access
+            <OrcidIcon size={18}/> Join with ORCID
           </button>
         </div>
 
-        {showInviteForm && (
-          <div ref={inviteRef} style={{
-            marginTop: 24,
-            display: isMobile ? 'block' : 'inline-block',
-            background: T.w, border: `1.5px solid ${T.v}`,
-            borderRadius: 12,
-            padding: isMobile ? '16px 16px' : '20px 24px',
-            textAlign: 'left',
-            minWidth: isMobile ? 0 : 320,
-            boxShadow: '0 4px 20px rgba(108,99,255,0.10)',
-          }}>
-            <div style={{
-              fontSize: 13, fontWeight: 700, color: T.text,
-              marginBottom: 12,
-            }}>
-              Enter your invite code
-            </div>
-            <InviteCodeForm supabase={supabase} onShowAuth={onShowAuth} />
-            <div style={{
-              marginTop: 12, paddingTop: 12,
-              borderTop: `1px solid ${T.bdr}`,
-              fontSize: 12, color: T.mu, textAlign: 'center',
-            }}>
-              Already have an account?{' '}
-              <button onClick={onShowAuth} style={{
-                background: 'transparent', border: 'none',
-                color: T.v, fontWeight: 600, cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: 12, padding: 0,
-              }}>
-                Log in
-              </button>
-            </div>
-          </div>
-        )}
       </section>
 
       <div style={{
@@ -566,15 +518,12 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         </div>
       </section>
 
-      {/* ── Waitlist ── */}
-      <section
-        ref={waitlistRef}
-        style={{
-          maxWidth: 560, margin: '0 auto',
-          padding: isMobile ? '56px 20px' : '80px 32px',
-          textAlign: 'center',
-        }}
-      >
+      {/* ── Closing CTA ── */}
+      <section style={{
+        maxWidth: 560, margin: '0 auto',
+        padding: isMobile ? '56px 20px' : '80px 32px',
+        textAlign: 'center',
+      }}>
         <h2 style={{
           fontFamily: "'DM Serif Display', serif",
           fontSize: isMobile ? 26 : 34, color: T.text, fontWeight: 400, margin: '0 0 12px',
@@ -583,14 +532,31 @@ export default function LandingScreen({ supabase, onShowAuth }) {
         </h2>
         <p style={{
           fontSize: isMobile ? 14 : 15, color: T.mu, lineHeight: 1.65,
-          margin: isMobile ? '0 0 24px' : '0 0 36px',
+          margin: isMobile ? '0 0 24px' : '0 0 32px',
         }}>
-          Luminary is growing by invitation only, so the people you invite
-          shape the community we become. Leave your details and we'll reach
-          out when a spot opens up for your field.
+          Sign up in under a minute with your email, or use your ORCID iD to
+          get a verified badge and import your publications automatically.
         </p>
-
-        <WaitlistForm supabase={supabase} isMobile={isMobile} />
+        <div style={{
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 10 : 12, justifyContent: 'center',
+        }}>
+          <button onClick={showSignup} style={{
+            padding: '13px 28px', borderRadius: 10, border: 'none',
+            background: T.v, color: '#fff', fontSize: 15, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            Create your free account →
+          </button>
+          <button onClick={showLogin} style={{
+            padding: '13px 28px', borderRadius: 10,
+            border: `1.5px solid ${T.bdr}`, background: T.w,
+            color: T.text, fontSize: 15, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            Log in
+          </button>
+        </div>
       </section>
 
       {/* ── Footer ── */}
@@ -823,310 +789,6 @@ function UseCasesCarousel({ isMobile }) {
       }}>
         {active + 1} / {USE_CASES.length}
       </div>
-    </div>
-  );
-}
-
-// ─── InviteCodeForm ───────────────────────────────────────────────────────────
-
-function InviteCodeForm({ supabase, onShowAuth }) {
-  const [code, setCode]       = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
-
-  const handleSubmit = async () => {
-    if (!code.trim()) return;
-    setLoading(true);
-    setError('');
-
-    const normalized = code.trim().toUpperCase();
-
-    const { data: row, error: fetchErr } = await supabase
-      .from('invite_codes')
-      .select('id, claimed_by, is_multi_use, max_uses, uses_count, expires_at, locked_at')
-      .eq('code', normalized)
-      .single();
-
-    if (fetchErr || !row) {
-      setError('Invalid invite code. Please check and try again.');
-      setLoading(false);
-      return;
-    }
-
-    if (row.locked_at) {
-      setError('This invite code has been locked.');
-      setLoading(false);
-      return;
-    }
-
-    if (row.expires_at && new Date(row.expires_at) < new Date()) {
-      setError('This invite code has expired.');
-      setLoading(false);
-      return;
-    }
-
-    if (!row.is_multi_use && row.claimed_by) {
-      setError('This invite code has already been used.');
-      setLoading(false);
-      return;
-    }
-
-    if (row.is_multi_use && row.max_uses != null
-        && row.uses_count >= row.max_uses) {
-      setError('This invite code is no longer available.');
-      setLoading(false);
-      return;
-    }
-
-    sessionStorage.setItem('prefill_invite_code', normalized);
-    setLoading(false);
-    onShowAuth();
-  };
-
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={code}
-          onChange={e => { setCode(e.target.value); setError(''); }}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          placeholder="e.g. AHA2026"
-          autoFocus
-          style={{
-            flex: 1, padding: '10px 13px', borderRadius: 8,
-            border: `1.5px solid ${error ? T.ro : T.bdr}`,
-            background: T.s2, fontSize: 14,
-            fontFamily: 'monospace', fontWeight: 700,
-            color: T.text, outline: 'none',
-            textTransform: 'uppercase',
-            letterSpacing: 1,
-            boxSizing: 'border-box',
-          }}
-        />
-        <button
-          onClick={handleSubmit}
-          disabled={loading || !code.trim()}
-          style={{
-            padding: '10px 18px', borderRadius: 8, border: 'none',
-            background: T.v, color: '#fff', fontWeight: 700,
-            fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
-            opacity: (loading || !code.trim()) ? 0.6 : 1,
-          }}
-        >
-          {loading ? '…' : 'Continue'}
-        </button>
-      </div>
-      {error && (
-        <div style={{
-          marginTop: 8, fontSize: 12.5, color: T.ro,
-        }}>
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── WaitlistForm ─────────────────────────────────────────────────────────────
-
-function WaitlistForm({ supabase, isMobile }) {
-  const [form, setForm] = useState({
-    full_name:       '',
-    email:           '',
-    institution:     '',
-    role_title:      '',
-    referral_source: '',
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted]   = useState(false);
-  const [error, setError]           = useState('');
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref');
-    if (ref) setForm(prev => ({ ...prev, referral_source: ref }));
-  }, []);
-
-  const set = (key, val) =>
-    setForm(prev => ({ ...prev, [key]: val }));
-
-  const handleSubmit = async () => {
-    if (!form.full_name.trim() || !form.email.trim()) {
-      setError('Name and email are required.');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-
-    setSubmitting(true);
-    setError('');
-
-    const { error: insertErr } = await supabase
-      .from('waitlist')
-      .insert({
-        full_name:       form.full_name.trim(),
-        email:           form.email.trim().toLowerCase(),
-        institution:     form.institution.trim() || null,
-        role_title:      form.role_title.trim()  || null,
-        referral_source: form.referral_source    || null,
-        is_priority:     false,
-      });
-
-    setSubmitting(false);
-
-    if (insertErr) {
-      if (insertErr.code === '23505') {
-        setError('This email is already on the waitlist.');
-      } else {
-        setError('Something went wrong. Please try again.');
-      }
-      return;
-    }
-
-    setSubmitted(true);
-  };
-
-  if (submitted) {
-    return (
-      <div style={{
-        background: T.gr2, border: `1px solid ${T.gr}`,
-        borderRadius: 12, padding: '28px 24px',
-        textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 36, marginBottom: 10 }}>✓</div>
-        <div style={{
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 20, color: T.text, marginBottom: 8,
-        }}>
-          You're on the list
-        </div>
-        <div style={{ fontSize: 14, color: T.mu, lineHeight: 1.6 }}>
-          We'll be in touch when a spot opens up
-          for your field. Thank you for your interest in Luminary.
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      background: T.w, border: `1px solid ${T.bdr}`,
-      borderRadius: 14,
-      padding: isMobile ? '20px 18px' : '28px 28px',
-      textAlign: 'left',
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{
-          display: 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: 12,
-        }}>
-          <WaitlistField
-            label="Full name *"
-            value={form.full_name}
-            onChange={v => set('full_name', v)}
-            placeholder="Dr. Jane Smith"
-          />
-          <WaitlistField
-            label="Email *"
-            value={form.email}
-            onChange={v => set('email', v)}
-            placeholder="jane@university.edu"
-            type="email"
-          />
-        </div>
-
-        <div style={{
-          padding: '12px 14px',
-          background: T.v2, borderRadius: 10,
-          borderLeft: `3px solid ${T.v}`,
-          fontSize: 13, fontWeight: 600, color: T.v,
-        }}>
-          Tell us a little bit about you to get priority access.
-        </div>
-
-        <div style={{
-          display: 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: 12,
-        }}>
-          <WaitlistField
-            label="Institution"
-            value={form.institution}
-            onChange={v => set('institution', v)}
-            placeholder="University / Hospital / Company"
-          />
-          <WaitlistField
-            label="Role / Title"
-            value={form.role_title}
-            onChange={v => set('role_title', v)}
-            placeholder="e.g. Clinical Researcher, MSL"
-          />
-        </div>
-
-        <WaitlistField
-          label="Where did you hear about us? (optional)"
-          value={form.referral_source}
-          onChange={v => set('referral_source', v)}
-          placeholder="Colleague, conference, Twitter…"
-        />
-
-        {error && (
-          <div style={{
-            padding: '8px 12px', borderRadius: 8,
-            background: T.ro2, color: T.ro, fontSize: 13,
-          }}>
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          style={{
-            padding: '12px 0', borderRadius: 9, border: 'none',
-            background: T.v, color: '#fff',
-            fontWeight: 700, fontSize: 14,
-            cursor: submitting ? 'default' : 'pointer',
-            fontFamily: 'inherit',
-            opacity: submitting ? 0.7 : 1,
-            marginTop: 4,
-          }}
-        >
-          {submitting ? 'Submitting…' : 'Request early access'}
-        </button>
-
-        <div style={{ fontSize: 11.5, color: T.mu, textAlign: 'center' }}>
-          We'll never share your details. No spam.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WaitlistField({ label, value, onChange, placeholder, type = 'text' }) {
-  return (
-    <div style={{ flex: 1 }}>
-      <div style={{
-        fontSize: 11.5, fontWeight: 600, color: T.mu,
-        marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.3,
-      }}>
-        {label}
-      </div>
-      <input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: '100%', padding: '9px 11px', borderRadius: 8,
-          border: `1px solid ${T.bdr}`, background: T.s2,
-          fontSize: 13, color: T.text, fontFamily: 'inherit',
-          outline: 'none', boxSizing: 'border-box',
-        }}
-      />
     </div>
   );
 }
